@@ -93,17 +93,17 @@ public class UltraPathFollower extends CommandBase {
             double leftGoalPos = leftPath[currentPoint][0];
             double leftGoalVel = leftPath[currentPoint][1];
             double leftGoalAcc = leftPath[currentPoint][2];
-            double leftGoalAbsHead = leftPath[currentPoint][3];
-            double leftGoalRelHead = leftPath[currentPoint][4];
+            // double leftGoalAbsHead = leftPath[currentPoint][3];
+            // double leftGoalRelHead = leftPath[currentPoint][4];
 
             double rightGoalPos = rightPath[currentPoint][0];
             double rightGoalVel = rightPath[currentPoint][1];
             double rightGoalAcc = rightPath[currentPoint][2];
-            double rightGoalAbsHead = rightPath[currentPoint][3];
-            double rightGoalRelHead = leftPath[currentPoint][4];
+            // double rightGoalAbsHead = rightPath[currentPoint][3];
+            // double rightGoalRelHead = leftPath[currentPoint][4];
 
-            double avgAbsHeading = (leftGoalAbsHead + rightGoalAbsHead) / 2;
-            double avgRelHeading = (leftGoalRelHead + rightGoalRelHead) / 2;
+            // double avgAbsHeading = (leftGoalAbsHead + rightGoalAbsHead) / 2;
+            // double avgRelHeading = (leftGoalRelHead + rightGoalRelHead) / 2;
 
             //double turnEncoderAmt = (((22.68 * Math.PI / settings.kEncoderCountsPerRotation) / settings.kGearRatio) * (avgRelHeading / 360.0));
 
