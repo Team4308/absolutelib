@@ -6,8 +6,6 @@ import java.io.FileReader;
 import java.util.ArrayList;
 import java.util.Arrays;
 
-import com.ctre.phoenix.motorcontrol.ControlMode;
-
 import ca.team4308.absolutelib.math.DoubleUtils;
 import ca.team4308.absolutelib.wrapper.drive.TankDriveSubsystem;
 import edu.wpi.first.wpilibj.DriverStation;
@@ -132,7 +130,7 @@ public class UltraPathFollower extends CommandBase {
             leftPrevError = leftError;
             rightPrevError = rightError;
 
-            m_subsystem.setMotorOutput(ControlMode.PercentOutput, leftOutput, rightOutput);
+            m_subsystem.setMotorOutputPercent(leftOutput, rightOutput);
 
             currentPoint++;
         } else {
@@ -169,6 +167,6 @@ public class UltraPathFollower extends CommandBase {
 
     @Override
     public void end(boolean interrupted) {
-        m_subsystem.setMotorOutput(ControlMode.PercentOutput, 0.0, 0.0);
+        m_subsystem.stopControllers();
     }
 }

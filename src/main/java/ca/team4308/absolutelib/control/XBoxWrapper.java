@@ -4,6 +4,20 @@ import edu.wpi.first.wpilibj.Joystick;
 import edu.wpi.first.wpilibj2.command.button.JoystickButton;
 
 public class XBoxWrapper {
+
+    public static class XBoxMapping {
+        public static int A = 1;
+        public static int B = 2;
+        public static int X = 3;
+        public static int Y = 4;
+
+        public static int LB = 5;
+        public static int RB = 6;
+
+        public static int Start = 7;
+        public static int Back = 8;
+    }
+
     public final Joystick joystick;
 
     public final JoystickButton A;
@@ -20,16 +34,16 @@ public class XBoxWrapper {
     public XBoxWrapper(int port) {
         this.joystick = new Joystick(port);
 
-        this.A = new JoystickButton(joystick, 1);
-        this.B = new JoystickButton(joystick, 2);
-        this.X = new JoystickButton(joystick, 3);
-        this.Y = new JoystickButton(joystick, 4);
+        this.A = new JoystickButton(joystick, XBoxMapping.A);
+        this.B = new JoystickButton(joystick, XBoxMapping.B);
+        this.X = new JoystickButton(joystick, XBoxMapping.X);
+        this.Y = new JoystickButton(joystick, XBoxMapping.Y);
 
-        this.LB = new JoystickButton(joystick, 5);
-        this.RB = new JoystickButton(joystick, 6);
+        this.LB = new JoystickButton(joystick, XBoxMapping.LB);
+        this.RB = new JoystickButton(joystick, XBoxMapping.RB);
 
-        this.Start = new JoystickButton(joystick, 8);
-        this.Back = new JoystickButton(joystick, 7);
+        this.Start = new JoystickButton(joystick, XBoxMapping.Start);
+        this.Back = new JoystickButton(joystick, XBoxMapping.Back);
     }
 
     public double getLeftX() {

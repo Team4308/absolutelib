@@ -1,12 +1,11 @@
 package ca.team4308.absolutelib.wrapper.drive;
 
-import com.ctre.phoenix.motorcontrol.ControlMode;
 import com.kauailabs.navx.frc.AHRS;
 
-import ca.team4308.absolutelib.wrapper.LogSubsystem;
+import ca.team4308.absolutelib.wrapper.MotoredSubsystem;
 
-public abstract class TankDriveSubsystem extends LogSubsystem {
-    public abstract void setMotorOutput(ControlMode mode, double left, double right);
+public abstract class TankDriveSubsystem extends MotoredSubsystem {
+    public abstract void setMotorOutputPercent(double left, double right);
 
     public abstract void selectProfileSlot(int slot);
     public abstract void resetSensors();
