@@ -1,4 +1,4 @@
-package ca.team4308.absolutelib.path;
+package ca.team4308.absolutelib.path.tankfollower;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -10,21 +10,24 @@ import ca.team4308.absolutelib.math.DoubleUtils;
 import ca.team4308.absolutelib.wrapper.drive.TankDriveSubsystem;
 import edu.wpi.first.wpilibj.DriverStation;
 import edu.wpi.first.wpilibj.Filesystem;
+import edu.wpi.first.wpilibj.Notifier;
 import edu.wpi.first.wpilibj.Timer;
 import edu.wpi.first.wpilibj.controller.PIDController;
 import edu.wpi.first.wpilibj2.command.CommandBase;
 
 /**
- * UltraPathFollower
+ * TankFollower
  * Paths must be generated with p,v,a,h
  */
-public class UltraPathFollower extends CommandBase {
+public class TankFollower extends CommandBase {
     private final double[][] leftPath, rightPath;
 
-    private final PathFollowSettings settings;
+    private final TankFollowerSettings settings;
     private final TankDriveSubsystem m_subsystem;
 
     PIDController turnController;
+
+    Notifier notifier;
 
     private volatile boolean isFinished = false;
     private volatile int currentPoint = 0;
@@ -33,8 +36,8 @@ public class UltraPathFollower extends CommandBase {
     private volatile double rightPrevError = 0.0;
 
     /**
-     * UltraPathFollower, a pd based motion profile follower for tank drive drivetrains
-     * Paths must be generated with p,v,a,h
+     * TankFollower, a pd based motion profile follower for tank drive drivetrains
+     * Paths must be generated with `p,v,a,h,H,r,o,O,s`
      * 
      * Runs as a command
      * 
@@ -42,7 +45,7 @@ public class UltraPathFollower extends CommandBase {
      * @param settings Path follower settings
      * @param subsystem Tank Drive Subsystem
      */
-    public UltraPathFollower(String profileFilename, PathFollowSettings settings, TankDriveSubsystem subsystem) {
+    public TankFollower(String profileFilename, TankFollowerSettings settings, TankDriveSubsystem subsystem) {
         leftPath = loadPath(profileFilename + "_left");
         rightPath = loadPath(profileFilename + "_right");
 
@@ -54,13 +57,14 @@ public class UltraPathFollower extends CommandBase {
         turnController.setTolerance(settings.turnGains.tolerance / 5.4);
         turnController.setSetpoint(subsystem.getAhrs().getYaw());
 
+        notifier = new Notifier(this::calculate);
+
         addRequirements(subsystem);
     }
 
     @Override
     public void initialize() {
         m_subsystem.resetSensors();
-        m_subsystem.selectProfileSlot(settings.profileSlot);
 
         isFinished = false;
         currentPoint = 0;
@@ -71,21 +75,7 @@ public class UltraPathFollower extends CommandBase {
             return;
         }
 
-        new Thread(() -> {
-            double lastTime = 0.0;
-
-            while (!isFinished && DriverStation.getInstance().isEnabled()) {
-                if (Timer.getFPGATimestamp() >= lastTime + settings.period) {
-                    lastTime = Timer.getFPGATimestamp();
-                    calculate();
-                }
-                try {
-                    Thread.sleep(2);
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
-                }
-            }
-        }).start();
+        notifier.startPeriodic(settings.period / 1000);
     }
 
     protected synchronized void calculate() {
@@ -150,7 +140,7 @@ public class UltraPathFollower extends CommandBase {
                 pointArray.add(point);
             }
 
-            double[][] doubleArray = new double[pointArray.size()][5];
+            double[][] doubleArray = new double[pointArray.size()][9];
             pointArray.toArray(doubleArray);
 
             return doubleArray;

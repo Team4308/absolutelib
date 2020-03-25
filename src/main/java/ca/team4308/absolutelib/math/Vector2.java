@@ -19,6 +19,22 @@ public class Vector2 {
         this.y = y;
     }
 
+    public Vector2 add(Vector2 other) {
+        return new Vector2(this.x + other.x, this.y + other.y);
+    }
+
+    public Vector2 sub(Vector2 other) {
+        return new Vector2(this.x - other.x, this.y - other.y);
+    }
+
+    public Vector2 mul(Vector2 other) {
+        return new Vector2(this.x * other.x, this.y * other.y);
+    }
+
+    public Vector2 div(Vector2 other) {
+        return new Vector2(this.x / other.x, this.y / other.y);
+    }
+
     public boolean equals(Vector2 other) {
         return (this.x == other.x && this.y == other.y);
     }
@@ -49,19 +65,5 @@ public class Vector2 {
         }
 
         return this;
-    }
-
-    public Vector2 normalizeNew() {
-        double length = Math.sqrt(x * x + y * y);
-
-        Vector2 result = new Vector2();
-
-        if (length != 0.0) {
-            double s = 1.0 / length;
-            result.x = x * s;
-            result.y = y * s;
-        }
-
-        return result;
     }
 }

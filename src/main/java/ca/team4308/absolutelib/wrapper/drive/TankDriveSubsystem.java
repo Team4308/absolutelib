@@ -7,7 +7,6 @@ import ca.team4308.absolutelib.wrapper.MotoredSubsystem;
 public abstract class TankDriveSubsystem extends MotoredSubsystem {
     public abstract void setMotorOutputPercent(double left, double right);
 
-    public abstract void selectProfileSlot(int slot);
     public abstract void resetSensors();
 
     public abstract double getLeftSensorPosition();

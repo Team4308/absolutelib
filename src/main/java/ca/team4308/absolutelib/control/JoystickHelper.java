@@ -28,7 +28,7 @@ public class JoystickHelper {
             double legalRange = 1.0 - deadzone;
             double normalizedMag = Math.min(1.0, (inputMagnitude - deadzone) / legalRange);
             double scale = normalizedMag / inputMagnitude;
-            return new Vector2(stickInput.normalizeNew().x * scale, stickInput.normalizeNew().y * scale);
+            return new Vector2(stickInput.normalize().x * scale, stickInput.normalize().y * scale);
         }
     }
 
