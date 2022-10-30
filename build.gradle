@@ -1,26 +1,21 @@
 plugins {
+    id "edu.wpi.first.GradleRIO" version "2022.4.1"
+    id 'com.github.johnrengelman.shadow' version '7.1.2'
+    id 'java'
     id 'java-library'
     id 'maven-publish'
-    id 'java'
-    id 'maven'
-    id "edu.wpi.first.GradleRIO" version "2020.3.2"
-    id 'com.github.johnrengelman.shadow' version '5.2.0'
 }
+
+sourceCompatibility = JavaVersion.VERSION_11
+targetCompatibility = JavaVersion.VERSION_11
 
 repositories {
     mavenCentral()
 }
 
 dependencies {
-    //WPI Deps
-    implementation wpi.deps.wpilib()
-    nativeZip wpi.deps.wpilibJni(wpi.platforms.roborio)
-    nativeDesktopZip wpi.deps.wpilibJni(wpi.platforms.desktop)
-    implementation wpi.deps.vendor.java()
-    nativeZip wpi.deps.vendor.jni(wpi.platforms.roborio)
-    nativeDesktopZip wpi.deps.vendor.jni(wpi.platforms.desktop)
+    implementation wpi.java.deps.wpilib()
+    implementation wpi.java.vendor.java()
 
-    compile 'org.apache.commons:commons-math3:3.6.1'
-    compile 'com.google.guava:guava:27.0.1-jre'
-    testImplementation 'junit:junit:4.12'
+    testImplementation 'junit:junit:4.13.1'
 }

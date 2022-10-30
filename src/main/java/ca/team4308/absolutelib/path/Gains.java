@@ -1,6 +1,6 @@
-package ca.team4308.absolutelib.path.tankfollower;
+package ca.team4308.absolutelib.path;
 
-public class TankFollowerGains {
+public class Gains {
     public final double kP;
     public final double kI;
     public final double kD;
@@ -10,7 +10,7 @@ public class TankFollowerGains {
 
     public final double tolerance;
 
-    public TankFollowerGains(double _kP, double _kI, double _kD, double _kF, double _kV, double _ka, double _tolerance) {
+    public Gains(double _kP, double _kI, double _kD, double _kF, double _kV, double _ka, double _tolerance) {
         kP = _kP;
         kI = _kI;
         kD = _kD;
@@ -20,7 +20,7 @@ public class TankFollowerGains {
         tolerance = _tolerance;
     }
 
-    public TankFollowerGains(double _kP, double _kI, double _kD, double _kF, double _kV, double _ka) {
+    public Gains(double _kP, double _kI, double _kD, double _kF, double _kV, double _ka) {
         kP = _kP;
         kI = _kI;
         kD = _kD;
@@ -30,7 +30,7 @@ public class TankFollowerGains {
         tolerance = 0.0;
     }
 
-    public TankFollowerGains(double _kP, double _kI, double _kD, double _kF) {
+    public Gains(double _kP, double _kI, double _kD, double _kF) {
         kP = _kP;
         kI = _kI;
         kD = _kD;
