@@ -4,7 +4,6 @@ import edu.wpi.first.wpilibj.Joystick;
 import edu.wpi.first.wpilibj2.command.button.JoystickButton;
 
 public class XBoxWrapper {
-
     public static class XBoxMapping {
         public static int A = 1;
         public static int B = 2;
@@ -21,14 +20,14 @@ public class XBoxWrapper {
     public final Joystick joystick;
 
     public final JoystickButton A;
-	public final JoystickButton B;
-	public final JoystickButton X;
-	public final JoystickButton Y;
-	
-	public final JoystickButton LB;
+    public final JoystickButton B;
+    public final JoystickButton X;
+    public final JoystickButton Y;
+
+    public final JoystickButton LB;
     public final JoystickButton RB;
 
-	public final JoystickButton Start;
+    public final JoystickButton Start;
     public final JoystickButton Back;
 
     public XBoxWrapper(int port) {
