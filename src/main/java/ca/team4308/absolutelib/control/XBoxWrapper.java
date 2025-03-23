@@ -4,7 +4,14 @@ import edu.wpi.first.wpilibj.Joystick;
 import edu.wpi.first.wpilibj2.command.button.JoystickButton;
 import edu.wpi.first.wpilibj2.command.button.POVButton;
 
+/**
+ * Wrapper class for Xbox controller functionality in FRC.
+ * Provides easy access to buttons and analog inputs.
+ */
 public class XBoxWrapper {
+    /**
+     * Static mapping of Xbox controller button IDs.
+     */
     public static class XBoxMapping {
         public static int A = 1;
         public static int B = 2;
@@ -42,6 +49,10 @@ public class XBoxWrapper {
     public final POVButton povDown;
     public final POVButton povLeft;
 
+    /**
+     * Creates a new Xbox controller wrapper.
+     * @param port The port number the controller is connected to
+     */
     public XBoxWrapper(int port) {
         this.joystick = new Joystick(port);
 
@@ -64,26 +75,50 @@ public class XBoxWrapper {
         this.povLeft = new POVButton(joystick, 270);
     }
 
+    /**
+     * Gets the X-axis value of the left stick.
+     * @return Value from -1.0 to 1.0
+     */
     public double getLeftX() {
         return joystick.getRawAxis(0);
     }
 
+    /**
+     * Gets the Y-axis value of the left stick.
+     * @return Value from -1.0 to 1.0
+     */
     public double getLeftY() {
         return joystick.getRawAxis(1);
     }
 
+    /**
+     * Gets the X-axis value of the right stick.
+     * @return Value from -1.0 to 1.0
+     */
     public double getRightX() {
         return joystick.getRawAxis(4);
     }
 
+    /**
+     * Gets the Y-axis value of the right stick.
+     * @return Value from -1.0 to 1.0
+     */
     public double getRightY() {
         return joystick.getRawAxis(5);
     }
 
+    /**
+     * Gets the value of the left trigger.
+     * @return Value from 0.0 to 1.0
+     */
     public double getLeftTrigger() {
         return joystick.getRawAxis(2);
     }
 
+    /**
+     * Gets the value of the right trigger.
+     * @return Value from 0.0 to 1.0
+     */
     public double getRightTrigger() {
         return joystick.getRawAxis(3);
     }
