@@ -1,0 +1,65 @@
+{
+    "fileName": "absolutelib.json",
+    "name": "absolutelib",
+    "version": "${version}",
+    "frcYear": "2025",
+    "uuid": "a604c6de-3573-4ba6-ae4f-32778238b9de",
+    "mavenUrls": [
+        "https://team4308.github.io/absolutelib/releases",
+        "https://repo1.maven.org/maven2",                  
+        "https://maven.revrobotics.com",                  
+        "https://maven.ctr-electronics.com/release",      
+        "https://maven.littletonrobotics.com/release"
+    ],
+    "jsonUrl": "https://raw.githubusercontent.com/team4308/absolutelib/main/absolutelib.json",
+    "javaDependencies": [
+        {
+            "groupId": "${groupId}",
+            "artifactId": "${artifactId}-java",
+            "version": "${version}"
+        },
+        {
+            "groupId": "com.revrobotics.frc",
+            "artifactId": "REVLib-java",
+            "version": "2025.0.0"                        
+        },
+        {
+            "groupId": "com.ctre.phoenix6",
+            "artifactId": "wpiapi-java",
+            "version": "25.0.0"                          
+        },
+        {
+            "groupId": "org.littletonrobotics.akit",
+            "artifactId": "AdvantageKit",
+            "version": "2.0.0"                           
+        }
+    ],
+    "jniDependencies": [
+        {
+            "groupId": "com.revrobotics.frc",
+            "artifactId": "REVLib-driver",
+            "version": "2025.0.0",
+            "skipInvalidPlatforms": true
+        }
+    ],
+    "cppDependencies": [
+        {
+            "groupId": "com.revrobotics.frc",
+            "artifactId": "REVLib-cpp",
+            "version": "2025.0.0",
+            "libName": "REVLib",
+            "headerClassifier": "headers",
+            "sourcesClassifier": "sources",
+            "skipInvalidPlatforms": true
+        },
+        {
+            "groupId": "com.ctre.phoenix6",
+            "artifactId": "wpiapi-cpp",
+            "version": "25.0.0",
+            "libName": "phoenix6",
+            "headerClassifier": "headers",
+            "sourcesClassifier": "sources",
+            "skipInvalidPlatforms": true
+        }
+    ]
+}

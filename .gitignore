@@ -1,0 +1,28 @@
+# Gradle
+.gradle/
+build/
+bin/
+out/
+
+# Eclipse
+.settings/
+.classpath
+.project
+
+# IntelliJ
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# VSCode
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# WPILIB
+*.wpilib/
+simgui*.json
+networktables.json

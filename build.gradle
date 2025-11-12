@@ -1,0 +1,189 @@
+import edu.wpi.first.toolchain.*
+
+plugins {
+  id 'java'
+  id 'maven-publish'
+  id 'edu.wpi.first.wpilib.repositories.WPILibRepositoriesPlugin' version '2025.0'
+  id 'edu.wpi.first.GradleVsCode' version '2.1.0'
+}
+
+// Library version and group
+group = 'ca.team4308'
+version = '1.0.0'
+
+// WPILib version
+ext.wpilibVersion = "2025.+"
+
+// Repositories
+repositories {
+  mavenCentral()
+  maven { url "https://maven.ctr-electronics.com/release/" } // CTRE
+  maven { url "https://maven.revrobotics.com/" } // REV
+  maven { url "https://maven.photonvision.org/repository/release/" } // PhotonVision
+  maven { url "https://3015rangerrobotics.github.io/pathplannerlib/repo" } // PathPlanner
+  maven { url "https://frcmaven.wpi.edu/release" } // WPILib fallback
+  maven { url "https://frcmaven.wpi.edu/artifactory/littletonrobotics-mvn-release/" } // AdvantageKit
+}
+
+if (project.hasProperty('releaseMode')) {
+  wpilibRepositories.addAllReleaseRepositories(project)
+} else {
+  wpilibRepositories.addAllDevelopmentRepositories(project)
+}
+
+// Java setup
+java {
+  sourceCompatibility = JavaVersion.VERSION_17
+  targetCompatibility = JavaVersion.VERSION_17
+  withSourcesJar()
+  withJavadocJar()
+}
+var javaVersion = "17"
+
+// Dependencies
+dependencies {
+    // Core WPILib
+    implementation "edu.wpi.first.cscore:cscore-java:$wpilibVersion"
+    implementation "edu.wpi.first.cameraserver:cameraserver-java:$wpilibVersion"
+    implementation "edu.wpi.first.ntcore:ntcore-java:$wpilibVersion"
+    implementation "edu.wpi.first.wpilibj:wpilibj-java:$wpilibVersion"
+    implementation "edu.wpi.first.wpilibNewCommands:wpilibNewCommands-java:$wpilibVersion"
+    implementation "edu.wpi.first.wpimath:wpimath-java:$wpilibVersion"
+    implementation "edu.wpi.first.wpiunits:wpiunits-java:$wpilibVersion"
+    implementation "edu.wpi.first.hal:hal-java:$wpilibVersion"
+    implementation "edu.wpi.first.wpiutil:wpiutil-java:$wpilibVersion"
+    implementation 'edu.wpi.first.thirdparty.frc2025.opencv:opencv-java:4.10.0-2'
+
+    //  CTRE Phoenix 5 
+    implementation "com.ctre.phoenix:api-java:5.33.1"
+    implementation "com.ctre.phoenix:wpiapi-java:5.33.1"
+
+    //  CTRE Phoenix 6 
+    implementation "com.ctre.phoenix6:wpiapi-java:25.4.0"
+
+    //  REV Robotics
+    implementation "com.revrobotics.frc:REVLib-java:2025.0.0"
+
+    //  Math & Utility Libraries
+    implementation "org.ejml:ejml-simple:0.43.1"
+    implementation "org.apache.commons:commons-math3:3.6.1"
+    implementation "org.apache.commons:commons-lang3:3.13.0"
+
+    //  JSON / Serialization
+    implementation "com.fasterxml.jackson.core:jackson-annotations:2.17.2"
+    implementation "com.fasterxml.jackson.core:jackson-core:2.17.2"
+    implementation "com.fasterxml.jackson.core:jackson-databind:2.17.2"
+    implementation "com.google.code.gson:gson:2.10.1"
+
+    // Logging
+    implementation "org.slf4j:slf4j-api:2.0.9"
+    implementation "org.slf4j:slf4j-simple:2.0.9"
+
+    // AdvantageKit Logger
+    implementation "org.littletonrobotics.akit:akit-java:4.1.2"
+
+    // QuickBuf
+    implementation 'us.hebi.quickbuf:quickbuf-runtime:1.3.3'
+
+    // PathPlanner 
+    implementation "com.pathplanner.lib:PathplannerLib-java:2025.2.7"
+
+    //  Testing
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.10.1'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+// Configure JUnit
+test {
+    useJUnitPlatform()
+    systemProperty 'junit.jupiter.extensions.autodetection.enabled', 'true'
+    
+    testLogging {
+        events "passed", "skipped", "failed"
+        exceptionFormat "full"
+        showStandardStreams = false
+        showExceptions = true
+        showCauses = true
+        showStackTraces = true
+    }
+    
+    // Run tests even if some fail, but record failures
+    ignoreFailures = false
+    
+    // Increase test timeout
+    maxHeapSize = '1G'
+    
+    // Display test results
+    afterSuite { desc, result ->
+        if (!desc.parent) {
+            println "\nTest Results: ${result.resultType} (${result.testCount} tests, ${result.successfulTestCount} passed, ${result.failedTestCount} failed, ${result.skippedTestCount} skipped)"
+        }
+    }
+}
+
+// Disable tests on limited platforms
+if (project.hasProperty('onlylinuxathena') || 
+    project.hasProperty('onlylinuxarm32') || 
+    project.hasProperty('onlylinuxarm64') || 
+    project.hasProperty('onlywindowsarm64') || 
+    project.hasProperty('onlylinuxsystemcore')) {
+    test.enabled = false
+}
+
+// Compiler setup
+tasks.withType(JavaCompile) {
+    options.compilerArgs.add '-XDstringConcat=inline'
+    options.encoding = 'UTF-8'
+}
+
+// Javadocs
+javadoc {
+    options {
+        links "https://docs.oracle.com/en/java/javase/$javaVersion/docs/api/",
+              'https://github.wpilib.org/allwpilib/docs/release/java/'
+    }
+}
+
+// Gradle wrapper
+wrapper {
+  gradleVersion = '8.11'
+}
+
+// Maven Publishing Configuration for JitPack
+publishing {
+    publications {
+        maven(MavenPublication) {
+            groupId = 'ca.team4308'
+            artifactId = 'absolutelib'
+            version = project.version
+            
+            from components.java
+            
+            pom {
+                name = 'AbsoluteLib'
+                description = 'A comprehensive FRC library for Team 4308'
+                url = 'https://github.com/team4308/absolutelib'
+                
+                licenses {
+                    license {
+                        name = 'MIT License'
+                        url = 'https://opensource.org/licenses/MIT'
+                    }
+                }
+                
+                developers {
+                    developer {
+                        id = 'team4308'
+                        name = 'Team 4308'
+                    }
+                }
+                
+                scm {
+                    connection = 'scm:git:git://github.com/team4308/absolutelib.git'
+                    developerConnection = 'scm:git:ssh://github.com/team4308/absolutelib.git'
+                    url = 'https://github.com/team4308/absolutelib'
+                }
+            }
+        }
+    }
+}
