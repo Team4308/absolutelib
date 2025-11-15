@@ -41,6 +41,11 @@ jobs:
       - name: Publish to local Pages repo
         run: ./gradlew -Pversion="${PUBLISH_VERSION}" -PpagesPublish publishPagesRepo --no-daemon
 
+      - name: Verify local Maven repo contents
+        run: |
+          echo "Listing build/pages-maven:"
+          find build/pages-maven -type f | head -50 || true
+
       - name: Prepare deploy directory
         run: |
           mkdir -p deploy/releases
@@ -48,6 +53,28 @@ jobs:
           cp absolutelib.json deploy/releases/absolutelib.json
           cp absolutelib.json deploy/absolutelib.json
           echo "<html><body><h1>AbsoluteLib Releases</h1></body></html>" > deploy/index.html
+          touch deploy/.nojekyll
+
+      - name: Check artifact availability (non-fatal)
+        run: |
+          POM_URL="https://team4308.github.io/absolutelib/releases/ca/team4308/absolutelib-java/${PUBLISH_VERSION}/absolutelib-java-${PUBLISH_VERSION}.pom"
+          echo "Checking $POM_URL"
+          curl -I $POM_URL || echo "POM not reachable yet."
+
+      - name: Assert POM exists
+        run: |
+          LOCAL_POM="build/pages-maven/ca/team4308/absolutelib-java/${PUBLISH_VERSION}/absolutelib-java-${PUBLISH_VERSION}.pom"
+          if [ ! -f "$LOCAL_POM" ]; then
+            echo "Expected POM not found locally: $LOCAL_POM"
+            echo "If this was a non-tag push, version is a snapshot (main-SNAPSHOT-<sha>)."
+            exit 1
+          fi
+
+      - name: Upload local Maven dir (debug)
+        uses: actions/upload-artifact@v4
+        with:
+          name: pages-maven-${{ env.PUBLISH_VERSION }}
+          path: build/pages-maven
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
