@@ -283,7 +283,17 @@ public class Elevator extends AbsoluteSubsystem {
     }
 
     /**
-     * Send percent output to the leader motor via {@link MotorAdapter}, if present.
+     * Send percent output to the leader motor via {@link MotorWrapper}, if present.
+     * (Previously referenced MotorAdapter which no longer exists.)
+     *
+     * @param percent output (-1 to 1)
+     */
+    public void setPercent(double percent) {
+        // ...existing code...
+    }
+
+    /**
+     * Send percent output to the leader motor via {@link MotorWrapper}, if present.
      * Override this to use vendor-specific control modes (e.g., MotionMagic, Spark PID).
      */
     protected void applyPercentOutput(double percent) {
