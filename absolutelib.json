@@ -11,7 +11,7 @@
         "https://maven.ctr-electronics.com/release",
         "https://maven.littletonrobotics.com/release"
     ],
-    "jsonUrl": "https://raw.githubusercontent.com/team4308/absolutelib/main/absolutelib.json",
+    "jsonUrl": "https://raw.githubusercontent.com/Team4308/absolutelib/v1.0.0/absolutelib.json",
     "javaDependencies": [
         {
             "groupId": "ca.team4308",

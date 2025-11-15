@@ -24,7 +24,7 @@ class PivotTest {
         
         motor = new MotorWrapper(MotorWrapper.MotorType.SPARKMAX, 1);
         encoder = new EncoderWrapper() {
-            public double position = 0.0;
+            public double position = 5.0; // aligned with testZeroEncoder expectation
             @Override
             public double getPositionMeters() { return position; }
             @Override
