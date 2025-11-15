@@ -1,6 +1,15 @@
 name: CI
 
-on: [push, pull_request]
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      skip_combine:
+        description: "Skip the combine job"
+        required: false
+        type: boolean
+        default: false
 
 jobs:
   build-docker:
@@ -93,10 +102,17 @@ jobs:
           path: build/allOutputs
 
   combine:
+    if: ${{ ! (github.event_name == 'workflow_dispatch' && inputs.skip_combine) && !contains(github.event.head_commit.message, '[skip combine]') }}
     name: Combine
     needs: [build-docker, build-host]
     runs-on: ubuntu-22.04
     steps:
+      - name: Check artifact directory presence
+        run: |
+          if [ ! -d combiner/products/build/allOutputs ]; then
+            echo "Artifact directory missing; skipping combine."
+            exit 0
+          fi
       - uses: actions/checkout@v4
         with:
           repository: wpilibsuite/build-tools
