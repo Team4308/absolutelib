@@ -154,7 +154,7 @@ publishing {
     publications {
         maven(MavenPublication) {
             groupId = 'ca.team4308'
-            artifactId = 'absolutelib'
+            artifactId = 'absolutelib-java' 
             version = project.version
             
             from components.java
@@ -186,4 +186,30 @@ publishing {
             }
         }
     }
+    if (project.hasProperty('pagesPublish')) {
+        repositories {
+            maven {
+                name = "GitHubPagesLocal"
+                url = layout.buildDirectory.dir("pages-maven")
+            }
+        }
+    }
+}
+
+// Minimal index file for Pages repo
+tasks.register("generatePagesIndex") {
+    onlyIf { project.hasProperty('pagesPublish') }
+    dependsOn("publish")
+    doLast {
+        def outDir = layout.buildDirectory.dir("pages-maven").get().asFile
+        def index = new File(outDir, "index.html")
+        index.text = """<html><body><h1>AbsoluteLib Maven Repository</h1><p>Published versions under /${group.replace('.','/')}/absolutelib</p></body></html>"""
+    }
+}
+
+// Aggregate task for CI
+tasks.register("publishPagesRepo") {
+    group = "publishing"
+    description = "Publish artifacts into build/pages-maven for GitHub Pages."
+    dependsOn("generatePagesIndex")
 }

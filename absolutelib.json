@@ -1,37 +1,37 @@
 {
     "fileName": "absolutelib.json",
     "name": "absolutelib",
-    "version": "${version}",
+    "version": "1.0.0",
     "frcYear": "2025",
     "uuid": "a604c6de-3573-4ba6-ae4f-32778238b9de",
     "mavenUrls": [
         "https://team4308.github.io/absolutelib/releases",
-        "https://repo1.maven.org/maven2",                  
-        "https://maven.revrobotics.com",                  
-        "https://maven.ctr-electronics.com/release",      
+        "https://repo1.maven.org/maven2",
+        "https://maven.revrobotics.com",
+        "https://maven.ctr-electronics.com/release",
         "https://maven.littletonrobotics.com/release"
     ],
     "jsonUrl": "https://raw.githubusercontent.com/team4308/absolutelib/main/absolutelib.json",
     "javaDependencies": [
         {
-            "groupId": "${groupId}",
-            "artifactId": "${artifactId}-java",
-            "version": "${version}"
+            "groupId": "ca.team4308",
+            "artifactId": "absolutelib-java",
+            "version": "1.0.0"
         },
         {
             "groupId": "com.revrobotics.frc",
             "artifactId": "REVLib-java",
-            "version": "2025.0.0"                        
+            "version": "2025.0.0"
         },
         {
             "groupId": "com.ctre.phoenix6",
             "artifactId": "wpiapi-java",
-            "version": "25.0.0"                          
+            "version": "25.0.0"
         },
         {
             "groupId": "org.littletonrobotics.akit",
             "artifactId": "AdvantageKit",
-            "version": "2.0.0"                           
+            "version": "2.0.0"
         }
     ],
     "jniDependencies": [
