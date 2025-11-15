@@ -191,19 +191,34 @@ publishing {
                     url = 'https://github.com/team4308/absolutelib'
                 }
             }
+            suppressPomMetadataWarningsFor('runtimeElements')
         }
     }
-    // Always publish to GitHub Packages
+
+    // Extended credential resolution: gradle.properties -> env(GPR_USER/GPR_TOKEN) -> GitHub Actions defaults
+    def ghUser = findProperty("gpr.user") ?: System.getenv("GPR_USER") ?: System.getenv("GITHUB_ACTOR")
+    def ghToken = findProperty("gpr.key") ?: System.getenv("GPR_TOKEN") ?: System.getenv("GITHUB_TOKEN")
+
+    if (project.hasProperty("publishToGitHub") && (!ghUser || !ghToken)) {
+        throw new GradleException("GitHub Packages credentials missing (set gpr.user/gpr.key or GPR_USER/GPR_TOKEN).")
+    }
+
     repositories {
-        maven {
-            name = "GitHubPackages"
-            url = uri("https://maven.pkg.github.com/Team4308/absolutelib")
-            credentials {
-                username = findProperty("gpr.user") ?: System.getenv("GITHUB_ACTOR")
-                password = findProperty("gpr.key") ?: System.getenv("GITHUB_TOKEN")
+        if (ghUser && ghToken) {
+            logger.lifecycle("Publishing to GitHub Packages as '${ghUser}' (source: ${findProperty('gpr.user') ? 'gradle.properties' : (System.getenv('GPR_USER') ? 'GPR_USER env' : 'GITHUB_ACTOR')})")
+            maven {
+                name = "GitHubPackages"
+                url = uri("https://maven.pkg.github.com/Team4308/absolutelib")
+                credentials {
+                    username = ghUser
+                    password = ghToken
+                }
             }
+        } else {
+            logger.lifecycle("Skipping GitHub Packages publish: missing credentials (set gpr.user/gpr.key or GPR_USER/GPR_TOKEN)")
         }
     }
+
     if (project.hasProperty('pagesPublish')) {
         repositories {
             maven {
@@ -235,5 +250,18 @@ tasks.register("publishPagesRepo") {
         logger.lifecycle("Pages root: https://team4308.github.io/absolutelib/")
         logger.lifecycle("Pages releases index: https://team4308.github.io/absolutelib/releases/")
         logger.lifecycle("Artifact path (tag builds): https://team4308.github.io/absolutelib/releases/${project.group.toString().replace('.','/')}/absolutelib-java/${project.version}/")
+    }
+}
+
+// Quick credential verification task
+tasks.register("verifyPublishCreds") {
+    doLast {
+        def u = findProperty("gpr.user") ?: System.getenv("GPR_USER") ?: System.getenv("GITHUB_ACTOR")
+        def t = (findProperty("gpr.key") ?: System.getenv("GPR_TOKEN") ?: System.getenv("GITHUB_TOKEN")) ? '***' : null
+        if (u && t) {
+            logger.lifecycle("GitHub Packages credentials resolved: user='${u}', token='${t}'")
+        } else {
+            logger.lifecycle("GitHub Packages credentials NOT resolved. Provide gpr.user/gpr.key or GPR_USER/GPR_TOKEN.")
+        }
     }
 }
