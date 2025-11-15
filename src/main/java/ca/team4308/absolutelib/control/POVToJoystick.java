@@ -12,12 +12,10 @@ import edu.wpi.first.wpilibj2.command.button.Trigger;
 import java.util.function.BooleanSupplier;
 
 /**
- * A {@link Trigger} that gets its state from a {@link GenericHID}.
+ * A {@link Trigger} whose state is based on a POV (D-pad) angle from a {@link GenericHID}.
  * <p>
- * Matches POV angle against a specified POV index on the HID.
- * NOTE: Null check currently occurs after super() which means if a null joystick
- * were passed, the supplier would capture null before validation. Consider moving
- * requireNonNullParam before super() in a future revision.
+ * The trigger is active when {@link GenericHID#getPOV(int)} for the configured POV index
+ * returns the specified angle.
  */
 public class POVToJoystick extends Trigger {
     /**

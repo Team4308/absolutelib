@@ -55,8 +55,7 @@ jobs:
       - name: Prepare deploy directory
         run: |
           mkdir -p deploy/releases
-          # Hosting JSON only (disable Maven rsync)
-          # rsync -a build/pages-maven/ deploy/releases/
+          # Only host vendor JSON on Pages; Maven artifacts are served from GitHub Packages.
           cp absolutelib.json deploy/releases/absolutelib.json
           cp absolutelib.json deploy/absolutelib.json
           echo "<html><body><h1>AbsoluteLib Releases Root</h1><p>Vendor JSON at /absolutelib.json</p></body></html>" > deploy/index.html
