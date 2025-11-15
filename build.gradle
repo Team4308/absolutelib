@@ -211,6 +211,7 @@ tasks.register("generatePagesIndex") {
         def outDir = layout.buildDirectory.dir("pages-maven").get().asFile
         def index = new File(outDir, "index.html")
         index.text = """<html><body><h1>AbsoluteLib Maven Repository</h1><p>Artifacts under /${project.group.toString().replace('.','/')}/absolutelib-java/${project.version}</p></body></html>"""
+        logger.lifecycle("Vendor JSON will be available at /absolutelib.json and /releases/absolutelib.json on GitHub Pages.")
     }
 }
 

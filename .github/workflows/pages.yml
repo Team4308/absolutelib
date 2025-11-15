@@ -45,6 +45,8 @@ jobs:
         run: |
           mkdir -p deploy/releases
           rsync -a build/pages-maven/ deploy/releases/
+          cp absolutelib.json deploy/releases/absolutelib.json
+          cp absolutelib.json deploy/absolutelib.json
           echo "<html><body><h1>AbsoluteLib Releases</h1></body></html>" > deploy/index.html
 
       - name: Upload artifact
