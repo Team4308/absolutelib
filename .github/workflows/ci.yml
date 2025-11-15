@@ -82,8 +82,17 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           path: combiner/products/build/allOutputs
-      - name: Flatten Artifacts
-        run: rsync -a --delete combiner/products/build/allOutputs/*/* combiner/products/build/allOutputs/
+      - name: Prepare combiner outputs
+        shell: bash
+        run: |
+          set -e
+          mkdir -p combiner/products/build/allOutputs
+          if compgen -G "combiner/products/build/allOutputs/*/*" > /dev/null; then
+            echo "Syncing nested output directories..."
+            rsync -a --delete combiner/products/build/allOutputs/*/* combiner/products/build/allOutputs/
+          else
+            echo "No nested output directories found; skipping rsync."
+          fi
       - uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
