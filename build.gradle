@@ -220,4 +220,8 @@ tasks.register("publishPagesRepo") {
     group = "publishing"
     description = "Publish artifacts into build/pages-maven for GitHub Pages."
     dependsOn("generatePagesIndex")
+    doLast {
+        logger.lifecycle("Pages Maven base: https://team4308.github.io/absolutelib/releases/")
+        logger.lifecycle("Expected artifact path: https://team4308.github.io/absolutelib/releases/${project.group.toString().replace('.','/')}/absolutelib-java/${project.version}/")
+    }
 }
