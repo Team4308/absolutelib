@@ -1,0 +1,10 @@
+// ...existing code...
+// Collect vendor JSONs (adjust pattern if different)
+def vendorJsons = fileTree("$buildDir/allOutputs").matching { include "**/*.json" }.files.toList()
+// Guard against empty list (was throwing at .first())
+if (vendorJsons.isEmpty()) {
+    logger.lifecycle("No vendor JSON files found in $buildDir/allOutputs; skipping thirdparty publish.")
+    return
+}
+def firstVendor = vendorJsons.first()
+// ...existing code that previously used list.first()...

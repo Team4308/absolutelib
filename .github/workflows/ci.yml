@@ -103,6 +103,11 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           path: combiner/products/build/allOutputs
+      - name: List downloaded artifacts
+        shell: bash
+        run: |
+          echo "Listing combiner/products/build/allOutputs:"
+          find combiner/products/build/allOutputs -maxdepth 4 -type f || true
       - name: Prepare combiner outputs
         shell: bash
         run: |
