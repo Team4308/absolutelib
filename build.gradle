@@ -193,6 +193,17 @@ publishing {
             }
         }
     }
+    // Always publish to GitHub Packages
+    repositories {
+        maven {
+            name = "GitHubPackages"
+            url = uri("https://maven.pkg.github.com/Team4308/absolutelib")
+            credentials {
+                username = findProperty("gpr.user") ?: System.getenv("GITHUB_ACTOR")
+                password = findProperty("gpr.key") ?: System.getenv("GITHUB_TOKEN")
+            }
+        }
+    }
     if (project.hasProperty('pagesPublish')) {
         repositories {
             maven {
@@ -221,7 +232,8 @@ tasks.register("publishPagesRepo") {
     description = "Publish artifacts into build/pages-maven for GitHub Pages."
     dependsOn("generatePagesIndex")
     doLast {
-        logger.lifecycle("Pages Maven base: https://team4308.github.io/absolutelib/releases/")
-        logger.lifecycle("Expected artifact path: https://team4308.github.io/absolutelib/releases/${project.group.toString().replace('.','/')}/absolutelib-java/${project.version}/")
+        logger.lifecycle("Pages root: https://team4308.github.io/absolutelib/")
+        logger.lifecycle("Pages releases index: https://team4308.github.io/absolutelib/releases/")
+        logger.lifecycle("Artifact path (tag builds): https://team4308.github.io/absolutelib/releases/${project.group.toString().replace('.','/')}/absolutelib-java/${project.version}/")
     }
 }

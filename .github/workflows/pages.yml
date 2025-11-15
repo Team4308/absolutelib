@@ -18,6 +18,9 @@ concurrency:
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -27,6 +30,9 @@ jobs:
           distribution: temurin
           java-version: 17
       - uses: gradle/actions/setup-gradle@v3
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
 
       - name: Derive version
         run: |
@@ -49,11 +55,12 @@ jobs:
       - name: Prepare deploy directory
         run: |
           mkdir -p deploy/releases
-          rsync -a build/pages-maven/ deploy/releases/
+          # Hosting JSON only (disable Maven rsync)
+          # rsync -a build/pages-maven/ deploy/releases/
           cp absolutelib.json deploy/releases/absolutelib.json
           cp absolutelib.json deploy/absolutelib.json
-          echo "<html><body><h1>AbsoluteLib Releases Root</h1><p>See /releases/ for Maven artifacts.</p></body></html>" > deploy/index.html
-          echo "<html><body><h1>AbsoluteLib Maven Releases</h1><p>Artifacts are under ca/team4308/absolutelib-java/${PUBLISH_VERSION}/</p></body></html>" > deploy/releases/index.html
+          echo "<html><body><h1>AbsoluteLib Releases Root</h1><p>Vendor JSON at /absolutelib.json</p></body></html>" > deploy/index.html
+          echo "<html><body><h1>AbsoluteLib Maven Releases</h1><p>Artifacts are fetched from GitHub Packages.</p></body></html>" > deploy/releases/index.html
           echo "<html><body><h2>404 - Not Found</h2></body></html>" > deploy/404.html
           touch deploy/.nojekyll
 

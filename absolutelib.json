@@ -5,13 +5,13 @@
     "frcYear": "2025",
     "uuid": "a604c6de-3573-4ba6-ae4f-32778238b9de",
     "mavenUrls": [
-        "https://team4308.github.io/absolutelib/releases",
+        "https://maven.pkg.github.com/Team4308/absolutelib",
         "https://repo1.maven.org/maven2",
         "https://maven.revrobotics.com",
         "https://maven.ctr-electronics.com/release",
         "https://maven.littletonrobotics.com/release"
     ],
-    "jsonUrl": "https://raw.githubusercontent.com/Team4308/absolutelib/v1.0.0/absolutelib.json",
+    "jsonUrl": "https://team4308.github.io/absolutelib/absolutelib.json",
     "javaDependencies": [
         {
             "groupId": "ca.team4308",
