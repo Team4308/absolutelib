@@ -2,33 +2,80 @@
 
 [![](https://jitpack.io/v/team4308/absolutelib.svg)](https://jitpack.io/#team4308/absolutelib)
 
-Team 4308's FRC library providing wrappers, utilities, and helpers for building robots quickly.
+AbsoluteLib is an FRC utility library for Team 4308 providing reusable subsystems, math helpers, and adapters around WPILib and common vendor APIs.
 
-Version: 2.0.0
+Version: 2.0.0  
 Updated: Nov 12, 2025
 
+## Installation (WPILib Vendor JSON)
 
-## Installation
+AbsoluteLib is distributed as a WPILib vendor library. The vendor JSON is hosted on GitHub Pages and the artifacts are hosted on GitHub Packages.
 
-Using JitPack with Gradle:
+1. Open your robot project in VS Code (WPILib extension installed).
+2. Press `Ctrl+Shift+P` and run: `WPILib: Manage Vendor Libraries`.
+3. Choose: `Install new library (online)`.
+4. When prompted for a URL, enter:
 
-```groovy
+   ```text
+   https://team4308.github.io/absolutelib/absolutelib.json
+   ```
+
+5. Save and let Gradle refresh. You should now have the dependency:
+
+   ```gradle
+   dependencies {
+       implementation "ca.team4308:absolutelib-java:1.0.0"
+       // ...your other dependencies...
+   }
+   ```
+
+### Maven Repository Details
+
+The vendor JSON (`absolutelib.json`) references:
+
+```json
+"mavenUrls": [
+  "https://maven.pkg.github.com/Team4308/absolutelib",
+  "https://repo1.maven.org/maven2",
+  "https://maven.revrobotics.com",
+  "https://maven.ctr-electronics.com/release",
+  "https://maven.littletonrobotics.com/release"
+]
+```
+
+The primary Maven host is GitHub Packages:
+
+- Group ID: `ca.team4308`
+- Artifact ID: `absolutelib-java`
+- Version: `1.0.0`
+
+If you want to consume the library directly from Gradle (without vendor JSON), add:
+
+```gradle
 repositories {
-    maven { url 'https://jitpack.io' }
+    maven {
+        url = uri("https://maven.pkg.github.com/Team4308/absolutelib")
+        credentials {
+            // GitHub username and a PAT with read:packages
+            username = findProperty("gpr.user") ?: System.getenv("GPR_USER")
+            password = findProperty("gpr.key")  ?: System.getenv("GPR_TOKEN")
+        }
+    }
+    mavenCentral()
+    // other repos...
 }
 
 dependencies {
-    implementation 'ca.team4308:absolutelib:2.0.0'
+    implementation "ca.team4308:absolutelib-java:1.0.0"
 }
 ```
 
-If you use the GitHub coordinates:
+## Publishing Workflow (Maintainers)
 
-```groovy
-dependencies {
-    implementation 'com.github.team4308:absolutelib:2.0.0'
-}
-```
+- `./scripts/publish-github-packages.bat` prompts for GitHub credentials and runs `gradlew publish` to GitHub Packages.
+- GitHub Actions workflows:
+  - `.github/workflows/update-vendor-json.yml` updates `absolutelib.json` version and JSON URL when a `v*` tag is pushed.
+  - `.github/workflows/pages.yml` deploys `absolutelib.json` to GitHub Pages at `https://team4308.github.io/absolutelib/absolutelib.json`.
 
 ## Features
 
@@ -38,8 +85,8 @@ dependencies {
 - Simulation-ready patterns
 - WPILib chooser helpers for runtime path selection
 - Premade Subsystems
----
 
+---
 
 ## Subsystem Usage Examples
 

@@ -161,69 +161,49 @@ publishing {
     publications {
         maven(MavenPublication) {
             groupId = 'ca.team4308'
-            artifactId = 'absolutelib-java' 
+            artifactId = 'absolutelib-java'
             version = project.version
-            
+
             from components.java
-            
+
             pom {
                 name = 'AbsoluteLib'
                 description = 'A comprehensive FRC library for Team 4308'
                 url = 'https://github.com/team4308/absolutelib'
-                
+
                 licenses {
                     license {
                         name = 'MIT License'
                         url = 'https://opensource.org/licenses/MIT'
                     }
                 }
-                
+
                 developers {
                     developer {
                         id = 'team4308'
                         name = 'Team 4308'
                     }
                 }
-                
+
                 scm {
                     connection = 'scm:git:git://github.com/team4308/absolutelib.git'
                     developerConnection = 'scm:git:ssh://github.com/team4308/absolutelib.git'
                     url = 'https://github.com/team4308/absolutelib'
                 }
             }
+
             suppressPomMetadataWarningsFor('runtimeElements')
         }
     }
 
-    // Extended credential resolution: gradle.properties -> env(GPR_USER/GPR_TOKEN) -> GitHub Actions defaults
-    def ghUser = findProperty("gpr.user") ?: System.getenv("GPR_USER") ?: System.getenv("GITHUB_ACTOR")
-    def ghToken = findProperty("gpr.key") ?: System.getenv("GPR_TOKEN") ?: System.getenv("GITHUB_TOKEN")
-
-    if (project.hasProperty("publishToGitHub") && (!ghUser || !ghToken)) {
-        throw new GradleException("GitHub Packages credentials missing (set gpr.user/gpr.key or GPR_USER/GPR_TOKEN).")
-    }
-
     repositories {
-        if (ghUser && ghToken) {
-            logger.lifecycle("Publishing to GitHub Packages as '${ghUser}' (source: ${findProperty('gpr.user') ? 'gradle.properties' : (System.getenv('GPR_USER') ? 'GPR_USER env' : 'GITHUB_ACTOR')})")
-            maven {
-                name = "GitHubPackages"
-                url = uri("https://maven.pkg.github.com/Team4308/absolutelib")
-                credentials {
-                    username = ghUser
-                    password = ghToken
-                }
-            }
-        } else {
-            logger.lifecycle("Skipping GitHub Packages publish: missing credentials (set gpr.user/gpr.key or GPR_USER/GPR_TOKEN)")
-        }
-    }
-
-    if (project.hasProperty('pagesPublish')) {
-        repositories {
-            maven {
-                name = "GitHubPagesLocal"
-                url = layout.buildDirectory.dir("pages-maven")
+        maven {
+            name = "GitHubPackages"
+            url = uri("https://maven.pkg.github.com/Team4308/absolutelib")
+            credentials {
+                // Prefer gradle.properties, then env vars
+                username = findProperty("gpr.user") ?: System.getenv("GPR_USER")
+                password = findProperty("gpr.key")  ?: System.getenv("GPR_TOKEN")
             }
         }
     }
