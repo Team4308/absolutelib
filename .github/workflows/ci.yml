@@ -28,11 +28,24 @@ jobs:
         with:
           submodules: true
           fetch-depth: 0
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
       - name: Fetch all history and metadata
         run: |
           git config --global --add safe.directory /__w/${{ github.event.repository.name }}/${{ github.event.repository.name }}
-      - name: Build with Gradle
-        run: ./gradlew build ${{ matrix.build-options }}
+      - name: Build with Gradle (verbose)
+        run: ./gradlew build ${{ matrix.build-options }} --info --stacktrace
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reports-${{ matrix.artifact-name }}
+          path: |
+            build/reports
+            build/test-results
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact-name }}
@@ -61,11 +74,19 @@ jobs:
         run: git fetch --prune --unshallow
       - uses: actions/setup-java@v4
         with:
-          distribution: 'temurin'
+          distribution: temurin
           java-version: 17
           architecture: ${{ matrix.architecture }}
-      - name: Build with Gradle
-        run: ./gradlew build -Pbuildalldesktop
+      - name: Build with Gradle (verbose)
+        run: ./gradlew build -Pbuildalldesktop --info --stacktrace
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reports-${{ matrix.artifact-name }}
+          path: |
+            build/reports
+            build/test-results
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact-name }}
