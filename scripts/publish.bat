@@ -20,23 +20,19 @@ set CACHE_PATH=%BACKUP_DIR%\%TS%
 mkdir "%CACHE_PATH%"
 
 echo Backing up working directory to %CACHE_PATH% ...
-
-:: Copy all files except .git
 xcopy * "%CACHE_PATH%\" /E /I /H /Y /EXCLUDE:.git-exclude-list.txt >nul
-
 echo Backup completed.
 echo.
 
 
 :: ========================================================
-:: GIT OPS START
+:: STORE CURRENT BRANCH
 :: ========================================================
 
-:: --- 1. Store current branch ---
 for /f "tokens=*" %%b in ('git rev-parse --abbrev-ref HEAD') do set CURRENT_BRANCH=%%b
 echo Current branch: %CURRENT_BRANCH%
+echo.
 
-:: --- 2. Ask for commit message ---
 set /p COMMIT_MSG="Enter commit message: "
 echo.
 
@@ -45,7 +41,7 @@ echo.
 :: MAIN BRANCH COMMIT + FORCE PUSH
 :: ========================================================
 
-echo === Committing MAIN branch first ===
+echo === Committing MAIN branch ===
 
 git reset
 git add .
@@ -54,41 +50,62 @@ git restore --staged site >nul 2>&1
 git commit -m "%COMMIT_MSG%"
 git push origin %CURRENT_BRANCH% --force
 
-
-:: ========================================================
-:: GH-PAGES DEPLOY
-:: ========================================================
-
+echo Main branch pushed.
 echo.
-echo === Deploying to gh-pages ===
 
-git fetch
-git branch --list gh-pages >nul 2>&1
-if %errorlevel%==0 (
-    git checkout gh-pages
-) else (
-    git checkout -b gh-pages
-)
 
-git reset
-git rm -r --cached . >nul 2>&1
+:: ========================================================
+:: PUSH SITE CONTENT TO GH-PAGES WITHOUT CHECKOUT
+:: ========================================================
 
+echo === Deploying site/* to origin/gh-pages WITHOUT checkout ===
+
+:: Create a temporary index
+set TEMP_INDEX=%TEMP%\ghpages_index_%RANDOM%.tmp
+set TEMP_TREE=%TEMP%\ghpages_tree_%RANDOM%.tmp
+
+set GIT_INDEX_FILE=%TEMP_INDEX%
+
+:: Reset temp index
+git read-tree --empty
+
+:: Add only site/*
 if exist site (
     git add site/*
 ) else (
-    echo ERROR: /site folder does not exist
+    echo ERROR: site folder missing.
     pause
     exit /b
 )
 
-git commit -m "%COMMIT_MSG%"
-git push origin gh-pages --force
+:: Create a tree object from the temporary index
+git write-tree > "%TEMP_TREE%"
+set /p TREE_HASH=<"%TEMP_TREE%"
 
-git checkout %CURRENT_BRANCH%
+echo Using tree %TREE_HASH% for gh-pages deployment...
 
+:: Commit object for gh-pages
+set AUTHOR_NAME=temp
+set AUTHOR_EMAIL=temp@local
+
+git commit-tree %TREE_HASH% -m "%COMMIT_MSG%" > "%TEMP_TREE%_commit"
+set /p COMMIT_HASH=<"%TEMP_TREE%_commit"
+
+:: Force push the commit to origin/gh-pages
+git push origin %COMMIT_HASH%:refs/heads/gh-pages --force
+
+echo GH-PAGES pushed without checkout.
 echo.
+
+
+:: Cleanup temp index
+set GIT_INDEX_FILE=
+del "%TEMP_INDEX%" >nul 2>&1
+del "%TEMP_TREE%"* >nul 2>&1
+
+
 echo ------------------------------------
-echo Deployment Complete!
+echo Deployment complete!
 echo Local backup stored at: %CACHE_PATH%
 echo ------------------------------------
 pause
