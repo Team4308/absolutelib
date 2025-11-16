@@ -222,11 +222,20 @@ publishing {
 // Minimal index file for Pages repo
 tasks.register("generatePagesIndex") {
     onlyIf { project.hasProperty('pagesPublish') }
+
+    // Declare outputs so Gradle knows what this task creates
+    def indexFile = file("$buildDir/pages-maven/index.html")
+    outputs.file(indexFile)
+
     doLast {
-        def outDir = layout.buildDirectory.dir("pages-maven").get().asFile
-        def index = new File(outDir, "index.html")
-        index.text = """<html><body><h1>AbsoluteLib Maven Repository</h1><p>Artifacts under /${project.group.toString().replace('.','/')}/absolutelib-java/${project.version}</p></body></html>"""
-        logger.lifecycle("Maven repo index generated in build/pages-maven/index.html")
+        // Ensure output directory exists
+        def outDir = indexFile.parentFile
+        if (!outDir.exists() && !outDir.mkdirs()) {
+            throw new GradleException("Failed to create pages-maven directory: ${outDir}")
+        }
+
+        indexFile.text = """<html><body><h1>AbsoluteLib Maven Repository</h1><p>Artifacts under /${project.group.toString().replace('.','/')}/absolutelib-java/${project.version}</p></body></html>"""
+        logger.lifecycle("Maven repo index generated at ${indexFile}")
     }
 }
 
