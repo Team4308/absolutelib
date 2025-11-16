@@ -4,6 +4,9 @@ build/
 bin/
 out/
 
+# Local site mirror for debugging Pages
+site/
+
 # Eclipse
 .settings/
 .classpath

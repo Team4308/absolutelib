@@ -5,7 +5,7 @@
 AbsoluteLib is an FRC utility library for Team 4308 providing reusable subsystems, math helpers, and adapters around WPILib and common vendor APIs.
 
 Version: 2.0.0  
-Updated: Nov 12, 2025
+Updated: Nov 16, 2025
 
 ---
 
@@ -41,7 +41,7 @@ The vendor JSON (`absolutelib.json`) currently references:
 
 ```json
 "mavenUrls": [
-  "https://team4308.github.io/absolutelib/releases",
+  "https://team4308.github.io/absolutelib",
   "https://jitpack.io"
 ]
 ```
@@ -55,7 +55,7 @@ The self-hosted Maven repo (under GitHub Pages) exposes:
 The path on Pages is:
 
 ```text
-https://team4308.github.io/absolutelib/releases/ca/team4308/absolutelib-java/1.0.5/absolutelib-java-1.0.5.jar
+https://team4308.github.io/absolutelib/ca/team4308/absolutelib-java/1.0.5/absolutelib-java-1.0.5.jar
 ```
 
 If you want to consume this directly without the vendordep, you can add:
@@ -64,7 +64,7 @@ If you want to consume this directly without the vendordep, you can add:
 repositories {
     mavenCentral()
     maven {
-        url = uri("https://team4308.github.io/absolutelib/releases")
+        url = uri("https://team4308.github.io/absolutelib")
     }
 }
 
@@ -164,22 +164,40 @@ If you get a 409 conflict, the version already exists; bump `version` in `gradle
 
 #### Self-hosted Maven (GitHub Pages)
 
-This is handled by the `pages.yml` workflow:
+GitHub Actions generates and deploys the Maven repo automatically from `main`:
 
-- It runs on pushes to `main` and tags `v*` (deploy gated to `main`).
-- It calls:
+1. Push your changes to `main` (either manually or via `scripts\publish-latest.bat`):
 
-  ```bash
-  ./gradlew -Pversion="${PUBLISH_VERSION}" -PpagesPublish publishPagesRepo
-  ```
+   ```powershell
+   scripts\publish-latest.bat
+   ```
 
-- `publishPagesRepo`:
-  - Publishes the `absolutelib-java` artifact into `build/pages-maven` using the `GitHubPagesLocal` Maven repository.
-  - Generates a minimal HTML index.
+   This optionally runs `build-site` locally and commits/pushes your code.
 
-- The workflow then copies `build/pages-maven` to `deploy/releases` and deploys it via `actions/deploy-pages`.
+2. The `.github/workflows/pages.yml` workflow runs on pushes to `main` and:
 
-Result: `https://team4308.github.io/absolutelib/releases` is a standard Maven repo the vendordep and robot projects can use without credentials.
+   - Calls:
+
+     ```bash
+     ./gradlew "-Pversion=${PUBLISH_VERSION}" "-PpagesPublish=true" publishPagesRepo
+     ```
+
+   - Writes the Maven repo to `build/pages-maven`.
+   - Uploads `build/pages-maven` as the Pages artifact and deploys it.
+
+GitHub Pages is configured to serve the `build/pages-maven` content, so:
+
+- Vendor JSON: `https://team4308.github.io/absolutelib/absolutelib.json`
+- Maven root: `https://team4308.github.io/absolutelib`
+- Artifact: `https://team4308.github.io/absolutelib/ca/team4308/absolutelib-java/1.0.X/absolutelib-java-1.0.X.pom`
+
+If you want to regenerate the Maven repo locally for debugging, you can run:
+
+```powershell
+scripts\build-site.bat
+```
+
+This runs `gradlew -PpagesPublish=true publishPagesRepo` and writes to `build/pages-maven` and `./site`.
 
 ### 3. Tagging and vendor JSON auto-update
 
