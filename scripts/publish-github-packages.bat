@@ -48,9 +48,14 @@ if errorlevel 1 (
 echo.
 echo Running: gradlew publish
 call .\gradlew.bat publish
-if errorlevel 1 (
-  echo Publish failed.
-  exit /b 1
+set ERR=%ERRORLEVEL%
+
+if not "%ERR%"=="0" (
+  echo.
+  echo gradlew publish failed with exit code %ERR%.
+  echo If the error mentions "status code 409", the artifact version is already published.
+  echo To publish again, bump the version in gradle.properties.
+  exit /b %ERR%
 )
 
 echo.

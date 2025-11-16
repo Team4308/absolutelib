@@ -9,7 +9,7 @@ Updated: Nov 12, 2025
 
 ## Installation (WPILib Vendor JSON)
 
-AbsoluteLib is distributed as a WPILib vendor library. The vendor JSON is hosted on GitHub Pages and the artifacts are hosted on GitHub Packages.
+AbsoluteLib is distributed as a WPILib vendor library. The vendor JSON is hosted on GitHub Pages and the artifacts are hosted on a public Maven repository.
 
 1. Open your robot project in VS Code (WPILib extension installed).
 2. Press `Ctrl+Shift+P` and run: `WPILib: Manage Vendor Libraries`.
@@ -24,7 +24,7 @@ AbsoluteLib is distributed as a WPILib vendor library. The vendor JSON is hosted
 
    ```gradle
    dependencies {
-       implementation "ca.team4308:absolutelib-java:1.0.1"
+       implementation "ca.team4308:absolutelib-java:1.0.2"
        // ...your other dependencies...
    }
    ```
@@ -35,44 +35,32 @@ The vendor JSON (`absolutelib.json`) references:
 
 ```json
 "mavenUrls": [
-  "https://maven.pkg.github.com/Team4308/absolutelib",
-  "https://repo1.maven.org/maven2",
-  "https://maven.revrobotics.com",
-  "https://maven.ctr-electronics.com/release",
-  "https://maven.littletonrobotics.com/release"
+  "https://repo1.maven.org/maven2"
 ]
 ```
 
-The primary Maven host is GitHub Packages:
+The published artifact is:
 
 - Group ID: `ca.team4308`
 - Artifact ID: `absolutelib-java`
-- Version: `1.0.0`
+- Version: `1.0.1`
 
 If you want to consume the library directly from Gradle (without vendor JSON), add:
 
 ```gradle
 repositories {
-    maven {
-        url = uri("https://maven.pkg.github.com/Team4308/absolutelib")
-        credentials {
-            // GitHub username and a PAT with read:packages
-            username = findProperty("gpr.user") ?: System.getenv("GPR_USER")
-            password = findProperty("gpr.key")  ?: System.getenv("GPR_TOKEN")
-        }
-    }
     mavenCentral()
     // other repos...
 }
 
 dependencies {
-    implementation "ca.team4308:absolutelib-java:1.0.0"
+    implementation "ca.team4308:absolutelib-java:1.0.2"
 }
 ```
 
 ## Publishing Workflow (Maintainers)
 
-- `./scripts/publish-github-packages.bat` prompts for GitHub credentials and runs `gradlew publish` to GitHub Packages.
+- `./scripts/publish-github-packages.bat` prompts for GitHub credentials and runs `gradlew publish` to GitHub Packages (for development or JitPack). The vendor JSON currently points at Maven Central.
 - GitHub Actions workflows:
   - `.github/workflows/update-vendor-json.yml` updates `absolutelib.json` version and JSON URL when a `v*` tag is pushed.
   - `.github/workflows/pages.yml` deploys `absolutelib.json` to GitHub Pages at `https://team4308.github.io/absolutelib/absolutelib.json`.
@@ -316,5 +304,4 @@ PathConstraints fast = new PathConstraints(
 ```
 
 ---
-````
 
