@@ -7,9 +7,13 @@ AbsoluteLib is an FRC utility library for Team 4308 providing reusable subsystem
 Version: 2.0.0  
 Updated: Nov 12, 2025
 
-## Installation (WPILib Vendor JSON)
+---
 
-AbsoluteLib is distributed as a WPILib vendor library. The vendor JSON is hosted on GitHub Pages and the artifacts are hosted on a public Maven repository.
+## Installation (Recommended: WPILib Vendor JSON)
+
+AbsoluteLib is distributed as a WPILib vendor library. The vendor JSON is hosted on GitHub Pages and the artifacts are hosted on a public Maven repository that lives under GitHub Pages.
+
+Use this for normal FRC robot projects.
 
 1. Open your robot project in VS Code (WPILib extension installed).
 2. Press `Ctrl+Shift+P` and run: `WPILib: Manage Vendor Libraries`.
@@ -20,59 +24,218 @@ AbsoluteLib is distributed as a WPILib vendor library. The vendor JSON is hosted
    https://team4308.github.io/absolutelib/absolutelib.json
    ```
 
-5. Save and let Gradle refresh. You should now have the dependency:
+5. Save and let Gradle refresh.
 
-   ```gradle
-   dependencies {
-       implementation "ca.team4308:absolutelib-java:1.0.2"
-       // ...your other dependencies...
-   }
-   ```
+After installation, absolutelib will be included automatically via the vendordep. If you want to reference it explicitly in `build.gradle`:
 
-### Maven Repository Details
+```gradle
+dependencies {
+    implementation "ca.team4308:absolutelib-java:1.0.5"
+    // ...your other dependencies...
+}
+```
 
-The vendor JSON (`absolutelib.json`) references:
+### Maven Repository Details (Vendordep path)
+
+The vendor JSON (`absolutelib.json`) currently references:
 
 ```json
 "mavenUrls": [
-  "https://repo1.maven.org/maven2"
+  "https://team4308.github.io/absolutelib/releases",
+  "https://jitpack.io"
 ]
 ```
 
-The published artifact is:
+The self-hosted Maven repo (under GitHub Pages) exposes:
 
 - Group ID: `ca.team4308`
 - Artifact ID: `absolutelib-java`
-- Version: `1.0.1`
+- Version: `1.0.2`
 
-If you want to consume the library directly from Gradle (without vendor JSON), add:
+The path on Pages is:
+
+```text
+https://team4308.github.io/absolutelib/releases/ca/team4308/absolutelib-java/1.0.2/absolutelib-java-1.0.2.jar
+```
+
+If you want to consume this directly without the vendordep, you can add:
 
 ```gradle
 repositories {
     mavenCentral()
+    maven {
+        url = uri("https://team4308.github.io/absolutelib/releases")
+    }
+}
+
+dependencies {
+    implementation "ca.team4308:absolutelib-java:1.0.5"
+}
+```
+
+---
+
+## Alternative: Direct Gradle Dependency via JitPack
+
+For non-FRC projects or where you do not want to use a WPILib vendordep, you can use JitPack.
+
+Coordinates (see JitPack page for latest):
+
+- Group ID: `com.github.Team4308`
+- Artifact ID: `absolutelib`
+- Version: `1.0.2` (or tag of your choice)
+
+Add to your Gradle project:
+
+```gradle
+repositories {
+    maven { url "https://jitpack.io" }
     // other repos...
 }
 
 dependencies {
-    implementation "ca.team4308:absolutelib-java:1.0.2"
+    implementation "com.github.Team4308:absolutelib:1.0.5"
 }
 ```
 
-## Publishing Workflow (Maintainers)
+This bypasses the FRC vendordep mechanism entirely and pulls straight from JitPack.
 
-- `./scripts/publish-github-packages.bat` prompts for GitHub credentials and runs `gradlew publish` to GitHub Packages (for development or JitPack). The vendor JSON currently points at Maven Central.
-- GitHub Actions workflows:
-  - `.github/workflows/update-vendor-json.yml` updates `absolutelib.json` version and JSON URL when a `v*` tag is pushed.
-  - `.github/workflows/pages.yml` deploys `absolutelib.json` to GitHub Pages at `https://team4308.github.io/absolutelib/absolutelib.json`.
+---
+
+## Maintainers: How to Update and Publish
+
+This section is for people maintaining the library.
+
+### 1. Version bump
+
+1. Update the Gradle project version:
+
+   ```properties
+   // gradle.properties
+   group=ca.team4308
+   version=1.0.X
+   ```
+
+2. Update the vendordep JSON version and dependency:
+
+   ```json
+   // absolutelib.json
+   "version": "1.0.X",
+   "javaDependencies": [
+     {
+       "groupId": "ca.team4308",
+       "artifactId": "absolutelib-java",
+       "version": "1.0.X"
+     }
+   ]
+   ```
+
+3. Update the README examples to match the new version:
+
+   ```gradle
+   implementation "ca.team4308:absolutelib-java:1.0.5"
+   implementation "com.github.Team4308:absolutelib:1.0.5"
+   ```
+
+### 2. Publishing the Java artifact
+
+There are two publishing paths:
+
+- GitHub Packages (for internal use / debug)
+- Self-hosted Maven under GitHub Pages (for vendordep)
+
+#### GitHub Packages
+
+From the `absolutelib` root:
+
+```powershell
+scripts\publish-github-packages.bat
+```
+
+The script:
+
+- Prompts for your GitHub username and a PAT with `read:packages`, `write:packages`.
+- Runs `gradlew verifyPublishCreds` and then `gradlew publish`.
+- Uses the `GitHubPackages` repository block in `build.gradle` to upload.
+
+If you get a 409 conflict, the version already exists; bump `version` in `gradle.properties` if you really need a new build.
+
+#### Self-hosted Maven (GitHub Pages)
+
+This is handled by the `pages.yml` workflow:
+
+- It runs on pushes to `main` and tags `v*`.
+- It calls:
+
+  ```bash
+  ./gradlew -Pversion="${PUBLISH_VERSION}" -PpagesPublish publishPagesRepo
+  ```
+
+- `publishPagesRepo`:
+  - Publishes the `absolutelib-java` artifact into `build/pages-maven` using the `GitHubPagesLocal` Maven repository.
+  - Generates a minimal HTML index.
+
+- The workflow then copies `build/pages-maven` to `deploy/releases` and deploys it via `actions/deploy-pages`.
+
+Result: `https://team4308.github.io/absolutelib/releases` is a standard Maven repo the vendordep and robot projects can use without credentials.
+
+### 3. Tagging and vendor JSON auto-update
+
+The `.github/workflows/update-vendor-json.yml` workflow runs when you push a tag `v*`:
+
+- Extracts the version from the tag name (e.g. `v1.0.2` → `1.0.2`).
+- Updates the `"version"` field in `absolutelib.json`.
+- Updates the `jsonUrl` to point at the tagged version on raw.githubusercontent.com (for archival).
+- Commits and pushes the updated `absolutelib.json`.
+
+For the GitHub Pages path (the URL you give to teams), we keep:
+
+```json
+"jsonUrl": "https://team4308.github.io/absolutelib/absolutelib.json"
+```
+
+and the `pages.yml` workflow ensures that is updated on each deploy.
+
+### 4. Robot project pattern (example: `tut`)
+
+In a robot project like `tut`, the minimal pattern is:
+
+```groovy
+// Detect vendordep
+def hasAbsoluteLibVendordep = file("vendordeps/absolutelib.json").exists()
+
+dependencies {
+    // WPILib
+    annotationProcessor wpi.java.deps.wpilibAnnotations()
+    implementation wpi.java.deps.wpilib()
+    implementation wpi.java.vendor.java()
+
+    // Only use absolutelib if vendordep is installed
+    if (hasAbsoluteLibVendordep) {
+        implementation "ca.team4308:absolutelib-java:1.0.5"
+    }
+}
+
+repositories {
+    mavenCentral()
+    maven { url "https://jitpack.io" } // optional extra if using JitPack directly
+}
+```
+
+This makes absolutelib optional: projects without the vendordep still build, ones with the vendordep get the dependency.
+
+---
 
 ## Features
 
-- Subsystem base with logging and telemetry (AbsoluteSubsystem)
+- Subsystem base with logging and telemetry (`AbsoluteSubsystem`)
 - PathPlanner integration with on-the-fly path generation (2025 API)
 - Motor and encoder wrappers (CTRE, REV, duty-cycle, CANCoder)
 - Simulation-ready patterns
 - WPILib chooser helpers for runtime path selection
-- Premade Subsystems
+- Pre-made subsystems (elevator, pivot, etc.)
+
+(See the examples below and generated Javadoc for more details.)
 
 ---
 

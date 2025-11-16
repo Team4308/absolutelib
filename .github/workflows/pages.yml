@@ -55,26 +55,15 @@ jobs:
       - name: Prepare deploy directory
         run: |
           mkdir -p deploy/releases
-          # Only host vendor JSON on Pages; Maven artifacts are served from GitHub Packages.
+          # Copy Maven repo under /releases so it is a full Maven repository
+          cp -R build/pages-maven/* deploy/releases/
+          # Vendor JSON at root and under /releases for convenience
           cp absolutelib.json deploy/releases/absolutelib.json
           cp absolutelib.json deploy/absolutelib.json
           echo "<html><body><h1>AbsoluteLib Releases Root</h1><p>Vendor JSON at /absolutelib.json</p></body></html>" > deploy/index.html
-          echo "<html><body><h1>AbsoluteLib Maven Releases</h1><p>Artifacts are fetched from GitHub Packages.</p></body></html>" > deploy/releases/index.html
+          echo "<html><body><h1>AbsoluteLib Maven Releases</h1><p>Maven repo at /releases/</p></body></html>" > deploy/releases/index.html
           echo "<html><body><h2>404 - Not Found</h2></body></html>" > deploy/404.html
           touch deploy/.nojekyll
-
-      - name: Check artifact availability (non-fatal)
-        run: |
-          POM_URL="https://team4308.github.io/absolutelib/releases/ca/team4308/absolutelib-java/${PUBLISH_VERSION}/absolutelib-java-${PUBLISH_VERSION}.pom"
-          echo "Checking $POM_URL"
-          curl -I $POM_URL || echo "POM not reachable yet (may be snapshot or not tagged)."
-
-      - name: Assert POM exists (no-fail)
-        run: |
-          LOCAL_POM="build/pages-maven/ca/team4308/absolutelib-java/${PUBLISH_VERSION}/absolutelib-java-${PUBLISH_VERSION}.pom"
-          if [ ! -f "$LOCAL_POM" ]; then
-            echo "Local POM missing (expected for non-tag snapshot). Continuing without failure."
-          fi
 
       - name: List deploy structure
         run: |

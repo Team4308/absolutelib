@@ -1,0 +1,380 @@
+[1mdiff --git a/.github/workflows/pages.yml b/.github/workflows/pages.yml[m
+[1mindex a1e7aff..1f28246 100644[m
+[1m--- a/.github/workflows/pages.yml[m
+[1m+++ b/.github/workflows/pages.yml[m
+[36m@@ -55,27 +55,16 @@[m [mjobs:[m
+       - name: Prepare deploy directory[m
+         run: |[m
+           mkdir -p deploy/releases[m
+[31m-          # Only host vendor JSON on Pages; Maven artifacts are served from GitHub Packages.[m
+[32m+[m[32m          # Copy Maven repo under /releases so it is a full Maven repository[m
+[32m+[m[32m          cp -R build/pages-maven/* deploy/releases/[m
+[32m+[m[32m          # Vendor JSON at root and under /releases for convenience[m
+           cp absolutelib.json deploy/releases/absolutelib.json[m
+           cp absolutelib.json deploy/absolutelib.json[m
+           echo "<html><body><h1>AbsoluteLib Releases Root</h1><p>Vendor JSON at /absolutelib.json</p></body></html>" > deploy/index.html[m
+[31m-          echo "<html><body><h1>AbsoluteLib Maven Releases</h1><p>Artifacts are fetched from GitHub Packages.</p></body></html>" > deploy/releases/index.html[m
+[32m+[m[32m          echo "<html><body><h1>AbsoluteLib Maven Releases</h1><p>Maven repo at /releases/</p></body></html>" > deploy/releases/index.html[m
+           echo "<html><body><h2>404 - Not Found</h2></body></html>" > deploy/404.html[m
+           touch deploy/.nojekyll[m
+ [m
+[31m-      - name: Check artifact availability (non-fatal)[m
+[31m-        run: |[m
+[31m-          POM_URL="https://team4308.github.io/absolutelib/releases/ca/team4308/absolutelib-java/${PUBLISH_VERSION}/absolutelib-java-${PUBLISH_VERSION}.pom"[m
+[31m-          echo "Checking $POM_URL"[m
+[31m-          curl -I $POM_URL || echo "POM not reachable yet (may be snapshot or not tagged)."[m
+[31m-[m
+[31m-      - name: Assert POM exists (no-fail)[m
+[31m-        run: |[m
+[31m-          LOCAL_POM="build/pages-maven/ca/team4308/absolutelib-java/${PUBLISH_VERSION}/absolutelib-java-${PUBLISH_VERSION}.pom"[m
+[31m-          if [ ! -f "$LOCAL_POM" ]; then[m
+[31m-            echo "Local POM missing (expected for non-tag snapshot). Continuing without failure."[m
+[31m-          fi[m
+[31m-[m
+       - name: List deploy structure[m
+         run: |[m
+           echo "Deploy tree (first 100 entries):"[m
+[1mdiff --git a/README.md b/README.md[m
+[1mindex 4e7635a..13ee1f7 100644[m
+[1m--- a/README.md[m
+[1m+++ b/README.md[m
+[36m@@ -7,9 +7,13 @@[m [mAbsoluteLib is an FRC utility library for Team 4308 providing reusable subsystem[m
+ Version: 2.0.0  [m
+ Updated: Nov 12, 2025[m
+ [m
+[31m-## Installation (WPILib Vendor JSON)[m
+[32m+[m[32m---[m
+[32m+[m
+[32m+[m[32m## Installation (Recommended: WPILib Vendor JSON)[m
+[32m+[m
+[32m+[m[32mAbsoluteLib is distributed as a WPILib vendor library. The vendor JSON is hosted on GitHub Pages and the artifacts are hosted on a public Maven repository that lives under GitHub Pages.[m
+ [m
+[31m-AbsoluteLib is distributed as a WPILib vendor library. The vendor JSON is hosted on GitHub Pages and the artifacts are hosted on a public Maven repository.[m
+[32m+[m[32mUse this for normal FRC robot projects.[m
+ [m
+ 1. Open your robot project in VS Code (WPILib extension installed).[m
+ 2. Press `Ctrl+Shift+P` and run: `WPILib: Manage Vendor Libraries`.[m
+[36m@@ -20,59 +24,218 @@[m [mAbsoluteLib is distributed as a WPILib vendor library. The vendor JSON is hosted[m
+    https://team4308.github.io/absolutelib/absolutelib.json[m
+    ```[m
+ [m
+[31m-5. Save and let Gradle refresh. You should now have the dependency:[m
+[32m+[m[32m5. Save and let Gradle refresh.[m
+ [m
+[31m-   ```gradle[m
+[31m-   dependencies {[m
+[31m-       implementation "ca.team4308:absolutelib-java:1.0.2"[m
+[31m-       // ...your other dependencies...[m
+[31m-   }[m
+[31m-   ```[m
+[32m+[m[32mAfter installation, absolutelib will be included automatically via the vendordep. If you want to reference it explicitly in `build.gradle`:[m
+ [m
+[31m-### Maven Repository Details[m
+[32m+[m[32m```gradle[m
+[32m+[m[32mdependencies {[m
+[32m+[m[32m    implementation "ca.team4308:absolutelib-java:1.0.4"[m
+[32m+[m[32m    // ...your other dependencies...[m
+[32m+[m[32m}[m
+[32m+[m[32m```[m
+ [m
+[31m-The vendor JSON (`absolutelib.json`) references:[m
+[32m+[m[32m### Maven Repository Details (Vendordep path)[m
+[32m+[m
+[32m+[m[32mThe vendor JSON (`absolutelib.json`) currently references:[m
+ [m
+ ```json[m
+ "mavenUrls": [[m
+[31m-  "https://repo1.maven.org/maven2"[m
+[32m+[m[32m  "https://team4308.github.io/absolutelib/releases",[m
+[32m+[m[32m  "https://jitpack.io"[m
+ ][m
+ ```[m
+ [m
+[31m-The published artifact is:[m
+[32m+[m[32mThe self-hosted Maven repo (under GitHub Pages) exposes:[m
+ [m
+ - Group ID: `ca.team4308`[m
+ - Artifact ID: `absolutelib-java`[m
+[31m-- Version: `1.0.1`[m
+[32m+[m[32m- Version: `1.0.2`[m
+ [m
+[31m-If you want to consume the library directly from Gradle (without vendor JSON), add:[m
+[32m+[m[32mThe path on Pages is:[m
+[32m+[m
+[32m+[m[32m```text[m
+[32m+[m[32mhttps://team4308.github.io/absolutelib/releases/ca/team4308/absolutelib-java/1.0.2/absolutelib-java-1.0.2.jar[m
+[32m+[m[32m```[m
+[32m+[m
+[32m+[m[32mIf you want to consume this directly without the vendordep, you can add:[m
+ [m
+ ```gradle[m
+ repositories {[m
+     mavenCentral()[m
+[32m+[m[32m    maven {[m
+[32m+[m[32m        url = uri("https://team4308.github.io/absolutelib/releases")[m
+[32m+[m[32m    }[m
+[32m+[m[32m}[m
+[32m+[m
+[32m+[m[32mdependencies {[m
+[32m+[m[32m    implementation "ca.team4308:absolutelib-java:1.0.4"[m
+[32m+[m[32m}[m
+[32m+[m[32m```[m
+[32m+[m
+[32m+[m[32m---[m
+[32m+[m
+[32m+[m[32m## Alternative: Direct Gradle Dependency via JitPack[m
+[32m+[m
+[32m+[m[32mFor non-FRC projects or where you do not want to use a WPILib vendordep, you can use JitPack.[m
+[32m+[m
+[32m+[m[32mCoordinates (see JitPack page for latest):[m
+[32m+[m
+[32m+[m[32m- Group ID: `com.github.Team4308`[m
+[32m+[m[32m- Artifact ID: `absolutelib`[m
+[32m+[m[32m- Version: `1.0.2` (or tag of your choice)[m
+[32m+[m
+[32m+[m[32mAdd to your Gradle project:[m
+[32m+[m
+[32m+[m[32m```gradle[m
+[32m+[m[32mrepositories {[m
+[32m+[m[32m    maven { url "https://jitpack.io" }[m
+     // other repos...[m
+ }[m
+ [m
+ dependencies {[m
+[31m-    implementation "ca.team4308:absolutelib-java:1.0.2"[m
+[32m+[m[32m    implementation "com.github.Team4308:absolutelib:1.0.4"[m
+ }[m
+ ```[m
+ [m
+[31m-## Publishing Workflow (Maintainers)[m
+[32m+[m[32mThis bypasses the FRC vendordep mechanism entirely and pulls straight from JitPack.[m
+[32m+[m
+[32m+[m[32m---[m
+[32m+[m
+[32m+[m[32m## Maintainers: How to Update and Publish[m
+ [m
+[31m-- `./scripts/publish-github-packages.bat` prompts for GitHub credentials and runs `gradlew publish` to GitHub Packages (for development or JitPack). The vendor JSON currently points at Maven Central.[m
+[31m-- GitHub Actions workflows:[m
+[31m-  - `.github/workflows/update-vendor-json.yml` updates `absolutelib.json` version and JSON URL when a `v*` tag is pushed.[m
+[31m-  - `.github/workflows/pages.yml` deploys `absolutelib.json` to GitHub Pages at `https://team4308.github.io/absolutelib/absolutelib.json`.[m
+[32m+[m[32mThis section is for people maintaining the library.[m
+[32m+[m
+[32m+[m[32m### 1. Version bump[m
+[32m+[m
+[32m+[m[32m1. Update the Gradle project version:[m
+[32m+[m
+[32m+[m[32m   ```properties[m
+[32m+[m[32m   // gradle.properties[m
+[32m+[m[32m   group=ca.team4308[m
+[32m+[m[32m   version=1.0.X[m
+[32m+[m[32m   ```[m
+[32m+[m
+[32m+[m[32m2. Update the vendordep JSON version and dependency:[m
+[32m+[m
+[32m+[m[32m   ```json[m
+[32m+[m[32m   // absolutelib.json[m
+[32m+[m[32m   "version": "1.0.X",[m
+[32m+[m[32m   "javaDependencies": [[m
+[32m+[m[32m     {[m
+[32m+[m[32m       "groupId": "ca.team4308",[m
+[32m+[m[32m       "artifactId": "absolutelib-java",[m
+[32m+[m[32m       "version": "1.0.X"[m
+[32m+[m[32m     }[m
+[32m+[m[32m   ][m
+[32m+[m[32m   ```[m
+[32m+[m
+[32m+[m[32m3. Update the README examples to match the new version:[m
+[32m+[m
+[32m+[m[32m   ```gradle[m
+[32m+[m[32m   implementation "ca.team4308:absolutelib-java:1.0.4"[m
+[32m+[m[32m   implementation "com.github.Team4308:absolutelib:1.0.4"[m
+[32m+[m[32m   ```[m
+[32m+[m
+[32m+[m[32m### 2. Publishing the Java artifact[m
+[32m+[m
+[32m+[m[32mThere are two publishing paths:[m
+[32m+[m
+[32m+[m[32m- GitHub Packages (for internal use / debug)[m
+[32m+[m[32m- Self-hosted Maven under GitHub Pages (for vendordep)[m
+[32m+[m
+[32m+[m[32m#### GitHub Packages[m
+[32m+[m
+[32m+[m[32mFrom the `absolutelib` root:[m
+[32m+[m
+[32m+[m[32m```powershell[m
+[32m+[m[32mscripts\publish-github-packages.bat[m
+[32m+[m[32m```[m
+[32m+[m
+[32m+[m[32mThe script:[m
+[32m+[m
+[32m+[m[32m- Prompts for your GitHub username and a PAT with `read:packages`, `write:packages`.[m
+[32m+[m[32m- Runs `gradlew verifyPublishCreds` and then `gradlew publish`.[m
+[32m+[m[32m- Uses the `GitHubPackages` repository block in `build.gradle` to upload.[m
+[32m+[m
+[32m+[m[32mIf you get a 409 conflict, the version already exists; bump `version` in `gradle.properties` if you really need a new build.[m
+[32m+[m
+[32m+[m[32m#### Self-hosted Maven (GitHub Pages)[m
+[32m+[m
+[32m+[m[32mThis is handled by the `pages.yml` workflow:[m
+[32m+[m
+[32m+[m[32m- It runs on pushes to `main` and tags `v*`.[m
+[32m+[m[32m- It calls:[m
+[32m+[m
+[32m+[m[32m  ```bash[m
+[32m+[m[32m  ./gradlew -Pversion="${PUBLISH_VERSION}" -PpagesPublish publishPagesRepo[m
+[32m+[m[32m  ```[m
+[32m+[m
+[32m+[m[32m- `publishPagesRepo`:[m
+[32m+[m[32m  - Publishes the `absolutelib-java` artifact into `build/pages-maven` using the `GitHubPagesLocal` Maven repository.[m
+[32m+[m[32m  - Generates a minimal HTML index.[m
+[32m+[m
+[32m+[m[32m- The workflow then copies `build/pages-maven` to `deploy/releases` and deploys it via `actions/deploy-pages`.[m
+[32m+[m
+[32m+[m[32mResult: `https://team4308.github.io/absolutelib/releases` is a standard Maven repo the vendordep and robot projects can use without credentials.[m
+[32m+[m
+[32m+[m[32m### 3. Tagging and vendor JSON auto-update[m
+[32m+[m
+[32m+[m[32mThe `.github/workflows/update-vendor-json.yml` workflow runs when you push a tag `v*`:[m
+[32m+[m
+[32m+[m[32m- Extracts the version from the tag name (e.g. `v1.0.2` → `1.0.2`).[m
+[32m+[m[32m- Updates the `"version"` field in `absolutelib.json`.[m
+[32m+[m[32m- Updates the `jsonUrl` to point at the tagged version on raw.githubusercontent.com (for archival).[m
+[32m+[m[32m- Commits and pushes the updated `absolutelib.json`.[m
+[32m+[m
+[32m+[m[32mFor the GitHub Pages path (the URL you give to teams), we keep:[m
+[32m+[m
+[32m+[m[32m```json[m
+[32m+[m[32m"jsonUrl": "https://team4308.github.io/absolutelib/absolutelib.json"[m
+[32m+[m[32m```[m
+[32m+[m
+[32m+[m[32mand the `pages.yml` workflow ensures that is updated on each deploy.[m
+[32m+[m
+[32m+[m[32m### 4. Robot project pattern (example: `tut`)[m
+[32m+[m
+[32m+[m[32mIn a robot project like `tut`, the minimal pattern is:[m
+[32m+[m
+[32m+[m[32m```groovy[m
+[32m+[m[32m// Detect vendordep[m
+[32m+[m[32mdef hasAbsoluteLibVendordep = file("vendordeps/absolutelib.json").exists()[m
+[32m+[m
+[32m+[m[32mdependencies {[m
+[32m+[m[32m    // WPILib[m
+[32m+[m[32m    annotationProcessor wpi.java.deps.wpilibAnnotations()[m
+[32m+[m[32m    implementation wpi.java.deps.wpilib()[m
+[32m+[m[32m    implementation wpi.java.vendor.java()[m
+[32m+[m
+[32m+[m[32m    // Only use absolutelib if vendordep is installed[m
+[32m+[m[32m    if (hasAbsoluteLibVendordep) {[m
+[32m+[m[32m        implementation "ca.team4308:absolutelib-java:1.0.4"[m
+[32m+[m[32m    }[m
+[32m+[m[32m}[m
+[32m+[m
+[32m+[m[32mrepositories {[m
+[32m+[m[32m    mavenCentral()[m
+[32m+[m[32m    maven { url "https://jitpack.io" } // optional extra if using JitPack directly[m
+[32m+[m[32m}[m
+[32m+[m[32m```[m
+[32m+[m
+[32m+[m[32mThis makes absolutelib optional: projects without the vendordep still build, ones with the vendordep get the dependency.[m
+[32m+[m
+[32m+[m[32m---[m
+ [m
+ ## Features[m
+ [m
+[31m-- Subsystem base with logging and telemetry (AbsoluteSubsystem)[m
+[32m+[m[32m- Subsystem base with logging and telemetry (`AbsoluteSubsystem`)[m
+ - PathPlanner integration with on-the-fly path generation (2025 API)[m
+ - Motor and encoder wrappers (CTRE, REV, duty-cycle, CANCoder)[m
+ - Simulation-ready patterns[m
+ - WPILib chooser helpers for runtime path selection[m
+[31m-- Premade Subsystems[m
+[32m+[m[32m- Pre-made subsystems (elevator, pivot, etc.)[m
+[32m+[m
+[32m+[m[32m(See the examples below and generated Javadoc for more details.)[m
+ [m
+ ---[m
+ [m
+[1mdiff --git a/absolutelib.json b/absolutelib.json[m
+[1mindex 869333c..c45a6cf 100644[m
+[1m--- a/absolutelib.json[m
+[1m+++ b/absolutelib.json[m
+[36m@@ -1,18 +1,19 @@[m
+ {[m
+     "fileName": "absolutelib.json",[m
+     "name": "absolutelib",[m
+[31m-    "version": "1.0.2",[m
+[32m+[m[32m    "version": "1.0.4",[m
+     "frcYear": "2025",[m
+     "uuid": "a604c6de-3573-4ba6-ae4f-32778238b9de",[m
+     "mavenUrls": [[m
+[31m-        "https://repo1.maven.org/maven2"[m
+[32m+[m[32m        "https://team4308.github.io/absolutelib/releases",[m
+[32m+[m[32m        "https://jitpack.io"[m
+     ],[m
+     "jsonUrl": "https://team4308.github.io/absolutelib/absolutelib.json",[m
+     "javaDependencies": [[m
+         {[m
+             "groupId": "ca.team4308",[m
+             "artifactId": "absolutelib-java",[m
+[31m-            "version": "1.0.2"[m
+[32m+[m[32m            "version": "1.0.4"[m
+         }[m
+     ],[m
+     "jniDependencies": [],[m
+[1mdiff --git a/build.gradle b/build.gradle[m
+[1mindex ae2262a..93c55cb 100644[m
+[1m--- a/build.gradle[m
+[1m+++ b/build.gradle[m
+[36m@@ -197,13 +197,21 @@[m [mpublishing {[m
+     }[m
+ [m
+     repositories {[m
+[32m+[m[32m        // GitHub Packages (for internal/dev use)[m
+         maven {[m
+             name = "GitHubPackages"[m
+             url = uri("https://maven.pkg.github.com/Team4308/absolutelib")[m
+             credentials {[m
+[31m-                // Prefer gradle.properties, then env vars[m
+[31m-                username = findProperty("gpr.user") ?: System.getenv("GPR_USER")[m
+[31m-                password = findProperty("gpr.key")  ?: System.getenv("GPR_TOKEN")[m
+[32m+[m[32m                username = findProperty("gpr.user") ?: System.getenv("GPR_USER") ?: System.getenv("GITHUB_ACTOR")[m
+[32m+[m[32m                password = findProperty("gpr.key")  ?: System.getenv("GPR_TOKEN") ?: System.getenv("GITHUB_TOKEN")[m
+[32m+[m[32m            }[m
+[32m+[m[32m        }[m
+[32m+[m
+[32m+[m[32m        // Local Maven repo for GitHub Pages[m
+[32m+[m[32m        if (project.hasProperty('pagesPublish')) {[m
+[32m+[m[32m            maven {[m
+[32m+[m[32m                name = "GitHubPagesLocal"[m
+[32m+[m[32m                url = layout.buildDirectory.dir("pages-maven")[m
+             }[m
+         }[m
+     }[m
+[36m@@ -225,11 +233,13 @@[m [mtasks.register("generatePagesIndex") {[m
+ tasks.register("publishPagesRepo") {[m
+     group = "publishing"[m
+     description = "Publish artifacts into build/pages-maven for GitHub Pages."[m
+[32m+[m[32m    // Ensure Java artifact is published into build/pages-maven when -PpagesPublish is set[m
+[32m+[m[32m    dependsOn("publishMavenPublicationToGitHubPagesLocalRepository")[m
+     dependsOn("generatePagesIndex")[m
+     doLast {[m
+         logger.lifecycle("Pages root: https://team4308.github.io/absolutelib/")[m
+         logger.lifecycle("Pages releases index: https://team4308.github.io/absolutelib/releases/")[m
+[31m-        logger.lifecycle("Artifact path (tag builds): https://team4308.github.io/absolutelib/releases/${project.group.toString().replace('.','/')}/absolutelib-java/${project.version}/")[m
+[32m+[m[32m        logger.lifecycle("Artifact path: https://team4308.github.io/absolutelib/releases/ca/team4308/absolutelib-java/${project.version}/")[m
+     }[m
+ }[m
+ [m
+[1mdiff --git a/gradle.properties b/gradle.properties[m
+[1mindex 46533fc..0272c6e 100644[m
+[1m--- a/gradle.properties[m
+[1m+++ b/gradle.properties[m
+[36m@@ -1,7 +1,7 @@[m
+ org.gradle.workers.max=1[m
+ [m
+ group=ca.team4308[m
+[31m-version=1.0.2[m
+[32m+[m[32mversion=1.0.4[m
+ [m
+ org.gradle.console=plain[m
+ org.gradle.logging.level=info[m

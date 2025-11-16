@@ -1,18 +1,19 @@
 {
     "fileName": "absolutelib.json",
     "name": "absolutelib",
-    "version": "1.0.2",
+    "version": "1.0.5",
     "frcYear": "2025",
     "uuid": "a604c6de-3573-4ba6-ae4f-32778238b9de",
     "mavenUrls": [
-        "https://repo1.maven.org/maven2"
+        "https://team4308.github.io/absolutelib/releases",
+        "https://jitpack.io"
     ],
     "jsonUrl": "https://team4308.github.io/absolutelib/absolutelib.json",
     "javaDependencies": [
         {
             "groupId": "ca.team4308",
             "artifactId": "absolutelib-java",
-            "version": "1.0.2"
+            "version": "1.0.5"
         }
     ],
     "jniDependencies": [],

@@ -197,13 +197,21 @@ publishing {
     }
 
     repositories {
+        // GitHub Packages (for internal/dev use)
         maven {
             name = "GitHubPackages"
             url = uri("https://maven.pkg.github.com/Team4308/absolutelib")
             credentials {
-                // Prefer gradle.properties, then env vars
-                username = findProperty("gpr.user") ?: System.getenv("GPR_USER")
-                password = findProperty("gpr.key")  ?: System.getenv("GPR_TOKEN")
+                username = findProperty("gpr.user") ?: System.getenv("GPR_USER") ?: System.getenv("GITHUB_ACTOR")
+                password = findProperty("gpr.key")  ?: System.getenv("GPR_TOKEN") ?: System.getenv("GITHUB_TOKEN")
+            }
+        }
+
+        // Local Maven repo for GitHub Pages
+        if (project.hasProperty('pagesPublish')) {
+            maven {
+                name = "GitHubPagesLocal"
+                url = layout.buildDirectory.dir("pages-maven")
             }
         }
     }
@@ -225,11 +233,13 @@ tasks.register("generatePagesIndex") {
 tasks.register("publishPagesRepo") {
     group = "publishing"
     description = "Publish artifacts into build/pages-maven for GitHub Pages."
+    // Ensure Java artifact is published into build/pages-maven when -PpagesPublish is set
+    dependsOn("publishMavenPublicationToGitHubPagesLocalRepository")
     dependsOn("generatePagesIndex")
     doLast {
         logger.lifecycle("Pages root: https://team4308.github.io/absolutelib/")
         logger.lifecycle("Pages releases index: https://team4308.github.io/absolutelib/releases/")
-        logger.lifecycle("Artifact path (tag builds): https://team4308.github.io/absolutelib/releases/${project.group.toString().replace('.','/')}/absolutelib-java/${project.version}/")
+        logger.lifecycle("Artifact path: https://team4308.github.io/absolutelib/releases/ca/team4308/absolutelib-java/${project.version}/")
     }
 }
 
