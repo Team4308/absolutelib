@@ -24,7 +24,7 @@ AbsoluteLib is distributed as a WPILib vendor library. The vendor JSON is hosted
 
    ```gradle
    dependencies {
-       implementation "ca.team4308:absolutelib-java:1.0.0"
+       implementation "ca.team4308:absolutelib-java:1.0.1"
        // ...your other dependencies...
    }
    ```
@@ -316,4 +316,5 @@ PathConstraints fast = new PathConstraints(
 ```
 
 ---
+````
 
