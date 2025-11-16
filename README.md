@@ -50,12 +50,12 @@ The self-hosted Maven repo (under GitHub Pages) exposes:
 
 - Group ID: `ca.team4308`
 - Artifact ID: `absolutelib-java`
-- Version: `1.0.2`
+- Version: `1.0.5`
 
 The path on Pages is:
 
 ```text
-https://team4308.github.io/absolutelib/releases/ca/team4308/absolutelib-java/1.0.2/absolutelib-java-1.0.2.jar
+https://team4308.github.io/absolutelib/releases/ca/team4308/absolutelib-java/1.0.5/absolutelib-java-1.0.5.jar
 ```
 
 If you want to consume this directly without the vendordep, you can add:
@@ -83,7 +83,7 @@ Coordinates (see JitPack page for latest):
 
 - Group ID: `com.github.Team4308`
 - Artifact ID: `absolutelib`
-- Version: `1.0.2` (or tag of your choice)
+- Version: `1.0.5` (or tag of your choice)
 
 Add to your Gradle project:
 
@@ -133,9 +133,11 @@ This section is for people maintaining the library.
 3. Update the README examples to match the new version:
 
    ```gradle
-   implementation "ca.team4308:absolutelib-java:1.0.5"
-   implementation "com.github.Team4308:absolutelib:1.0.5"
+   implementation "ca.team4308:absolutelib-java:1.0.X"
+   implementation "com.github.Team4308:absolutelib:1.0.X"
    ```
+
+You can also run `scripts\release-absolutelib.bat` from the repo root to automate these steps (it bumps versions, commits, tags, and pushes).
 
 ### 2. Publishing the Java artifact
 
@@ -164,7 +166,7 @@ If you get a 409 conflict, the version already exists; bump `version` in `gradle
 
 This is handled by the `pages.yml` workflow:
 
-- It runs on pushes to `main` and tags `v*`.
+- It runs on pushes to `main` and tags `v*` (deploy gated to `main`).
 - It calls:
 
   ```bash
@@ -183,7 +185,7 @@ Result: `https://team4308.github.io/absolutelib/releases` is a standard Maven re
 
 The `.github/workflows/update-vendor-json.yml` workflow runs when you push a tag `v*`:
 
-- Extracts the version from the tag name (e.g. `v1.0.2` → `1.0.2`).
+- Extracts the version from the tag name (e.g. `v1.0.5` → `1.0.5`).
 - Updates the `"version"` field in `absolutelib.json`.
 - Updates the `jsonUrl` to point at the tagged version on raw.githubusercontent.com (for archival).
 - Commits and pushes the updated `absolutelib.json`.
@@ -196,9 +198,9 @@ For the GitHub Pages path (the URL you give to teams), we keep:
 
 and the `pages.yml` workflow ensures that is updated on each deploy.
 
-### 4. Robot project pattern (example: `tut`)
+### 4. Robot project pattern (examples: `tut`, `tut2`)
 
-In a robot project like `tut`, the minimal pattern is:
+In a robot project (like `tut` or `tut2`), the minimal pattern is:
 
 ```groovy
 // Detect vendordep

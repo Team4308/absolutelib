@@ -222,12 +222,11 @@ publishing {
 // Minimal index file for Pages repo
 tasks.register("generatePagesIndex") {
     onlyIf { project.hasProperty('pagesPublish') }
-    dependsOn("publish")
     doLast {
         def outDir = layout.buildDirectory.dir("pages-maven").get().asFile
         def index = new File(outDir, "index.html")
         index.text = """<html><body><h1>AbsoluteLib Maven Repository</h1><p>Artifacts under /${project.group.toString().replace('.','/')}/absolutelib-java/${project.version}</p></body></html>"""
-        logger.lifecycle("Vendor JSON will be available at /absolutelib.json and /releases/absolutelib.json on GitHub Pages.")
+        logger.lifecycle("Maven repo index generated in build/pages-maven/index.html")
     }
 }
 
@@ -240,8 +239,7 @@ tasks.register("publishPagesRepo") {
     dependsOn("generatePagesIndex")
     doLast {
         logger.lifecycle("Pages root: https://team4308.github.io/absolutelib/")
-        logger.lifecycle("Pages releases index: https://team4308.github.io/absolutelib/releases/")
-        logger.lifecycle("Artifact path: https://team4308.github.io/absolutelib/releases/ca/team4308/absolutelib-java/${project.version}/")
+        logger.lifecycle("Artifact path: https://team4308.github.io/absolutelib/ca/team4308/absolutelib-java/${project.version}/")
     }
 }
 
