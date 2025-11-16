@@ -18,9 +18,13 @@ concurrency:
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
+    # Only use the protected 'github-pages' environment when running from main,
+    # so tags don't try to deploy directly and get blocked.
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
+    # Skip the deploy steps entirely when the ref is a tag (v*).
+    if: startsWith(github.ref, 'refs/heads/main') || github.event_name == 'workflow_dispatch'
     steps:
       - uses: actions/checkout@v4
         with:
@@ -30,6 +34,9 @@ jobs:
           distribution: temurin
           java-version: 17
       - uses: gradle/actions/setup-gradle@v3
+
+      - name: Make gradlew executable
+        run: chmod +x ./gradlew
 
       - name: Configure Pages
         uses: actions/configure-pages@v5
