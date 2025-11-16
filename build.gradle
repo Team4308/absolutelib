@@ -197,13 +197,15 @@ publishing {
     }
 
     repositories {
-        // GitHub Packages (for internal/dev use)
-        maven {
-            name = "GitHubPackages"
-            url = uri("https://maven.pkg.github.com/Team4308/absolutelib")
-            credentials {
-                username = findProperty("gpr.user") ?: System.getenv("GPR_USER") ?: System.getenv("GITHUB_ACTOR")
-                password = findProperty("gpr.key")  ?: System.getenv("GPR_TOKEN") ?: System.getenv("GITHUB_TOKEN")
+        // GitHub Packages (for internal/dev use) - skip when pagesPublish is set
+        if (!project.hasProperty('pagesPublish')) {
+            maven {
+                name = "GitHubPackages"
+                url = uri("https://maven.pkg.github.com/Team4308/absolutelib")
+                credentials {
+                    username = findProperty("gpr.user") ?: System.getenv("GPR_USER") ?: System.getenv("GITHUB_ACTOR")
+                    password = findProperty("gpr.key")  ?: System.getenv("GPR_TOKEN") ?: System.getenv("GITHUB_TOKEN")
+                }
             }
         }
 
