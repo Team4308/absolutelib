@@ -47,6 +47,8 @@ echo Backup completed.
 echo.
 
 
+
+
 :: ========================================================
 :: STORE CURRENT BRANCH
 :: ========================================================
@@ -80,7 +82,7 @@ echo.
 :: PUSH SITE CONTENT 
 :: ========================================================
 
-echo === Deploying site/* to origin/gh-pages WITHOUT checkout ===
+echo === Deploying site/* to origin/gh-pages ===
 
 :: Create a temporary index
 set TEMP_INDEX=%TEMP%\ghpages_index_%RANDOM%.tmp
