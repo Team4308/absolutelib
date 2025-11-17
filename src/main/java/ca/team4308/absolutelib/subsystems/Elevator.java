@@ -289,7 +289,7 @@ public class Elevator extends AbsoluteSubsystem {
      * @param percent output (-1 to 1)
      */
     public void setPercent(double percent) {
-        // ...existing code...
+        applyPercentOutput(percent);
     }
 
     /**
@@ -368,7 +368,7 @@ public class Elevator extends AbsoluteSubsystem {
     protected void onModeChanged(Mode from, Mode to) {}
 
     /** helper to centralize mode changes and fire {@link #onModeChanged(Mode, Mode)}. */
-    private void setMode(Mode newMode) {
+    public void setMode(Mode newMode) {
         if (this.mode != newMode) {
             Mode prev = this.mode;
             this.mode = newMode;

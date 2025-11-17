@@ -30,10 +30,9 @@ public class POVToJoystick extends Trigger {
      *  - Null validation runs after super(); safe in normal usage but could be moved earlier.
      */
     public POVToJoystick(GenericHID joystick, int angle, int povNumber) {
-        super(() -> joystick.getPOV(povNumber) == angle); // existing logic preserved
-        requireNonNullParam(joystick, "joystick", "POVButton"); // original validation retained
-        // Additional diagnostic comment:
-        // If joystick is null, a NullPointerException would occur inside the Trigger evaluation before this check.
+        super(() -> joystick.getPOV(povNumber) == angle);
+        requireNonNullParam(joystick, "joystick", "POVButton"); 
+ 
     }
 
     /**

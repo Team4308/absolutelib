@@ -54,7 +54,6 @@ public class PivotSimulation extends SimulationBase {
         super(name);
         this.config = config;
         
-        // I = (1/3) * m * L^2
         double moi = (1.0 / 3.0) * config.armMassKg * config.armLengthMeters * config.armLengthMeters;
         
         this.armSim = new SingleJointedArmSim(
@@ -81,20 +80,18 @@ public class PivotSimulation extends SimulationBase {
 
     @Override
     protected void updateSimulation(double dtSeconds) {
-        // Set input voltage (clamped to realistic battery range)
         double clampedVoltage = clamp(appliedVoltage, -12.0, 12.0);
         armSim.setInputVoltage(clampedVoltage);
         
-        // Update physics
         armSim.update(dtSeconds);
         
-        // Update state cache
         currentState.positionMeters = armSim.getAngleRads();
         currentState.velocityMetersPerSec = armSim.getVelocityRadPerSec();
         currentState.appliedVoltage = clampedVoltage;
         currentState.currentDrawAmps = armSim.getCurrentDrawAmps();
         currentState.accelerationMetersPerSecSq = 0.0; 
         currentState.temperatureCelsius = 20.0 + (currentState.currentDrawAmps * 2.0);
+        
     }
 
     @Override

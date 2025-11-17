@@ -88,15 +88,12 @@ public class Pivot extends AbsoluteSubsystem {
 		pid.setTolerance(Math.toRadians(cfg.toleranceDeg));
 		ff = new ArmFeedforward(cfg.kS, cfg.kG, cfg.kV, cfg.kA);
 
-		 // Detect encoder type
 		encoderIsAbsolute = (cfg.encoder != null) && cfg.encoder.isAbsolute();
-		
-		// For absolute encoders, store initial position
 		if (encoderIsAbsolute && cfg.encoder != null) {
 			absoluteEncoderInitialOffset = cfg.encoder.getPositionMeters();
 		}
 
-		// Auto-create simulation if enabled and in sim mode
+		// Only initialize simulation, do not run any loop here
 		if (RobotBase.isSimulation() && cfg.enableSimulation) {
 			initSimulation();
 		}
@@ -165,34 +162,13 @@ public class Pivot extends AbsoluteSubsystem {
 	public void periodic() {
 		onPrePeriodic();
 		onPeriodic();
-		
-		// Update simulation if present
+
+		// Only update simulation if present, do not call periodic recursively
 		if (simulation != null) {
-			// Feed voltage to simulation
 			simulation.setVoltage(lastAppliedVoltage);
 			simulation.periodic();
-			
-			// Feed simulated angle back to encoder wrapper
-			if (cfg.encoder != null) {
-				double simAngleRad = simulation.getAngleRad();
-				
-				if (encoderIsAbsolute) {
-					// For absolute encoders, don't overwrite - use sim for validation only
-					// Or optionally add noise/drift simulation
-					// In real robot, absolute encoder would provide actual position
-					logOnce("absolute_encoder_sim", 
-						"Absolute encoder detected - simulation running in parallel for validation");
-				} else {
-					// For relative encoders, update from simulation
-					double jointRot = simAngleRad / (2.0 * Math.PI);
-					if (cfg.encoderInverted) jointRot = -jointRot;
-					jointRot -= Math.toRadians(cfg.angleOffsetDeg) / (2.0 * Math.PI);
-					double motorRot = jointRot * cfg.gearRatio;
-					cfg.encoder.setPositionMeters(motorRot);
-				}
-			}
 		}
-		
+
 		onPostPeriodic();
 	}
 
@@ -214,10 +190,10 @@ public class Pivot extends AbsoluteSubsystem {
 			applyVoltage(volts);
 		}
 		// Telemetry
-		logNumber("angleDeg", getAngleDeg());
-		logNumber("targetDeg", Math.toDegrees(targetAngleRad));
-		logBoolean("atTarget", atTarget());
-		logBoolean("encoderAbsolute", encoderIsAbsolute);
+		SDAdd("angleDeg", getAngleDeg());
+		SDAdd("targetDeg", Math.toDegrees(targetAngleRad));
+		SDAdd("atTarget", atTarget());
+		SDAdd("encoderAbsolute", encoderIsAbsolute);
 	}
 
 	protected void onPostPeriodic() {}

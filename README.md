@@ -261,230 +261,360 @@ This makes absolutelib optional: projects without the vendordep still build, one
 
 ## Subsystem Usage Examples
 
-### Pivot (Arm/Wrist)
+### Pivot Subsystem (Arm/Wrist)
+
+A minimal Pivot subsystem using AbsoluteLib:
 
 ```java
-import ca.team4308.absolutelib.wrapper.AbsoluteSubsystem;
 import ca.team4308.absolutelib.subsystems.Pivot;
 import ca.team4308.absolutelib.wrapper.MotorWrapper;
 import ca.team4308.absolutelib.wrapper.EncoderWrapper;
-import edu.wpi.first.wpilibj2.command.Command;
 
-public class ArmSubsystem extends AbsoluteSubsystem {
+public class ArmSubsystem {
     private final Pivot pivot;
 
     public ArmSubsystem() {
         MotorWrapper leader = MotorWrapper.createTalonFX(10);
-        MotorWrapper follower = MotorWrapper.createTalonFX(11);
         EncoderWrapper encoder = EncoderWrapper.createCANCoder(20);
 
-        pivot = new Pivot(new Pivot.Config()
+        Pivot.Config config = new Pivot.Config()
             .withLeader(leader)
-            .withFollowers(follower)
             .withEncoder(encoder)
             .pid(0.5, 0.0, 0.1)
             .ff(0.1, 0.5, 0.0, 0.0)
             .gear(100.0)
             .limits(-90, 90)
             .tolerance(2.0)
-            .inverted(false)
-        );
-        initialize();
+            .inverted(false);
+
+        pivot = new Pivot(config);
+        pivot.initialize();
     }
 
-    @Override
     public void periodic() {
-        runPeriodicWithHooks(() -> {
-            pivot.periodic();
-            SDAdd("angleDeg", pivot.getAngleDeg());
-            SDAdd("targetDeg", pivot.getTargetAngleDeg());
-            SDAdd("atTarget", pivot.atTarget());
-            logThrottle("pivotStatus", 500, "Pivot running");
-        });
+        pivot.periodic();
+        // Example: log current angle
+        double angleDeg = pivot.getAngleDeg();
+        boolean atTarget = pivot.atTarget();
+        // Use your preferred logging/telemetry system here
     }
 
-    @Override
-    public Sendable log() { return null; }
-
-    // Command factories
-    public Command setAngle(double degrees) {
-        return runOnce(() -> pivot.setTargetAngleDeg(degrees)).until(pivot::atTarget);
+    public void setAngle(double degrees) {
+        pivot.setTargetAngleDeg(degrees);
     }
 
-    public Command stow() { return setAngle(0); }
-    public Command score() { return setAngle(45); }
-    public Command intake() { return setAngle(-30); }
+    public void stop() {
+        pivot.disable();
+    }
 }
 ```
 
-With simulation:
+#### Simulation Integration
+
+AbsoluteLib supports WPILib simulation. To enable simulation for the Pivot:
 
 ```java
-pivot = new Pivot(new Pivot.Config()
+import ca.team4308.absolutelib.subsystems.simulation.PivotSimulation;
+
+Pivot.Config config = new Pivot.Config()
     .withLeader(leader)
     .withEncoder(encoder)
-    // ...existing config...
     .withSimulation(new PivotSimulation.Config()
-        .armLengthMeters(0.5)
-        .armMassKg(5.0)
-        .motorGearbox(DCMotor.getNEO(1))
-        .gearing(100.0)
+        .gearbox(DCMotor.getNEO(1), 1)
+        .gearRatio(100.0)
+        .armLength(0.5)
+        .armMass(5.0)
+        .limits(Math.toRadians(-90), Math.toRadians(90))
+        .startAngle(Math.toRadians(0))
+        .gravity(true)
     )
-    .enableSimulation(true)
-);
+    .enableSimulation(true);
+
+pivot = new Pivot(config);
 ```
+
+When running in simulation (`RobotBase.isSimulation()`), the Pivot will use the physics model for realistic behavior. You can set voltages, read angles, and visualize the simulated arm.
 
 ---
 
-### Elevator (with top and bottom beam breaks)
+### Elevator Subsystem
+
+A minimal Elevator subsystem using AbsoluteLib:
 
 ```java
-import ca.team4308.absolutelib.wrapper.AbsoluteSubsystem;
 import ca.team4308.absolutelib.subsystems.Elevator;
 import ca.team4308.absolutelib.wrapper.MotorWrapper;
 import ca.team4308.absolutelib.wrapper.EncoderWrapper;
-import edu.wpi.first.wpilibj.DigitalInput;
-import edu.wpi.first.wpilibj2.command.Command;
 
-public class ElevatorSubsystem extends AbsoluteSubsystem {
+public class ElevatorSubsystem {
     private final Elevator elevator;
 
-    // Beam breaks (active low)
-    private final DigitalInput bottomBeamBreak = new DigitalInput(0);
-    private final DigitalInput topBeamBreak = new DigitalInput(1);   
-
     public ElevatorSubsystem() {
-        MotorWrapper leader = MotorWrapper.createSparkMax(5, SparkMaxType.BRUSHLESS);
-        MotorWrapper follower = MotorWrapper.createSparkMax(6, SparkMaxType.BRUSHLESS);
+        MotorWrapper leader = MotorWrapper.createSparkMax(5);
         EncoderWrapper encoder = leader.getIntegratedEncoder();
 
-        elevator = new Elevator(new Elevator.Config()
+        Elevator.Config config = new Elevator.Config()
             .withLeader(leader)
-            .withFollowers(follower)
             .withEncoder(encoder)
             .pid(5.0, 0.0, 0.5)
             .ff(0.05, 0.8, 0.0, 0.0)
             .sprocketRadiusMeters(0.025)
             .gear(12.0)
             .limits(0.0, 1.5)
-            .tolerance(0.02)
-        );
-        initialize();
-        logOnce("init", "Elevator initialized");
+            .tolerance(0.02);
+
+        elevator = new Elevator(config);
+        elevator.initialize();
     }
 
-
-
-    private boolean atTopLimit() {
-        return !topBeamBreak.get();
-    }
-
-    @Override
     public void periodic() {
-        runPeriodicWithHooks(() -> {
-            elevator.periodic();
-
-            if (atTopLimit() && elevator.getHeightMeters() > 1.45) {
-                elevator.setTargetHeightMeters(1.45);
-                logThrottle("limit", 1000, "Top limit enforced");
-            }
-
-
-            SDAdd("heightMeters", elevator.getHeightMeters());
-            SDAdd("targetMeters", elevator.getTargetHeightMeters());
-            SDAdd("atTarget", elevator.atTarget());
-            SDAdd("topLimit", atTopLimit());
-        });
+        elevator.periodic();
+        double height = elevator.getHeightMeters();
+        boolean atTarget = elevator.atTarget();
+        // Use your preferred logging/telemetry system here
     }
 
-    @Override
-    public Sendable log() { return null; }
-
-    public Command goToHeight(double meters) {
-        return runOnce(() -> elevator.setTargetHeightMeters(meters)).until(elevator::atTarget);
+    public void setHeight(double meters) {
+        elevator.setTargetHeightMeters(meters);
     }
 
-    public Command groundLevel() { return goToHeight(0.0); }
-    public Command lowGoal() { return goToHeight(0.5); }
-    public Command highGoal() { return goToHeight(1.4); }
-
-
+    public void stop() {
+        elevator.disable();
+    }
 }
 ```
+
+#### Simulation Integration
+
+Elevator simulation is similar to Pivot. Provide a simulation config and enable simulation:
+
+```java
+import ca.team4308.absolutelib.subsystems.simulation.ElevatorSimulation;
+
+Elevator.Config config = new Elevator.Config()
+    .withLeader(leader)
+    .withEncoder(encoder)
+    .withSimulation(new ElevatorSimulation.Config()
+        .motorType(DCMotor.getNEO(2))
+        .gearRatio(12.0)
+        .massKg(8.0)
+        .heightLimits(0.0, 1.5)
+        .startHeight(0.0)
+    )
+    .enableSimulation(true);
+
+elevator = new Elevator(config);
+```
+
+---
+
+## Simulation Support
+
+AbsoluteLib subsystems support WPILib simulation out of the box. To use simulation:
+
+- Provide a simulation config (`PivotSimulation.Config`, `ElevatorSimulation.Config`, etc.) when constructing your subsystem.
+- Set `.enableSimulation(true)` in the config.
+- When running in simulation, the subsystem will use the physics model for realistic feedback.
+- You can interact with the simulated subsystem using the same API as real hardware (set voltages, read positions, etc.).
+- Telemetry and visualization (e.g., AdvantageScope) are supported.
+
+Simulation is useful for testing control logic, tuning, and visualization before deploying to a real robot.
 
 ---
 
 ## Path Following (PathPlanner 2025)
 
-On-the-fly path creation with OnTheFlyPathing, updated for the 2025 PathPlanner API. PathPoint takes only position and rotation target; use waypointsFromPoses and GoalEndState to set final velocity/heading.
+AbsoluteLib provides helpers for on-the-fly path generation using PathPlanner:
 
 ```java
 import ca.team4308.absolutelib.path.OnTheFlyPathing;
 import com.pathplanner.lib.path.PathPlannerPath;
 import com.pathplanner.lib.path.PathConstraints;
-import com.pathplanner.lib.path.GoalEndState;
 import edu.wpi.first.math.geometry.Pose2d;
 import edu.wpi.first.math.geometry.Rotation2d;
-import edu.wpi.first.wpilibj.smartdashboard.SendableChooser;
 
-// Constraints (record): max lin vel/accel, max ang vel/accel, voltage, unlimited flag
+// Define constraints
 PathConstraints constraints = OnTheFlyPathing.constraints(3.5, 3.0);
 
-// Build simple direct path
+// Create a direct path between two poses
 Pose2d start = new Pose2d(1.0, 1.0, Rotation2d.fromDegrees(0));
-Pose2d end   = new Pose2d(3.0, 2.0, Rotation2d.fromDegrees(0));
-Rotation2d endHeading = Rotation2d.fromDegrees(180);
+Pose2d end   = new Pose2d(3.0, 2.0, Rotation2d.fromDegrees(180));
 
 PathPlannerPath path = OnTheFlyPathing.direct(
     start,
     end,
     constraints,
-    endHeading,
+    Rotation2d.fromDegrees(180),
     0.0,        // end velocity m/s
-    true        // prevent alliance flipping (coords already correct)
+    true        // prevent alliance flipping
 );
-
-// Build variants and select via chooser
-var variants = OnTheFlyPathing.variants(start, end, constraints, endHeading, true);
-SendableChooser<String> chooser = OnTheFlyPathing.buildChooser(variants, "direct");
-
-PathPlannerPath selected = OnTheFlyPathing.selected(chooser, variants);
 ```
 
-To create curved recipes:
+You can also generate arc and S-curve paths, and select between variants at runtime.
 
-```java
-PathPlannerPath arcLeft = OnTheFlyPathing.arcViaOffsetMidpoint(
-    start, end, +0.75, constraints, endHeading, 0.0, true);
+---
 
-PathPlannerPath sCurve = OnTheFlyPathing.sCurve(
-    start, end, +0.6, -0.6, constraints, endHeading, 0.0, true);
+## See Also
+
+- [Javadoc](https://team4308.github.io/absolutelib/javadoc/)
+- [Examples](https://github.com/team4308/absolutelib/tree/main/examples)
+- [WPILib Simulation Docs](https://docs.wpilib.org/en/stable/docs/software/wpilib-tools/robot-simulation.html)
+
+---
+
+## Appendix: Quick Reference
+
+### Common Patterns
+
+**Install via WPILib vendordep:**
+```text
+https://team4308.github.io/absolutelib/absolutelib.json
 ```
 
-Constraints helpers:
+**Gradle dependency:**
+```gradle
+implementation "ca.team4308:absolutelib-java:1.0.5"
+```
 
-```java
-// Convenience (defaults angular limits to very large values and 12V)
-PathConstraints base = OnTheFlyPathing.constraints(3.0, 3.0);
-
-// Derive slow/fast sets (uses record ctor)
-PathConstraints slow = new PathConstraints(
-    Math.min(base.maxVelocityMPS(), 2.0),
-    Math.min(base.maxAccelerationMPSSq(), 2.0),
-    base.maxAngularVelocityRadPerSec(),
-    base.maxAngularAccelerationRadPerSecSq(),
-    base.nominalVoltageVolts(),
-    false
-);
-PathConstraints fast = new PathConstraints(
-    base.maxVelocityMPS() * 1.25,
-    base.maxAccelerationMPSSq() * 1.25,
-    base.maxAngularVelocityRadPerSec() * 1.25,
-    base.maxAngularAccelerationRadPerSecSq() * 1.25,
-    base.nominalVoltageVolts(),
-    false
-);
+**Add Maven repo:**
+```gradle
+repositories {
+    mavenCentral()
+    maven { url = uri("https://team4308.github.io/absolutelib") }
+}
 ```
 
 ---
+
+### Subsystem Construction Patterns
+
+#### Pivot (Arm/Wrist)
+```java
+Pivot.Config config = new Pivot.Config()
+    .withLeader(MotorWrapper.createTalonFX(10))
+    .withEncoder(EncoderWrapper.createCANCoder(20))
+    .pid(0.5, 0.0, 0.1)
+    .ff(0.1, 0.5, 0.0, 0.0)
+    .gear(100.0)
+    .limits(-90, 90)
+    .tolerance(2.0)
+    .inverted(false);
+
+Pivot pivot = new Pivot(config);
+pivot.initialize();
+```
+**Enable simulation:**
+```java
+config.withSimulation(new PivotSimulation.Config()
+    .gearbox(DCMotor.getNEO(1), 1)
+    .gearRatio(100.0)
+    .armLength(0.5)
+    .armMass(5.0)
+    .limits(Math.toRadians(-90), Math.toRadians(90))
+    .startAngle(Math.toRadians(0))
+    .gravity(true)
+).enableSimulation(true);
+```
+
+#### Elevator
+```java
+Elevator.Config config = new Elevator.Config()
+    .withLeader(MotorWrapper.createSparkMax(5))
+    .withEncoder(MotorWrapper.createSparkMax(5).getIntegratedEncoder())
+    .pid(5.0, 0.0, 0.5)
+    .ff(0.05, 0.8, 0.0, 0.0)
+    .sprocketRadiusMeters(0.025)
+    .gear(12.0)
+    .limits(0.0, 1.5)
+    .tolerance(0.02);
+
+Elevator elevator = new Elevator(config);
+elevator.initialize();
+```
+**Enable simulation:**
+```java
+config.withSimulation(new ElevatorSimulation.Config()
+    .motorType(DCMotor.getNEO(2))
+    .gearRatio(12.0)
+    .massKg(8.0)
+    .heightLimits(0.0, 1.5)
+    .startHeight(0.0)
+).enableSimulation(true);
+```
+
+#### Intake
+```java
+Intake.Config config = new Intake.Config()
+    .withLeader(MotorWrapper.createSparkMax(7))
+    .pid(0.2, 0.0, 0.01)
+    .ff(0.05, 0.1, 0.0, 0.0)
+    .inverted(false);
+
+Intake intake = new Intake(config);
+intake.initialize();
+```
+**Enable simulation:**
+```java
+config.withSimulation(new IntakeSimulation.Config()
+    .motorType(DCMotor.getNEO(1))
+    .gearRatio(1.0)
+    .massKg(1.0)
+).enableSimulation(true);
+```
+
+#### Shooter
+```java
+Shooter.Config config = new Shooter.Config()
+    .withLeader(MotorWrapper.createTalonFX(15))
+    .pid(0.3, 0.0, 0.02)
+    .ff(0.1, 0.2, 0.0, 0.0)
+    .inverted(false);
+
+Shooter shooter = new Shooter(config);
+shooter.initialize();
+```
+**Enable simulation:**
+```java
+config.withSimulation(new ShooterSimulation.Config()
+    .motorType(DCMotor.getFalcon500(1))
+    .gearRatio(1.0)
+    .flywheelRadius(0.075)
+    .flywheelMass(2.0)
+).enableSimulation(true);
+```
+
+#### Drivetrain (Differential)
+```java
+Drivetrain.Config config = new Drivetrain.Config()
+    .withLeftLeader(MotorWrapper.createSparkMax(1))
+    .withRightLeader(MotorWrapper.createSparkMax(2))
+    .trackWidthMeters(0.6)
+    .wheelDiameterMeters(0.1524)
+    .gearRatio(10.71)
+    .pid(0.8, 0.0, 0.1)
+    .ff(0.2, 0.5, 0.0, 0.0);
+
+Drivetrain drivetrain = new Drivetrain(config);
+drivetrain.initialize();
+```
+**Enable simulation:**
+```java
+config.withSimulation(new DrivetrainSimulation.Config()
+    .motorType(DCMotor.getNEO(2))
+    .trackWidthMeters(0.6)
+    .wheelDiameterMeters(0.1524)
+    .gearRatio(10.71)
+    .robotMassKg(50.0)
+).enableSimulation(true);
+```
+
+---
+
+### PathPlanner direct path
+```java
+PathPlannerPath path = OnTheFlyPathing.direct(
+    startPose, endPose, constraints, endHeading, 0.0, true
+);
+```
+
 

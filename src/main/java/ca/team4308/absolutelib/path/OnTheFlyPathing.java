@@ -86,7 +86,6 @@ public final class OnTheFlyPathing {
 		return factory.waypointsFromPoses(poses);
 	}
 
-	/** Build a path from existing waypoints (no explicit start state). */
 	public static <P, W, C, G> P createPathFromWaypoints(
 			PathFactory<P, W, C, G> factory,
 			C constraints,
