@@ -3,8 +3,6 @@
 [![](https://jitpack.io/v/team4308/absolutelib.svg)](https://jitpack.io/#team4308/absolutelib)
 
 AbsoluteLib is an FRC utility library for Team 4308 providing reusable subsystems, math helpers, and adapters around WPILib and common vendor APIs.
-
-Version: 2.0.0  
 Updated: Nov 16, 2025
 
 ---
@@ -457,7 +455,6 @@ You can also generate arc and S-curve paths, and select between variants at runt
 ## See Also
 
 - [Javadoc](https://team4308.github.io/absolutelib/javadoc/)
-- [Examples](https://github.com/team4308/absolutelib/tree/main/examples)
 - [WPILib Simulation Docs](https://docs.wpilib.org/en/stable/docs/software/wpilib-tools/robot-simulation.html)
 
 ---
