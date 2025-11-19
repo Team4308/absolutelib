@@ -1,14 +1,17 @@
 package ca.team4308.absolutelib.subsystems.simulation;
 
-import edu.wpi.first.math.system.plant.DCMotor;
-import edu.wpi.first.wpilibj.simulation.SingleJointedArmSim;
-import org.littletonrobotics.junction.Logger;
 import java.util.ArrayList;
 import java.util.List;
+
+import org.littletonrobotics.junction.Logger;
+
+import edu.wpi.first.math.system.plant.DCMotor;
+import edu.wpi.first.wpilibj.simulation.SingleJointedArmSim;
 
 public class ArmSimulation extends SimulationBase {
 
     public static class JointSimConfig {
+
         public DCMotor gearbox = DCMotor.getNEO(1);
         public double gearRatio = 1.0;
         public double linkLengthMeters = 0.5;
@@ -18,20 +21,47 @@ public class ArmSimulation extends SimulationBase {
         public boolean simulateGravity = true;
         public double startAngleRad = 0.0;
 
-        public JointSimConfig gearbox(DCMotor motor) { this.gearbox = motor; return this; }
-        public JointSimConfig gearRatio(double ratio) { this.gearRatio = ratio; return this; }
-        public JointSimConfig linkLength(double meters) { this.linkLengthMeters = meters; return this; }
-        public JointSimConfig linkMass(double kg) { this.linkMassKg = kg; return this; }
-        public JointSimConfig limits(double minRad, double maxRad) { 
-            this.minAngleRad = minRad; this.maxAngleRad = maxRad; return this; 
+        public JointSimConfig gearbox(DCMotor motor) {
+            this.gearbox = motor;
+            return this;
         }
-        public JointSimConfig startAngle(double rad) { this.startAngleRad = rad; return this; }
-        public JointSimConfig gravity(boolean enable) { this.simulateGravity = enable; return this; }
+
+        public JointSimConfig gearRatio(double ratio) {
+            this.gearRatio = ratio;
+            return this;
+        }
+
+        public JointSimConfig linkLength(double meters) {
+            this.linkLengthMeters = meters;
+            return this;
+        }
+
+        public JointSimConfig linkMass(double kg) {
+            this.linkMassKg = kg;
+            return this;
+        }
+
+        public JointSimConfig limits(double minRad, double maxRad) {
+            this.minAngleRad = minRad;
+            this.maxAngleRad = maxRad;
+            return this;
+        }
+
+        public JointSimConfig startAngle(double rad) {
+            this.startAngleRad = rad;
+            return this;
+        }
+
+        public JointSimConfig gravity(boolean enable) {
+            this.simulateGravity = enable;
+            return this;
+        }
     }
 
     public static class Config {
+
         public List<JointSimConfig> joints = new ArrayList<>();
-        
+
         public Config addJoint(JointSimConfig joint) {
             joints.add(joint);
             return this;
@@ -39,16 +69,17 @@ public class ArmSimulation extends SimulationBase {
     }
 
     private static class JointSim {
+
         final SingleJointedArmSim sim;
         final JointSimConfig config;
         double appliedVoltage = 0.0;
 
         JointSim(JointSimConfig cfg) {
             this.config = cfg;
-            double moi = (1.0/3.0) * cfg.linkMassKg * cfg.linkLengthMeters * cfg.linkLengthMeters;
+            double moi = (1.0 / 3.0) * cfg.linkMassKg * cfg.linkLengthMeters * cfg.linkLengthMeters;
             this.sim = new SingleJointedArmSim(
-                cfg.gearbox, cfg.gearRatio, moi, cfg.linkLengthMeters,
-                cfg.minAngleRad, cfg.maxAngleRad, cfg.simulateGravity, cfg.startAngleRad
+                    cfg.gearbox, cfg.gearRatio, moi, cfg.linkLengthMeters,
+                    cfg.minAngleRad, cfg.maxAngleRad, cfg.simulateGravity, cfg.startAngleRad
             );
         }
     }
@@ -87,7 +118,7 @@ public class ArmSimulation extends SimulationBase {
             j.sim.update(dtSeconds);
             totalCurrent += j.sim.getCurrentDrawAmps();
         }
-        
+
         if (!joints.isEmpty()) {
             JointSim first = joints.get(0);
             currentState.positionMeters = first.sim.getAngleRads();
@@ -109,40 +140,46 @@ public class ArmSimulation extends SimulationBase {
         double[] angles = new double[joints.size()];
         double[] velocities = new double[joints.size()];
         double[] currents = new double[joints.size()];
-        
+
         for (int i = 0; i < joints.size(); i++) {
             JointSim j = joints.get(i);
             angles[i] = Math.toDegrees(j.sim.getAngleRads());
             velocities[i] = Math.toDegrees(j.sim.getVelocityRadPerSec());
             currents[i] = j.sim.getCurrentDrawAmps();
-            
-            SDAdd("joint" + i + "/angleDeg", angles[i]);
-            SDAdd("joint" + i + "/velocityDegPerSec", velocities[i]);
-            SDAdd("joint" + i + "/currentAmps", currents[i]);
-            SDAdd("joint" + i + "/hitLowerLimit", j.sim.hasHitLowerLimit());
-            SDAdd("joint" + i + "/hitUpperLimit", j.sim.hasHitUpperLimit());
+
+            recordOutput("joint" + i + "/angleDeg", angles[i]);
+            recordOutput("joint" + i + "/velocityDegPerSec", velocities[i]);
+            recordOutput("joint" + i + "/currentAmps", currents[i]);
+            recordOutput("joint" + i + "/hitLowerLimit", j.sim.hasHitLowerLimit());
+            recordOutput("joint" + i + "/hitUpperLimit", j.sim.hasHitUpperLimit());
         }
-        
+
         logJointAngles(toRadians(angles));
-        
+
         // Forward kinematics for end effector
         double[] fk = computeForwardKinematics();
         logPose2d("endEffector", fk[0], fk[1], fk[2]);
-        
+
         // Log mechanism2d data
         Logger.recordOutput(getLogChannelBase() + "/mechanism2d/angles", angles);
     }
 
     private double[] toRadians(double[] degrees) {
         double[] rad = new double[degrees.length];
-        for (int i = 0; i < degrees.length; i++) rad[i] = Math.toRadians(degrees[i]);
+        for (int i = 0; i < degrees.length; i++) {
+            rad[i] = Math.toRadians(degrees[i]);
+        }
         return rad;
     }
 
-    /** Compute end effector pose using forward kinematics */
+    /**
+     * Compute end effector pose using forward kinematics
+     */
     private double[] computeForwardKinematics() {
-        if (joints.isEmpty()) return new double[]{0, 0, 0};
-        
+        if (joints.isEmpty()) {
+            return new double[]{0, 0, 0};
+        }
+
         double x = 0, y = 0, rotation = 0;
         for (JointSim j : joints) {
             double angle = j.sim.getAngleRads() + rotation;
@@ -195,7 +232,9 @@ public class ArmSimulation extends SimulationBase {
 
     @Override
     protected void onStop() {
-        for (JointSim j : joints) j.appliedVoltage = 0.0;
+        for (JointSim j : joints) {
+            j.appliedVoltage = 0.0;
+        }
         super.onStop();
     }
 }

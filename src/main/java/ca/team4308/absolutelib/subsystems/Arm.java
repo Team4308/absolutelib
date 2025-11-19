@@ -260,7 +260,7 @@ public class Arm extends AbsoluteSubsystem {
 		double goalX = goalPose.getX();
 		double goalY = goalPose.getY();
 		double distToGoal = Math.hypot(goalX, goalY);
-		if(distToGoal > totalLength + 1e-6 || distToGoal < minReach - 1e-6){
+		if(distToGoal > totalLength + 1e-6  || distToGoal < minReach - 1e-6){
 			logThrottle("ik_unreachable", 500, "Goal unreachable (dist=" + distToGoal + ")");
 			ikSolved = false;
 			return;
@@ -370,7 +370,6 @@ public class Arm extends AbsoluteSubsystem {
 	@Override 
 	public void periodic(){ 
 		onPrePeriodic(); 
-		// Optimized: single loop
 		for(Joint j: joints) j.periodic(); 
 		onPostPeriodic(); 
 	}
