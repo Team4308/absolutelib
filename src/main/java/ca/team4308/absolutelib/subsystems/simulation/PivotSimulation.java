@@ -165,6 +165,10 @@ public class PivotSimulation extends SimulationBase {
         return armSim.hasHitLowerLimit();
     }
 
+    public double getVoltage() {
+        return appliedVoltage;
+    }
+
     public boolean hasHitUpperLimit() {
         return armSim.hasHitUpperLimit();
     }

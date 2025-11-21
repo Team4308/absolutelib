@@ -1,11 +1,13 @@
 # AbsoluteLib
 
 [![](https://jitpack.io/v/team4308/absolutelib.svg)](https://jitpack.io/#team4308/absolutelib)
+![Java CI](https://github.com/team4308/absolutelib/actions/workflows/gradle.yml/badge.svg)
+![License](https://img.shields.io/github/license/team4308/absolutelib)
 
 AbsoluteLib is an FRC utility library for Team 4308 providing reusable subsystems, math helpers, and adapters around WPILib and common vendor APIs.
 
 Version: 2.0.0  
-Updated: Nov 16, 2025
+Updated: Nov 20, 2025
 
 ---
 
@@ -99,6 +101,342 @@ dependencies {
 ```
 
 This bypasses the FRC vendordep mechanism entirely and pulls straight from JitPack.
+
+---
+
+## Features
+
+- Subsystem base with logging and telemetry (`AbsoluteSubsystem`)
+- PathPlanner integration with on-the-fly path generation (2025 API)
+- Motor and encoder wrappers (CTRE, REV, duty-cycle, CANCoder)
+- Simulation-ready patterns
+- WPILib chooser helpers for runtime path selection
+- Pre-made subsystems (elevator, pivot, arm, etc.)
+- PID Auto-Tuning Utilities
+- Music Player for TalonFX
+- LED Pattern Generators
+
+---
+
+## Subsystem Usage Examples
+
+### Pivot Subsystem (Arm/Wrist)
+
+A minimal Pivot subsystem using `Pivot.Config` builder:
+
+```java
+import ca.team4308.absolutelib.subsystems.Pivot;
+import ca.team4308.absolutelib.wrapper.MotorWrapper;
+import ca.team4308.absolutelib.wrapper.EncoderWrapper;
+
+public class ArmSubsystem {
+    private final Pivot pivot;
+
+    public ArmSubsystem() {
+        MotorWrapper leader = MotorWrapper.createTalonFX(10);
+        EncoderWrapper encoder = EncoderWrapper.createCANCoder(20);
+
+        Pivot.Config config = new Pivot.Config()
+            .withLeader(leader)
+            .withEncoder(encoder)
+            .pid(0.5, 0.0, 0.1)
+            .ff(0.1, 0.5, 0.0, 0.0)
+            .gear(100.0)
+            .limits(-90, 90)
+            .tolerance(2.0)
+            .inverted(false)
+            // Enable simulation with auto-generated physics
+            .enableSimulation(true); 
+
+        pivot = new Pivot(config);
+        pivot.initialize();
+    }
+
+    public void periodic() {
+        pivot.periodic();
+        // Example: log current angle
+        double angleDeg = pivot.getAngleDeg();
+        boolean atTarget = pivot.atTarget();
+    }
+
+    public void setAngle(double degrees) {
+        pivot.setTargetAngleDeg(degrees);
+    }
+
+    public void stop() {
+        pivot.disable();
+    }
+}
+```
+
+### Elevator Subsystem
+
+A minimal Elevator subsystem using `Elevator.ElevatorConfig` builder:
+
+```java
+import ca.team4308.absolutelib.subsystems.Elevator;
+import ca.team4308.absolutelib.wrapper.MotorWrapper;
+import ca.team4308.absolutelib.wrapper.EncoderWrapper;
+
+public class ElevatorSubsystem extends Elevator {
+    
+    public ElevatorSubsystem() {
+        super(
+            MotorWrapper.createSparkMax(5),
+            null, // No specific motor config
+            EncoderWrapper.createSparkMaxEncoder(5), // Use internal encoder
+            Elevator.ElevatorConfig.builder()
+                .minHeightMeters(0.0)
+                .maxHeightMeters(1.5)
+                .gearRatio(12.0)
+                .drumDiameterMeters(0.05)
+                .maxVelocityMetersPerSec(2.0)
+                .maxAccelerationMetersPerSecSq(4.0)
+                .toleranceMeters(0.02)
+                .build()
+        );
+        
+        // Set PID and FF
+        setPositionPID(5.0, 0.0, 0.5);
+        setFeedforwardGains(0.05, 0.8, 0.0, 0.0);
+        
+        initialize();
+    }
+}
+```
+
+### Multi-Joint Arm (with IK)
+
+The `Arm` class supports multiple joints and Inverse Kinematics (IK).
+
+```java
+import ca.team4308.absolutelib.subsystems.Arm;
+import ca.team4308.absolutelib.wrapper.MotorWrapper;
+import ca.team4308.absolutelib.wrapper.EncoderWrapper;
+
+public class MyRobotArm extends Arm {
+    
+    public MyRobotArm() {
+        // Joint 1 (Shoulder)
+        addJoint(
+            MotorWrapper.createTalonFX(1),
+            null,
+            EncoderWrapper.createCANCoder(11),
+            Arm.JointConfig.builder()
+                .minAngleRad(Math.toRadians(-90))
+                .maxAngleRad(Math.toRadians(90))
+                .linkLengthMeters(0.8)
+                .build()
+        );
+
+        // Joint 2 (Elbow)
+        addJoint(
+            MotorWrapper.createTalonFX(2),
+            null,
+            EncoderWrapper.createCANCoder(12),
+            Arm.JointConfig.builder()
+                .minAngleRad(Math.toRadians(0))
+                .maxAngleRad(Math.toRadians(150))
+                .linkLengthMeters(0.6)
+                .build()
+        );
+        
+        initialize();
+    }
+    
+    public void moveToCoordinate(double x, double y) {
+        // Solves IK and moves joints
+        setGoalPose(x, y);
+    }
+}
+```
+
+### EndEffector
+
+Extend `EndEffector` for simple mechanisms like intakes or claws.
+
+```java
+import ca.team4308.absolutelib.subsystems.EndEffector;
+import ca.team4308.absolutelib.wrapper.MotorWrapper;
+
+public class Intake extends EndEffector {
+    private final MotorWrapper motor;
+
+    public Intake() {
+        motor = MotorWrapper.createSparkMax(3);
+        // Configure motor...
+    }
+
+    public void run(double speed) {
+        motor.set(speed);
+    }
+
+    @Override
+    public void stop() {
+        motor.set(0);
+    }
+}
+```
+
+---
+
+## PID Tuning Utilities
+
+AbsoluteLib includes powerful tools for tuning PID controllers, located in `ca.team4308.absolutelib.pid`.
+
+### SimpleTune (Relay / Bang-Bang Auto-Tuner)
+
+The `SimpleTune` class uses the Åström–Hägglund Relay method to automatically estimate the **Ultimate Gain (Ku)** and **Ultimate Period (Tu)** of your system. These values can then be used to calculate PID constants using standard tuning rules (Ziegler-Nichols, Tyreus-Luyben, etc.).
+
+```java
+import ca.team4308.absolutelib.pid.SimpleTune;
+
+// 1. Initialize the tuner
+// setpoint: target value (e.g., 90 degrees)
+// relayOutput: voltage to apply (e.g., 2.0V)
+// hysteresis: noise threshold (e.g., 0.5 degrees)
+SimpleTune tuner = new SimpleTune(90.0, 2.0, 0.5);
+
+// 2. In your periodic loop:
+public void periodic() {
+    double measurement = getMechanismPosition();
+    
+    // Get the output voltage to apply to the motor
+    double output = tuner.update(measurement);
+    motor.setVoltage(output);
+    
+    if (tuner.isFinished()) {
+        motor.setVoltage(0);
+        
+        // 3. Calculate constants when done
+        SimpleTune.PIDResult result = tuner.calculateConstants(SimpleTune.TuningRule.ZIEGLER_NICHOLS);
+        System.out.println("Calculated PID: " + result);
+        // Result contains kP, kI, kD, and estimated Feedforward (kS, kV, kG)
+    }
+}
+```
+
+### PIDOptimizer (Twiddle)
+
+For fine-tuning existing constants, `PIDOptimizer` uses Coordinate Descent (Twiddle) to iteratively improve performance based on a score (like error over time).
+
+```java
+import ca.team4308.absolutelib.pid.SimpleTune.PIDOptimizer;
+
+// Initialize with starting constants
+PIDOptimizer optimizer = new PIDOptimizer(0.1, 0.0, 0.0);
+
+// In your tuning routine:
+// 1. Run a test cycle
+// 2. Calculate a score (lower is better)
+double score = calculateErrorScore();
+
+// 3. Get next constants to try
+SimpleTune.PIDResult nextConstants = optimizer.tune(score);
+applyConstants(nextConstants);
+```
+
+---
+
+## Music Player
+
+The `musicPlayer` class allows you to play CHRP music files through Falcon 500 (TalonFX) motors.
+
+```java
+import ca.team4308.absolutelib.other.musicPlayer;
+import com.ctre.phoenix.music.Orchestra;
+
+// Initialize
+Orchestra orchestra = new Orchestra();
+musicPlayer player = new musicPlayer(orchestra);
+
+// Add motors to the orchestra
+player.addInstruments(new MotorWrapper[] { leftLeader, rightLeader });
+
+// Load and play a song
+// File path is relative to the deploy directory or absolute
+player.loadSong("deploy/song.chrp"); 
+player.playSong();
+```
+
+---
+
+## Controls & Wrappers
+
+AbsoluteLib provides wrappers to simplify input handling.
+
+- **`JoystickHelper`**: Adds deadband, squaring, and curve mapping to standard joysticks.
+- **`XBoxWrapper`**: specific helper for Xbox controllers.
+- **`RazerWrapper`**: specific helper for Razer controllers.
+
+```java
+import ca.team4308.absolutelib.control.JoystickHelper;
+
+JoystickHelper driver = new JoystickHelper(0);
+double speed = driver.getLeftY(); // Automatically applies deadband
+```
+
+---
+
+## LED Patterns
+
+Easily control addressable LEDs (WS2812B) with the `Leds` class and `Patterns`.
+
+```java
+import ca.team4308.absolutelib.leds.Leds;
+import ca.team4308.absolutelib.leds.Patterns;
+
+// Initialize on PWM port 9 with 60 LEDs
+Leds leds = new Leds(9, 60);
+
+// Set a pattern
+leds.setPattern(Patterns.rainbow());
+// or
+leds.setPattern(Patterns.solid(Color.kRed));
+
+// Must call in periodic
+leds.periodic();
+```
+
+---
+
+## Path Following (PathPlanner 2025)
+
+AbsoluteLib provides helpers for on-the-fly path generation using PathPlanner:
+
+```java
+import ca.team4308.absolutelib.path.OnTheFlyPathing;
+import com.pathplanner.lib.path.PathPlannerPath;
+import com.pathplanner.lib.path.PathConstraints;
+import edu.wpi.first.math.geometry.Pose2d;
+import edu.wpi.first.math.geometry.Rotation2d;
+
+// Define constraints
+PathConstraints constraints = OnTheFlyPathing.constraints(3.5, 3.0);
+
+// Create a direct path between two poses
+Pose2d start = new Pose2d(1.0, 1.0, Rotation2d.fromDegrees(0));
+Pose2d end   = new Pose2d(3.0, 2.0, Rotation2d.fromDegrees(180));
+
+PathPlannerPath path = OnTheFlyPathing.direct(
+    start,
+    end,
+    constraints,
+    Rotation2d.fromDegrees(180),
+    0.0,        // end velocity m/s
+    true        // prevent alliance flipping
+);
+```
+
+You can also generate arc and S-curve paths, and select between variants at runtime.
+
+---
+
+## See Also
+
+- [Javadoc](https://team4308.github.io/absolutelib/javadoc/)
+- [Examples](https://github.com/team4308/absolutelib/tree/main/examples)
+- [WPILib Simulation Docs](https://docs.wpilib.org/en/stable/docs/software/wpilib-tools/robot-simulation.html)
 
 ---
 
@@ -243,378 +581,3 @@ repositories {
 ```
 
 This makes absolutelib optional: projects without the vendordep still build, ones with the vendordep get the dependency.
-
----
-
-## Features
-
-- Subsystem base with logging and telemetry (`AbsoluteSubsystem`)
-- PathPlanner integration with on-the-fly path generation (2025 API)
-- Motor and encoder wrappers (CTRE, REV, duty-cycle, CANCoder)
-- Simulation-ready patterns
-- WPILib chooser helpers for runtime path selection
-- Pre-made subsystems (elevator, pivot, etc.)
-
-(See the examples below and generated Javadoc for more details.)
-
----
-
-## Subsystem Usage Examples
-
-### Pivot Subsystem (Arm/Wrist)
-
-A minimal Pivot subsystem using AbsoluteLib:
-
-```java
-import ca.team4308.absolutelib.subsystems.Pivot;
-import ca.team4308.absolutelib.wrapper.MotorWrapper;
-import ca.team4308.absolutelib.wrapper.EncoderWrapper;
-
-public class ArmSubsystem {
-    private final Pivot pivot;
-
-    public ArmSubsystem() {
-        MotorWrapper leader = MotorWrapper.createTalonFX(10);
-        EncoderWrapper encoder = EncoderWrapper.createCANCoder(20);
-
-        Pivot.Config config = new Pivot.Config()
-            .withLeader(leader)
-            .withEncoder(encoder)
-            .pid(0.5, 0.0, 0.1)
-            .ff(0.1, 0.5, 0.0, 0.0)
-            .gear(100.0)
-            .limits(-90, 90)
-            .tolerance(2.0)
-            .inverted(false);
-
-        pivot = new Pivot(config);
-        pivot.initialize();
-    }
-
-    public void periodic() {
-        pivot.periodic();
-        // Example: log current angle
-        double angleDeg = pivot.getAngleDeg();
-        boolean atTarget = pivot.atTarget();
-        // Use your preferred logging/telemetry system here
-    }
-
-    public void setAngle(double degrees) {
-        pivot.setTargetAngleDeg(degrees);
-    }
-
-    public void stop() {
-        pivot.disable();
-    }
-}
-```
-
-#### Simulation Integration
-
-AbsoluteLib supports WPILib simulation. To enable simulation for the Pivot:
-
-```java
-import ca.team4308.absolutelib.subsystems.simulation.PivotSimulation;
-
-Pivot.Config config = new Pivot.Config()
-    .withLeader(leader)
-    .withEncoder(encoder)
-    .withSimulation(new PivotSimulation.Config()
-        .gearbox(DCMotor.getNEO(1), 1)
-        .gearRatio(100.0)
-        .armLength(0.5)
-        .armMass(5.0)
-        .limits(Math.toRadians(-90), Math.toRadians(90))
-        .startAngle(Math.toRadians(0))
-        .gravity(true)
-    )
-    .enableSimulation(true);
-
-pivot = new Pivot(config);
-```
-
-When running in simulation (`RobotBase.isSimulation()`), the Pivot will use the physics model for realistic behavior. You can set voltages, read angles, and visualize the simulated arm.
-
----
-
-### Elevator Subsystem
-
-A minimal Elevator subsystem using AbsoluteLib:
-
-```java
-import ca.team4308.absolutelib.subsystems.Elevator;
-import ca.team4308.absolutelib.wrapper.MotorWrapper;
-import ca.team4308.absolutelib.wrapper.EncoderWrapper;
-
-public class ElevatorSubsystem {
-    private final Elevator elevator;
-
-    public ElevatorSubsystem() {
-        MotorWrapper leader = MotorWrapper.createSparkMax(5);
-        EncoderWrapper encoder = leader.getIntegratedEncoder();
-
-        Elevator.Config config = new Elevator.Config()
-            .withLeader(leader)
-            .withEncoder(encoder)
-            .pid(5.0, 0.0, 0.5)
-            .ff(0.05, 0.8, 0.0, 0.0)
-            .sprocketRadiusMeters(0.025)
-            .gear(12.0)
-            .limits(0.0, 1.5)
-            .tolerance(0.02);
-
-        elevator = new Elevator(config);
-        elevator.initialize();
-    }
-
-    public void periodic() {
-        elevator.periodic();
-        double height = elevator.getHeightMeters();
-        boolean atTarget = elevator.atTarget();
-        // Use your preferred logging/telemetry system here
-    }
-
-    public void setHeight(double meters) {
-        elevator.setTargetHeightMeters(meters);
-    }
-
-    public void stop() {
-        elevator.disable();
-    }
-}
-```
-
-#### Simulation Integration
-
-Elevator simulation is similar to Pivot. Provide a simulation config and enable simulation:
-
-```java
-import ca.team4308.absolutelib.subsystems.simulation.ElevatorSimulation;
-
-Elevator.Config config = new Elevator.Config()
-    .withLeader(leader)
-    .withEncoder(encoder)
-    .withSimulation(new ElevatorSimulation.Config()
-        .motorType(DCMotor.getNEO(2))
-        .gearRatio(12.0)
-        .massKg(8.0)
-        .heightLimits(0.0, 1.5)
-        .startHeight(0.0)
-    )
-    .enableSimulation(true);
-
-elevator = new Elevator(config);
-```
-
----
-
-## Simulation Support
-
-AbsoluteLib subsystems support WPILib simulation out of the box. To use simulation:
-
-- Provide a simulation config (`PivotSimulation.Config`, `ElevatorSimulation.Config`, etc.) when constructing your subsystem.
-- Set `.enableSimulation(true)` in the config.
-- When running in simulation, the subsystem will use the physics model for realistic feedback.
-- You can interact with the simulated subsystem using the same API as real hardware (set voltages, read positions, etc.).
-- Telemetry and visualization (e.g., AdvantageScope) are supported.
-
-Simulation is useful for testing control logic, tuning, and visualization before deploying to a real robot.
-
----
-
-## Path Following (PathPlanner 2025)
-
-AbsoluteLib provides helpers for on-the-fly path generation using PathPlanner:
-
-```java
-import ca.team4308.absolutelib.path.OnTheFlyPathing;
-import com.pathplanner.lib.path.PathPlannerPath;
-import com.pathplanner.lib.path.PathConstraints;
-import edu.wpi.first.math.geometry.Pose2d;
-import edu.wpi.first.math.geometry.Rotation2d;
-
-// Define constraints
-PathConstraints constraints = OnTheFlyPathing.constraints(3.5, 3.0);
-
-// Create a direct path between two poses
-Pose2d start = new Pose2d(1.0, 1.0, Rotation2d.fromDegrees(0));
-Pose2d end   = new Pose2d(3.0, 2.0, Rotation2d.fromDegrees(180));
-
-PathPlannerPath path = OnTheFlyPathing.direct(
-    start,
-    end,
-    constraints,
-    Rotation2d.fromDegrees(180),
-    0.0,        // end velocity m/s
-    true        // prevent alliance flipping
-);
-```
-
-You can also generate arc and S-curve paths, and select between variants at runtime.
-
----
-
-## See Also
-
-- [Javadoc](https://team4308.github.io/absolutelib/javadoc/)
-- [Examples](https://github.com/team4308/absolutelib/tree/main/examples)
-- [WPILib Simulation Docs](https://docs.wpilib.org/en/stable/docs/software/wpilib-tools/robot-simulation.html)
-
----
-
-## Appendix: Quick Reference
-
-### Common Patterns
-
-**Install via WPILib vendordep:**
-```text
-https://team4308.github.io/absolutelib/absolutelib.json
-```
-
-**Gradle dependency:**
-```gradle
-implementation "ca.team4308:absolutelib-java:1.0.5"
-```
-
-**Add Maven repo:**
-```gradle
-repositories {
-    mavenCentral()
-    maven { url = uri("https://team4308.github.io/absolutelib") }
-}
-```
-
----
-
-### Subsystem Construction Patterns
-
-#### Pivot (Arm/Wrist)
-```java
-Pivot.Config config = new Pivot.Config()
-    .withLeader(MotorWrapper.createTalonFX(10))
-    .withEncoder(EncoderWrapper.createCANCoder(20))
-    .pid(0.5, 0.0, 0.1)
-    .ff(0.1, 0.5, 0.0, 0.0)
-    .gear(100.0)
-    .limits(-90, 90)
-    .tolerance(2.0)
-    .inverted(false);
-
-Pivot pivot = new Pivot(config);
-pivot.initialize();
-```
-**Enable simulation:**
-```java
-config.withSimulation(new PivotSimulation.Config()
-    .gearbox(DCMotor.getNEO(1), 1)
-    .gearRatio(100.0)
-    .armLength(0.5)
-    .armMass(5.0)
-    .limits(Math.toRadians(-90), Math.toRadians(90))
-    .startAngle(Math.toRadians(0))
-    .gravity(true)
-).enableSimulation(true);
-```
-
-#### Elevator
-```java
-Elevator.Config config = new Elevator.Config()
-    .withLeader(MotorWrapper.createSparkMax(5))
-    .withEncoder(MotorWrapper.createSparkMax(5).getIntegratedEncoder())
-    .pid(5.0, 0.0, 0.5)
-    .ff(0.05, 0.8, 0.0, 0.0)
-    .sprocketRadiusMeters(0.025)
-    .gear(12.0)
-    .limits(0.0, 1.5)
-    .tolerance(0.02);
-
-Elevator elevator = new Elevator(config);
-elevator.initialize();
-```
-**Enable simulation:**
-```java
-config.withSimulation(new ElevatorSimulation.Config()
-    .motorType(DCMotor.getNEO(2))
-    .gearRatio(12.0)
-    .massKg(8.0)
-    .heightLimits(0.0, 1.5)
-    .startHeight(0.0)
-).enableSimulation(true);
-```
-
-#### Intake
-```java
-Intake.Config config = new Intake.Config()
-    .withLeader(MotorWrapper.createSparkMax(7))
-    .pid(0.2, 0.0, 0.01)
-    .ff(0.05, 0.1, 0.0, 0.0)
-    .inverted(false);
-
-Intake intake = new Intake(config);
-intake.initialize();
-```
-**Enable simulation:**
-```java
-config.withSimulation(new IntakeSimulation.Config()
-    .motorType(DCMotor.getNEO(1))
-    .gearRatio(1.0)
-    .massKg(1.0)
-).enableSimulation(true);
-```
-
-#### Shooter
-```java
-Shooter.Config config = new Shooter.Config()
-    .withLeader(MotorWrapper.createTalonFX(15))
-    .pid(0.3, 0.0, 0.02)
-    .ff(0.1, 0.2, 0.0, 0.0)
-    .inverted(false);
-
-Shooter shooter = new Shooter(config);
-shooter.initialize();
-```
-**Enable simulation:**
-```java
-config.withSimulation(new ShooterSimulation.Config()
-    .motorType(DCMotor.getFalcon500(1))
-    .gearRatio(1.0)
-    .flywheelRadius(0.075)
-    .flywheelMass(2.0)
-).enableSimulation(true);
-```
-
-#### Drivetrain (Differential)
-```java
-Drivetrain.Config config = new Drivetrain.Config()
-    .withLeftLeader(MotorWrapper.createSparkMax(1))
-    .withRightLeader(MotorWrapper.createSparkMax(2))
-    .trackWidthMeters(0.6)
-    .wheelDiameterMeters(0.1524)
-    .gearRatio(10.71)
-    .pid(0.8, 0.0, 0.1)
-    .ff(0.2, 0.5, 0.0, 0.0);
-
-Drivetrain drivetrain = new Drivetrain(config);
-drivetrain.initialize();
-```
-**Enable simulation:**
-```java
-config.withSimulation(new DrivetrainSimulation.Config()
-    .motorType(DCMotor.getNEO(2))
-    .trackWidthMeters(0.6)
-    .wheelDiameterMeters(0.1524)
-    .gearRatio(10.71)
-    .robotMassKg(50.0)
-).enableSimulation(true);
-```
-
----
-
-### PathPlanner direct path
-```java
-PathPlannerPath path = OnTheFlyPathing.direct(
-    startPose, endPose, constraints, endHeading, 0.0, true
-);
-```
-
-
