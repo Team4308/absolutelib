@@ -1,26 +1,23 @@
 package ca.team4308.absolutelib.other;
 
-import com.ctre.phoenix.music.Orchestra;
+import com.ctre.phoenix6.Orchestra;
+import com.ctre.phoenix6.hardware.TalonFX;
 
-import java.lang.reflect.Array;
-import java.nio.file.Path;
 import java.util.ArrayList;
-
-import com.ctre.phoenix.motorcontrol.can.TalonFX;
 
 import ca.team4308.absolutelib.wrapper.MotorWrapper;
 
-
 /**
- * musicPlayer class to manage an Orchestra of TalonFX motors to play music files. 
- * Supports loading, playing, queuing, and stopping songs.
- 
+ * musicPlayer class to manage an Orchestra of TalonFX motors to play music
+ * files. Supports loading, playing, queuing, and stopping songs.
+ *
  */
 public class musicPlayer {
 
     Orchestra orchestra = new Orchestra();
 
     ArrayList<String> songs = new ArrayList<String>();
+
     public musicPlayer(Orchestra orchestra) {
         this.orchestra = orchestra;
     }
@@ -33,10 +30,10 @@ public class musicPlayer {
         }
     }
 
-    
     public void loadSong(String songPath) {
         orchestra.loadMusic(songPath);
     }
+
     public void playSong() {
         orchestra.play();
     }
@@ -63,9 +60,8 @@ public class musicPlayer {
         }
     }
 
-    public ArrayList getPlaylist() {
+    public ArrayList<String> getPlaylist() {
         return songs;
     }
-
 
 }

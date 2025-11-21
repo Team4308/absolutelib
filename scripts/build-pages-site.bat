@@ -1,10 +1,6 @@
 @echo off
 setlocal enabledelayedexpansion
 
-REM Build static Maven repo and site content into .\site for GitHub Pages.
-REM Usage:
-REM   1) Run from repo root: scripts\build-pages-site.bat
-REM   2) Commit and push the 'site' directory to your gh-pages branch.
 
 if not exist ".git" (
   echo Run this from the repo root: C:\FRC\absolutelib
@@ -45,15 +41,5 @@ REM Copy vendor JSON to site root
 copy /Y absolutelib.json site\absolutelib.json >nul
 
 echo.
-echo Site content ready under .\site
-echo Commit and push 'site' to your GitHub Pages branch (e.g. gh-pages).
-echo Example:
-echo   git checkout gh-pages
-echo   git rm -rf .
-echo   xcopy /E /I /Y site\ .
-echo   git add .
-echo   git commit -m "Update Pages site for %CURRENT_VERSION%"
-echo   git push
-echo.
-echo Done.
+echo Please upload the static site yourself, via opening a terminal in the /site folder and then git init, git add, git commit, git push
 endlocal

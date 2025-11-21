@@ -27,9 +27,13 @@ public class Pivot extends AbsoluteSubsystem {
         public double gearRatio = 1.0;
         public double kP = 0.0, kI = 0.0, kD = 0.0;
         public double kS = 0.0, kG = 0.0, kV = 0.0, kA = 0.0;
+        
         public double minAngleDeg = -180.0;
         public double maxAngleDeg = 180.0;
-        public double toleranceDeg = 2.0;
+        
+        public double toleranceDeg = 1.0;
+
+
 
         // Added simulation config
         public PivotSimulation.Config simulationConfig = null;
@@ -319,8 +323,14 @@ public class Pivot extends AbsoluteSubsystem {
     }
 
     public boolean atTarget() {
-        return enabled && pid.atSetpoint();
+        return getAngleDeg() >= (Math.toDegrees(targetAngleRad) - cfg.toleranceDeg)
+                && getAngleDeg() <= (Math.toDegrees(targetAngleRad) + cfg.toleranceDeg);
     }
+
+    public double getTargetRad() {
+        return targetAngleRad;
+    }
+
 
     public void disable() {
         enabled = false;
