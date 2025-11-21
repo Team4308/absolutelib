@@ -41,15 +41,5 @@ REM Copy vendor JSON to site root
 copy /Y absolutelib.json site\absolutelib.json >nul
 
 echo.
-echo Site content ready under .\site
-echo Commit and push 'site' to your GitHub Pages branch (e.g. gh-pages).
-echo Example:
-echo   git checkout gh-pages
-echo   git rm -rf .
-echo   xcopy /E /I /Y site\ .
-echo   git add .
-echo   git commit -m "Update Pages site for %CURRENT_VERSION%"
-echo   git push
-echo.
-echo Please upload the static site yourself im to lazy to code it.
+echo Please upload the static site yourself, via opening a terminal in the /site folder and then git init, git add, git commit, git push
 endlocal

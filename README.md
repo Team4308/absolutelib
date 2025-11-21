@@ -1,13 +1,18 @@
-# AbsoluteLib
+# AbsoluteLib V2
 
 [![](https://jitpack.io/v/team4308/absolutelib.svg)](https://jitpack.io/#team4308/absolutelib)
 ![Java CI](https://github.com/team4308/absolutelib/actions/workflows/gradle.yml/badge.svg)
 ![License](https://img.shields.io/github/license/team4308/absolutelib)
 
+
+
+
 AbsoluteLib is an FRC utility library for Team 4308 providing reusable subsystems, math helpers, and adapters around WPILib and common vendor APIs.
 
-Version: 2.0.0  
-Updated: Nov 20, 2025
+Updated: Nov 21, 2025
+
+* Note for older version of absolutelib (v1) Check Legacy branch and LegacyV2 branch. 
+
 
 ---
 
@@ -441,6 +446,8 @@ You can also generate arc and S-curve paths, and select between variants at runt
 ---
 
 ## Maintainers: How to Update and Publish
+
+Please update the changelog with any notable updates 
 
 This section is for people maintaining the library.
 
