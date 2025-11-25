@@ -85,24 +85,24 @@ public abstract class SimulationBase extends AbsoluteSubsystem {
         String prefix = simLogPrefix;
         
         // Core mechanical state
-        Logger.recordOutput(prefix + "/positionMeters", state.positionMeters);
-        Logger.recordOutput(prefix + "/velocityMPS", state.velocityMetersPerSec);
-        Logger.recordOutput(prefix + "/accelerationMPSS", state.accelerationMetersPerSecSq);
+        recordOutput(prefix + "/positionMeters", state.positionMeters);
+        recordOutput(prefix + "/velocityMPS", state.velocityMetersPerSec);
+        recordOutput(prefix + "/accelerationMPSS", state.accelerationMetersPerSecSq);
         
         // Electrical state
-        Logger.recordOutput(prefix + "/voltage", state.appliedVoltage);
-        Logger.recordOutput(prefix + "/currentAmps", state.currentDrawAmps);
-        Logger.recordOutput(prefix + "/temperatureC", state.temperatureCelsius);
+        recordOutput(prefix + "/voltage", state.appliedVoltage);
+        recordOutput(prefix + "/currentAmps", state.currentDrawAmps);
+        recordOutput(prefix + "/temperatureC", state.temperatureCelsius);
         
         // Power consumption
         double powerWatts = state.appliedVoltage * state.currentDrawAmps;
-        Logger.recordOutput(prefix + "/powerWatts", powerWatts);
+        recordOutput(prefix + "/powerWatts", powerWatts);
         
         // Custom data
         if (state.customData != null && state.customDataKeys != null) {
             int n = Math.min(state.customData.length, state.customDataKeys.length);
             for (int i = 0; i < n; i++) {
-                Logger.recordOutput(prefix + "/custom/" + state.customDataKeys[i], state.customData[i]);
+                recordOutput(prefix + "/custom/" + state.customDataKeys[i], state.customData[i]);
             }
         }
         
@@ -139,7 +139,7 @@ public abstract class SimulationBase extends AbsoluteSubsystem {
             double batteryVoltage = RoboRioSim.getVInVoltage();
             double newVoltage = BatterySim.calculateDefaultBatteryLoadedVoltage(currentAmps);
             RoboRioSim.setVInVoltage(newVoltage);
-            Logger.recordOutput(simLogPrefix + "/batteryVoltage", newVoltage);
+            recordOutput(simLogPrefix + "/batteryVoltage", newVoltage);
         } catch (Exception e) {
             // Graceful fallback if battery sim not available
         }
@@ -203,13 +203,13 @@ public abstract class SimulationBase extends AbsoluteSubsystem {
 
     /** Log a 2D pose for visualization (e.g., arm end effector) */
     protected void logPose2d(String key, double x, double y, double rotationRad) {
-        Logger.recordOutput(simLogPrefix + "/" + key + "/x", x);
-        Logger.recordOutput(simLogPrefix + "/" + key + "/y", y);
-        Logger.recordOutput(simLogPrefix + "/" + key + "/rotationRad", rotationRad);
+        recordOutput(simLogPrefix + "/" + key + "/x", x);
+        recordOutput(simLogPrefix + "/" + key + "/y", y);
+        recordOutput(simLogPrefix + "/" + key + "/rotationRad", rotationRad);
     }
 
     /** Log multiple joint angles for multi-DOF mechanisms */
     protected void logJointAngles(double... anglesRad) {
-        Logger.recordOutput(simLogPrefix + "/jointAngles", anglesRad);
+        recordOutput(simLogPrefix + "/jointAngles", anglesRad);
     }
 }

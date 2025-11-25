@@ -9,7 +9,7 @@
 
 AbsoluteLib is an FRC utility library for Team 4308 providing reusable subsystems, math helpers, and adapters around WPILib and common vendor APIs.
 
-Updated: Nov 21, 2025
+Updated: Nov 25, 2025
 
 * Note for older version of absolutelib (v1) Check Legacy branch and LegacyV2 branch. 
 

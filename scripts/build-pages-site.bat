@@ -35,7 +35,11 @@ rmdir /S /Q site 2>nul
 mkdir site
 
 REM Copy Maven repo to site root
-xcopy /E /I /Y build\pages-maven site\
+xcopy /E /I /Y build\pages-maven site\lib\
+
+REM Copy the Javadocs
+xcopy /E /I /Y build\docs\javadoc site\docs\javadoc\
+
 
 REM Copy vendor JSON to site root
 copy /Y absolutelib.json site\absolutelib.json >nul

@@ -102,10 +102,10 @@ public class PivotSimulation extends SimulationBase {
     @Override
     protected void onSimulationPeriodic(double dtSeconds) {
         // Log additional pivot-specific data
-        logNumber("angleDeg", Math.toDegrees(armSim.getAngleRads()));
-        logNumber("velocityDegPerSec", Math.toDegrees(armSim.getVelocityRadPerSec()));
-        logBoolean("hasHitLowerLimit", armSim.hasHitLowerLimit());
-        logBoolean("hasHitUpperLimit", armSim.hasHitUpperLimit());
+        recordOutput("angleDeg", Math.toDegrees(armSim.getAngleRads()));
+        recordOutput("velocityDegPerSec", Math.toDegrees(armSim.getVelocityRadPerSec()));
+        recordOutput("hasHitLowerLimit", armSim.hasHitLowerLimit());
+        recordOutput("hasHitUpperLimit", armSim.hasHitUpperLimit());
         
         // Log end effector position for visualization
         double angle = armSim.getAngleRads();
@@ -115,7 +115,7 @@ public class PivotSimulation extends SimulationBase {
         
         // Log mechanism for AdvantageScope
         double[] ligament = new double[] { config.armLengthMeters, Math.toDegrees(angle) };
-        Logger.recordOutput(getLogChannelBase() + "/mechanism2d", ligament);
+        recordOutput(getLogChannelBase() + "/mechanism2d", ligament);
     }
 
     // Public control methods

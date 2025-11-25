@@ -1,8 +1,11 @@
 # Changelog for AbsoluteLib V2
 
+# 1.1.3
+- Minor bug fixes 
+- Added javadocs
+- Fixxed github-pages site
 
-
-# 1.1.2
+## 1.1.2
 - Fix every gradle error 
 - Re-Sync Gh-Pages with Master 
 

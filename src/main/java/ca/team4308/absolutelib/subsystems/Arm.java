@@ -312,12 +312,12 @@ public class Arm extends AbsoluteSubsystem {
 		if(ikSolved){
 			for(int i=0;i<joints.size();i++){
 				joints.get(i).setTargetAngleRadians(cachedIKAngles[i]);
-				logNumber("ik/joint" + i + "Deg", Math.toDegrees(cachedIKAngles[i]));
+				recordOutput("ik/joint" + i + "Deg", Math.toDegrees(cachedIKAngles[i]));
 			}
-			logBoolean("ik/solved", true);
+			recordOutput("ik/solved", true);
 		} else {
 			logThrottle("ik_not_converged", 500, "IK did not converge");
-			logBoolean("ik/solved", false);
+			recordOutput("ik/solved", false);
 		}
 	}
 
@@ -354,9 +354,9 @@ public class Arm extends AbsoluteSubsystem {
 
 		ikSolved = true;
 
-		logNumber("ik/theta1Deg", Math.toDegrees(theta1));
-		logNumber("ik/theta2Deg", Math.toDegrees(theta2));
-		logBoolean("ik/solved", true);
+		recordOutput("ik/theta1Deg", Math.toDegrees(theta1));
+		recordOutput("ik/theta2Deg", Math.toDegrees(theta2));
+		recordOutput("ik/solved", true);
 		for(int i=2; i<joints.size(); i++){
 			// Additional joints are ignored in 2-link analytic mode
 		}
