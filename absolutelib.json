@@ -8,7 +8,7 @@
                       "https://team4308.github.io/absolutelib",
                       "https://jitpack.io"
                   ],
-    "jsonUrl":  "https://team4308.github.io/absolutelib/absolutelib.json",
+    "jsonUrl":  "https://team4308.github.io/absolutelib/lib/absolutelib.json",
     "javaDependencies":  [
                              {
                                  "groupId":  "ca.team4308",
