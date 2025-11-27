@@ -27,7 +27,7 @@ dependencies {
 }
 ```
 
-### Direct JitPack Dependency (non‑FRC projects)
+### Direct JitPack Dependency (Don't Use)
 ```gradle
 repositories {
     maven { url "https://jitpack.io" }
