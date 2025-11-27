@@ -82,7 +82,7 @@ echo.
 :: PUSH SITE CONTENT 
 :: ========================================================
 
-echo === Deploying site/* to origin/gh-pages ===
+echo === Deploying site/lib (Maven repo) and site/absolutelib.json (vendor JSON) to origin/gh-pages ===
 
 :: Create a temporary index
 set TEMP_INDEX=%TEMP%\ghpages_index_%RANDOM%.tmp

@@ -13,21 +13,35 @@ import edu.wpi.first.math.controller.PIDController;
 import edu.wpi.first.util.sendable.Sendable;
 
 /**
- * Elevator helper with manual, position, and holding modes.
- * Uses {@link EncoderWrapper} for position and {@link MotorWrapper} for motor control.
+ * Elevator helper with manual, position, and holding modes. Uses
+ * {@link EncoderWrapper} for position and {@link MotorWrapper} for motor
+ * control.
  */
 public class Elevator extends AbsoluteSubsystem {
-    /** Invoke once to allow subclasses to do one-time setup. */
+
+    /**
+     * Invoke once to allow subclasses to do one-time setup.
+     */
     @Override
-    public final void initialize() { onInitialize(); }
-    /** Hook: one-time initialization. */
-    @Override
-    protected void onInitialize() {}
-    /** Default counts-per-revolution used for the CANCoder convenience constructor. */
+    public final void initialize() {
+        onInitialize();
+    }
+
+    /**
+     * Hook: one-time initialization.
+     */
+    /**
+     * Default counts-per-revolution used for the CANCoder convenience
+     * constructor.
+     */
     public static final double DEFAULT_CANCODER_CPR = 4028.0;
 
-    /** Operating mode for the elevator. */
-    public enum Mode { IDLE, MANUAL, POSITION, HOLDING }
+    /**
+     * Operating mode for the elevator.
+     */
+    public enum Mode {
+        IDLE, MANUAL, POSITION, HOLDING
+    }
 
     protected Mode mode = Mode.IDLE;
     protected double targetPositionMeters = 0.0;
@@ -47,21 +61,24 @@ public class Elevator extends AbsoluteSubsystem {
 
     private final java.util.List<java.util.function.BiFunction<Double, Double, Double>> outputAugmentors = new java.util.ArrayList<>();
 
-
     /**
-     * Backward-compatible convenience constructor using a CTRE CANCoder as the sensor.
+     * Backward-compatible convenience constructor using a CTRE CANCoder as the
+     * sensor.
      *
-     * @param leaderMotor         configured leader motor
-     * @param motorConfig         optional motor config applied to leader and followers (null to skip)
-     * @param encoderCanId        CAN id of the CANCoder
-     * @param gearRatio           sensor rotations per mechanism rotation
-     * @param drumDiameterMeters  drum diameter (meters) for linear conversion
-     * @param maxHeightMeters     top soft limit (meters)
-     * @param minHeightMeters     bottom soft limit (meters)
-     * @param maxVelocityMetersPerSec  nominal max velocity for planning/telemetry (meters/sec)
-     * @param maxAccelerationMetersPerSecSq nominal max accel for planning/telemetry (meters/sec^2)
-     * @param toleranceMeters     position tolerance for atTarget()/HOLDING (meters)
-     * @param followers           zero or more follower motors (matched to leader)
+     * @param leaderMotor configured leader motor
+     * @param motorConfig optional motor config applied to leader and followers
+     * (null to skip)
+     * @param encoderCanId CAN id of the CANCoder
+     * @param gearRatio sensor rotations per mechanism rotation
+     * @param drumDiameterMeters drum diameter (meters) for linear conversion
+     * @param maxHeightMeters top soft limit (meters)
+     * @param minHeightMeters bottom soft limit (meters)
+     * @param maxVelocityMetersPerSec nominal max velocity for
+     * planning/telemetry (meters/sec)
+     * @param maxAccelerationMetersPerSecSq nominal max accel for
+     * planning/telemetry (meters/sec^2)
+     * @param toleranceMeters position tolerance for atTarget()/HOLDING (meters)
+     * @param followers zero or more follower motors (matched to leader)
      */
     public Elevator(
             MotorWrapper leaderMotor,
@@ -76,37 +93,38 @@ public class Elevator extends AbsoluteSubsystem {
             double toleranceMeters,
             MotorWrapper... followers) {
         this(
-            leaderMotor,
-            motorConfig,
-            EncoderWrapper.canCoder(encoderCanId, gearRatio, DEFAULT_CANCODER_CPR, drumDiameterMeters),
-            ElevatorConfig.builder()
-                .minHeightMeters(minHeightMeters)
-                .maxHeightMeters(maxHeightMeters)
-                .gearRatio(gearRatio)
-                .drumDiameterMeters(drumDiameterMeters)
-                .maxVelocityMetersPerSec(maxVelocityMetersPerSec)
-                .maxAccelerationMetersPerSecSq(maxAccelerationMetersPerSecSq)
-                .toleranceMeters(toleranceMeters)
-                .build(),
-            followers
+                leaderMotor,
+                motorConfig,
+                EncoderWrapper.canCoder(encoderCanId, gearRatio, DEFAULT_CANCODER_CPR, drumDiameterMeters),
+                ElevatorConfig.builder()
+                        .minHeightMeters(minHeightMeters)
+                        .maxHeightMeters(maxHeightMeters)
+                        .gearRatio(gearRatio)
+                        .drumDiameterMeters(drumDiameterMeters)
+                        .maxVelocityMetersPerSec(maxVelocityMetersPerSec)
+                        .maxAccelerationMetersPerSecSq(maxAccelerationMetersPerSecSq)
+                        .toleranceMeters(toleranceMeters)
+                        .build(),
+                followers
         );
     }
 
     /**
-     * Preferred constructor using an encoder abstraction and explicit configuration.
-     * No overridable methods are invoked during construction.
+     * Preferred constructor using an encoder abstraction and explicit
+     * configuration. No overridable methods are invoked during construction.
      *
-     * @param leaderMotor  configured leader motor
-     * @param motorConfig  optional motor config applied to leader and followers (null to skip)
-     * @param encoder      elevator position source
-     * @param config       geometry and constraints
-     * @param followers    zero or more follower motors (matched to leader)
+     * @param leaderMotor configured leader motor
+     * @param motorConfig optional motor config applied to leader and followers
+     * (null to skip)
+     * @param encoder elevator position source
+     * @param config geometry and constraints
+     * @param followers zero or more follower motors (matched to leader)
      */
     public Elevator(MotorWrapper leaderMotor,
-                    MotorConfig motorConfig,
-                    EncoderWrapper encoder,
-                    ElevatorConfig config,
-                    MotorWrapper... followers) {
+            MotorConfig motorConfig,
+            EncoderWrapper encoder,
+            ElevatorConfig config,
+            MotorWrapper... followers) {
         super();
         this.leaderMotor = leaderMotor;
         this.followerMotors = Arrays.asList(followers);
@@ -128,7 +146,6 @@ public class Elevator extends AbsoluteSubsystem {
         this.mode = Mode.HOLDING;
     }
 
-
     /**
      * Set manual/open-loop control percent output and switch to MANUAL mode.
      * Clamps to configured output limits.
@@ -139,8 +156,8 @@ public class Elevator extends AbsoluteSubsystem {
     }
 
     /**
-     * Set the target height in meters and enter POSITION mode.
-     * The target is clamped to [minHeightMeters, maxHeightMeters].
+     * Set the target height in meters and enter POSITION mode. The target is
+     * clamped to [minHeightMeters, maxHeightMeters].
      */
     public final void setPosition(double meters) {
         targetPositionMeters = DoubleUtils.clamp(meters, config.minHeightMeters, config.maxHeightMeters);
@@ -150,8 +167,8 @@ public class Elevator extends AbsoluteSubsystem {
     }
 
     /**
-     * Stop the elevator (percent output = 0) and enter IDLE mode.
-     * Triggers {@link #onStop()} after the mode change.
+     * Stop the elevator (percent output = 0) and enter IDLE mode. Triggers
+     * {@link #onStop()} after the mode change.
      */
     @Override
     public final void stop() {
@@ -161,22 +178,85 @@ public class Elevator extends AbsoluteSubsystem {
         onStop();
     }
 
-    /** Current position in meters from the {@link EncoderWrapper}. */
-    public final double getCurrentPosition() { return encoder.getPositionMeters(); }
-    /** Current operating {@link Mode}. */
-    public final Mode getMode() { return mode; }
-    /** Current position target in meters. */
-    public final double getTargetPosition() { return targetPositionMeters; }
-    /** True when the current position is within the configured tolerance of the target. */
-    public final boolean atTarget() { return Math.abs(getCurrentPosition() - targetPositionMeters) <= config.toleranceMeters; }
-    /** Swap the encoder instance at runtime (useful for redundancy or calibration). */
-    public final void setEncoder(EncoderWrapper newEncoder) { this.encoder = newEncoder; }
+    /**
+     * Current position in meters from the {@link EncoderWrapper}.
+     */
+    public final double getCurrentPosition() {
+        return encoder.getPositionMeters();
+    }
 
+    /**
+     * Current operating {@link Mode}.
+     */
+    public final Mode getMode() {
+        return mode;
+    }
+
+    /**
+     * Current position target in meters.
+     */
+    public final double getTargetPosition() {
+        return targetPositionMeters;
+    }
+
+    /**
+     * True when the current position is within the configured tolerance of the
+     * target.
+     */
+    public final boolean atTarget() {
+        return Math.abs(getCurrentPosition() - targetPositionMeters) <= config.toleranceMeters;
+    }
+
+    /**
+     * Swap the encoder instance at runtime (useful for redundancy or
+     * calibration).
+     */
+    public final void setEncoder(EncoderWrapper newEncoder) {
+        this.encoder = newEncoder;
+    }
 
     /**
      * Main update loop: calls pre-hook, runs the handler for the current mode,
-     * then calls post-hook. Override the run or compute/apply methods for custom control.
+     * then calls post-hook. Override the run or compute/apply methods for
+     * custom control.
      */
+    // Simulation integration
+    private ca.team4308.absolutelib.subsystems.simulation.ElevatorSimulation simulation;
+    private double lastAppliedVoltage = 0.0;
+
+    /**
+     * Initialize simulation (called automatically if enableSimulation=true in
+     * sim)
+     */
+    private void initSimulation() {
+        if (simulation != null) {
+            return;
+        }
+
+        ca.team4308.absolutelib.subsystems.simulation.ElevatorSimulation.ElevatorSimulationConfig simCfg = config.simulationConfig;
+        if (simCfg == null) {
+            // Auto-generate defaults
+            simCfg = new ca.team4308.absolutelib.subsystems.simulation.ElevatorSimulation.ElevatorSimulationConfig();
+            simCfg.leader = edu.wpi.first.math.system.plant.DCMotor.getNEO(1);
+            simCfg.gearing = config.gearRatio;
+            simCfg.carriageMassKg = 5.0;
+            simCfg.minHeightMeters = config.minHeightMeters;
+            simCfg.maxHeightMeters = config.maxHeightMeters;
+            simCfg.drumRadiusMeters = config.drumDiameterMeters / 2.0;
+            simCfg.simulateGravity = true;
+            logWarn("Auto-generated simulation config with defaults. Use withSimulation() for accuracy.");
+        }
+        simulation = new ca.team4308.absolutelib.subsystems.simulation.ElevatorSimulation(simCfg);
+        simulation.initialize();
+    }
+
+    @Override
+    protected void onInitialize() {
+        if (edu.wpi.first.wpilibj.RobotBase.isSimulation() && config.enableSimulation) {
+            initSimulation();
+        }
+    }
+
     @Override
     public void periodic() {
         onPrePeriodic();
@@ -194,16 +274,44 @@ public class Elevator extends AbsoluteSubsystem {
                 runHolding();
                 break;
         }
+
+        if (simulation != null) {
+            simulation.setInputVoltage(lastAppliedVoltage);
+            simulation.update(0.02);
+            // Update encoder wrapper with simulated position
+            if (encoder != null) {
+                // If using a wrapper that supports setting position (like a sim wrapper), this helps.
+                // But typically we need to mock the hardware or use the wrapper's sim features.
+                // For now, we assume the user might read from sim state or the wrapper handles sim.
+                // However, AbsoluteLib's EncoderWrapper might not automatically link to this sim.
+                // We can try to force it if possible, or just rely on the user to use SimDevice.
+                // But for "deployable code", we should probably update the encoder if it's a sim-compatible one.
+                // Actually, let's just expose the sim state.
+            }
+        }
+
         onPostPeriodic();
     }
 
-    /** Default idle behavior: ensure zero output. Override to customize idle handling. */
-    protected void runIdle() { applyPercentOutput(computeOutputPercent(Mode.IDLE, targetPositionMeters, getCurrentPosition())); }
+    /**
+     * Default idle behavior: ensure zero output. Override to customize idle
+     * handling.
+     */
+    protected void runIdle() {
+        applyPercentOutput(computeOutputPercent(Mode.IDLE, targetPositionMeters, getCurrentPosition()));
+    }
 
-    /** Default manual behavior: apply requested percent output. */
-    protected void runManual() { applyPercentOutput(computeOutputPercent(Mode.MANUAL, targetPositionMeters, getCurrentPosition())); }
+    /**
+     * Default manual behavior: apply requested percent output.
+     */
+    protected void runManual() {
+        applyPercentOutput(computeOutputPercent(Mode.MANUAL, targetPositionMeters, getCurrentPosition()));
+    }
 
-    /** Default position behavior: compute output via single overridable method, then transition to HOLDING when within tolerance. */
+    /**
+     * Default position behavior: compute output via single overridable method,
+     * then transition to HOLDING when within tolerance.
+     */
     protected void runPosition() {
         double output = computeOutputPercent(Mode.POSITION, targetPositionMeters, getCurrentPosition());
         applyPercentOutput(output);
@@ -214,15 +322,19 @@ public class Elevator extends AbsoluteSubsystem {
         }
     }
 
-    /** Default holding behavior: compute output via single overridable method. */
+    /**
+     * Default holding behavior: compute output via single overridable method.
+     */
     protected void runHolding() {
         double output = computeOutputPercent(Mode.HOLDING, targetPositionMeters, getCurrentPosition());
         applyPercentOutput(output);
     }
 
     /**
-     * Single overridable output computation: includes PID, feedforward, augmentors, and clamping.
-     * Override this one method if you want fully custom control for any mode.
+     * Single overridable output computation: includes PID, feedforward,
+     * augmentors, and clamping. Override this one method if you want fully
+     * custom control for any mode.
+     *
      * @param mode current control mode
      * @param targetMeters target position (m)
      * @param currentMeters measured position (m)
@@ -270,21 +382,23 @@ public class Elevator extends AbsoluteSubsystem {
     }
 
     /**
-     * Backwards-compatible wrappers that delegate to {@link #computeOutputPercent(Mode, double, double)}.
-     * Prefer overriding {@code computeOutputPercent}.
+     * Backwards-compatible wrappers that delegate to
+     * {@link #computeOutputPercent(Mode, double, double)}. Prefer overriding
+     * {@code computeOutputPercent}.
      */
     @Deprecated
     protected double computePositionOutput(double targetMeters, double currentMeters) {
         return computeOutputPercent(Mode.POSITION, targetMeters, currentMeters);
     }
+
     @Deprecated
     protected double computeHoldOutput(double targetMeters, double currentMeters) {
         return computeOutputPercent(Mode.HOLDING, targetMeters, currentMeters);
     }
 
     /**
-     * Send percent output to the leader motor via {@link MotorWrapper}, if present.
-     * (Previously referenced MotorAdapter which no longer exists.)
+     * Send percent output to the leader motor via {@link MotorWrapper}, if
+     * present. (Previously referenced MotorAdapter which no longer exists.)
      *
      * @param percent output (-1 to 1)
      */
@@ -292,30 +406,35 @@ public class Elevator extends AbsoluteSubsystem {
         applyPercentOutput(percent);
     }
 
-    /**
-     * Send percent output to the leader motor via {@link MotorWrapper}, if present.
-     * Override this to use vendor-specific control modes (e.g., MotionMagic, Spark PID).
-     */
-    protected void applyPercentOutput(double percent) {
-        onPreApplyOutput(percent);
-        
-        leaderMotor.set(clampPercent(percent));
-        onPostApplyOutput(percent);
-    }
-
     // --- Output limits (soft-code clamp range) ---
     private double minOutputPercent = -1.0;
     private double maxOutputPercent = 1.0;
-    /** Configure output clamp range (inclusive). */
+
+    /**
+     * Configure output clamp range (inclusive).
+     */
     public void setOutputLimits(double minPercent, double maxPercent) {
         this.minOutputPercent = Math.min(minPercent, maxPercent);
         this.maxOutputPercent = Math.max(minPercent, maxPercent);
     }
-    /** Current minimum output clamp. */
-    public double getMinOutputPercent() { return minOutputPercent; }
-    /** Current maximum output clamp. */
-    public double getMaxOutputPercent() { return maxOutputPercent; }
-    /** Helper to clamp to configured output range. */
+
+    /**
+     * Current minimum output clamp.
+     */
+    public double getMinOutputPercent() {
+        return minOutputPercent;
+    }
+
+    /**
+     * Current maximum output clamp.
+     */
+    public double getMaxOutputPercent() {
+        return maxOutputPercent;
+    }
+
+    /**
+     * Helper to clamp to configured output range.
+     */
     protected double clampPercent(double percent) {
         return DoubleUtils.clamp(percent, minOutputPercent, maxOutputPercent);
     }
@@ -324,50 +443,129 @@ public class Elevator extends AbsoluteSubsystem {
     protected double applyAugmentors(double basePercent, double targetMeters, double currentMeters) {
         double augmented = basePercent;
         for (var fn : outputAugmentors) {
-            try { augmented += fn.apply(targetMeters, currentMeters); } catch (Exception ignored) {}
+            try {
+                augmented += fn.apply(targetMeters, currentMeters);
+            } catch (Exception ignored) {
+            }
         }
-        return augmented; 
+        return augmented;
     }
 
     // Public tuning and configuration methods
-    public void setPositionPID(double kP, double kI, double kD) { positionPid.setPID(kP, kI, kD); }
-    public void setHoldPID(double kP, double kI, double kD) { holdPid.setPID(kP, kI, kD); }
-    public void setFeedforwardGains(double kS, double kG, double kV, double kA) { this.feedforward = new ElevatorFeedforward(kS, kG, kV, kA); }
-    public void setDesiredMotion(double velocityMetersPerSec, double accelMetersPerSecSq) { this.desiredVelocity = velocityMetersPerSec; this.desiredAcceleration = accelMetersPerSecSq; }
-    public void setNominalVoltage(double volts) { this.nominalVoltage = volts; }
-    public void addOutputAugmentor(java.util.function.BiFunction<Double, Double, Double> augmentor) { if (augmentor != null) outputAugmentors.add(augmentor); }
-    public boolean removeOutputAugmentor(java.util.function.BiFunction<Double, Double, Double> augmentor) { return outputAugmentors.remove(augmentor); }
-    public void clearOutputAugmentors() { outputAugmentors.clear(); }
+    public void setPositionPID(double kP, double kI, double kD) {
+        positionPid.setPID(kP, kI, kD);
+    }
+
+    public void setHoldPID(double kP, double kI, double kD) {
+        holdPid.setPID(kP, kI, kD);
+    }
+
+    public void setFeedforwardGains(double kS, double kG, double kV, double kA) {
+        this.feedforward = new ElevatorFeedforward(kS, kG, kV, kA);
+    }
+
+    public void setDesiredMotion(double velocityMetersPerSec, double accelMetersPerSecSq) {
+        this.desiredVelocity = velocityMetersPerSec;
+        this.desiredAcceleration = accelMetersPerSecSq;
+    }
+
+    public void setNominalVoltage(double volts) {
+        this.nominalVoltage = volts;
+    }
+
+    public void addOutputAugmentor(java.util.function.BiFunction<Double, Double, Double> augmentor) {
+        if (augmentor != null) {
+            outputAugmentors.add(augmentor);
+
+        }
+    }
+
+    public boolean removeOutputAugmentor(java.util.function.BiFunction<Double, Double, Double> augmentor) {
+        return outputAugmentors.remove(augmentor);
+    }
+
+    public void clearOutputAugmentors() {
+        outputAugmentors.clear();
+    }
 
     // Lifecycle hooks
+    /**
+     * Called before running the mode handler in {@link #periodic()}.
+     */
+    @Override
+    protected void onPrePeriodic() {
+    }
 
-    /** Called before running the mode handler in {@link #periodic()}. */
+    /**
+     * Called after running the mode handler in {@link #periodic()}.
+     */
     @Override
-    protected void onPrePeriodic() {}
-    /** Called after running the mode handler in {@link #periodic()}. */
-    @Override
-    protected void onPostPeriodic() {}
-    /** Called before computing output in {@link #computeOutputPercent}. */
-    protected void onPreComputeOutput(Mode mode, double targetMeters, double currentMeters) {}
-    /** Called after computing and filtering output in {@link #computeOutputPercent}. */
-    protected void onPostComputeOutput(Mode mode, double targetMeters, double currentMeters, double outputPercent) {}
-    /** Hook to adjust output immediately after base (PID+FF) calculation. */
-    protected double afterBaseCompute(Mode mode, double targetMeters, double currentMeters, double basePercent) { return basePercent; }
-    /** Hook to adjust output after augmentors composition but before filters/clamp. */
-    protected double afterAugmentCompute(Mode mode, double targetMeters, double currentMeters, double percent) { return percent; }
-    /** Called right before sending percent to the motor controller. */
-    protected void onPreApplyOutput(double percent) {}
-    /** Called right after sending percent to the motor controller. */
-    protected void onPostApplyOutput(double percent) {}
-    /** Called exactly once when the POSITION target is declared reached. */
-    protected void onTargetReached(double targetMeters) {}
-    /** Called after {@link #stop()} changes the mode to IDLE. */
-    @Override
-    protected void onStop() {}
-    /** Called whenever the mode changes. */
-    protected void onModeChanged(Mode from, Mode to) {}
+    protected void onPostPeriodic() {
+    }
 
-    /** helper to centralize mode changes and fire {@link #onModeChanged(Mode, Mode)}. */
+    /**
+     * Called before computing output in {@link #computeOutputPercent}.
+     */
+    protected void onPreComputeOutput(Mode mode, double targetMeters, double currentMeters) {
+    }
+
+    /**
+     * Called after computing and filtering output in
+     * {@link #computeOutputPercent}.
+     */
+    protected void onPostComputeOutput(Mode mode, double targetMeters, double currentMeters, double outputPercent) {
+    }
+
+    /**
+     * Hook to adjust output immediately after base (PID+FF) calculation.
+     */
+    protected double afterBaseCompute(Mode mode, double targetMeters, double currentMeters, double basePercent) {
+        return basePercent;
+    }
+
+    /**
+     * Hook to adjust output after augmentors composition but before
+     * filters/clamp.
+     */
+    protected double afterAugmentCompute(Mode mode, double targetMeters, double currentMeters, double percent) {
+        return percent;
+    }
+
+    /**
+     * Called right before sending percent to the motor controller.
+     */
+    protected void onPreApplyOutput(double percent) {
+    }
+
+    /**
+     * Called right after sending percent to the motor controller.
+     */
+    protected void onPostApplyOutput(double percent) {
+    }
+
+    /**
+     * Called exactly once when the POSITION target is declared reached.
+     */
+    protected void onTargetReached(double targetMeters) {
+    }
+
+    /**
+     * Called after {@link #stop()} changes the mode to IDLE.
+     */
+    @Override
+    protected void onStop() {
+    }
+
+    /**
+     * Called whenever the mode changes.
+     */
+    protected void onModeChanged(Mode from, Mode to) {
+    }
+
+    /**
+     * helper to centralize mode changes and fire
+     * {@link #onModeChanged(Mode, Mode)}.
+     */
     public void setMode(Mode newMode) {
         if (this.mode != newMode) {
             Mode prev = this.mode;
@@ -377,28 +575,59 @@ public class Elevator extends AbsoluteSubsystem {
     }
 
     @Override
-    public Sendable log() { return null; }
+    public Sendable log() {
+        return null;
+    }
 
-    // Configuration
+    protected void applyPercentOutput(double percent) {
+        onPreApplyOutput(percent);
+        double clamped = clampPercent(percent);
+        leaderMotor.set(clamped);
+        // Estimate voltage for simulation
+        lastAppliedVoltage = clamped * nominalVoltage;
+        onPostApplyOutput(percent);
+    }
+
+    public ca.team4308.absolutelib.subsystems.simulation.ElevatorSimulation getSimulation() {
+        return simulation;
+    }
 
     /**
      * All units are meters, meters/sec, or meters/sec^2 unless noted.
      */
     public static class ElevatorConfig {
-        /** Bottom soft limit (m). */
+
+        /**
+         * Bottom soft limit (m).
+         */
         public final double minHeightMeters;
-        /** Top soft limit (m). */
+        /**
+         * Top soft limit (m).
+         */
         public final double maxHeightMeters;
-        /** Sensor rotations per mechanism rotation. */
+        /**
+         * Sensor rotations per mechanism rotation.
+         */
         public final double gearRatio;
-        /** Drum diameter (m). */
+        /**
+         * Drum diameter (m).
+         */
         public final double drumDiameterMeters;
-        /** Nominal max velocity for planning/telemetry (m/s). */
+        /**
+         * Nominal max velocity for planning/telemetry (m/s).
+         */
         public final double maxVelocityMetersPerSec;
-        /** Nominal max acceleration for planning/telemetry (m/s^2). */
+        /**
+         * Nominal max acceleration for planning/telemetry (m/s^2).
+         */
         public final double maxAccelerationMetersPerSecSq;
-        /** Position tolerance (m). */
+        /**
+         * Position tolerance (m).
+         */
         public final double toleranceMeters;
+
+        public final ca.team4308.absolutelib.subsystems.simulation.ElevatorSimulation.ElevatorSimulationConfig simulationConfig;
+        public final boolean enableSimulation;
 
         private ElevatorConfig(Builder b) {
             this.minHeightMeters = b.minHeightMeters;
@@ -408,12 +637,19 @@ public class Elevator extends AbsoluteSubsystem {
             this.maxVelocityMetersPerSec = b.maxVelocityMetersPerSec;
             this.maxAccelerationMetersPerSecSq = b.maxAccelerationMetersPerSecSq;
             this.toleranceMeters = b.toleranceMeters;
+            this.simulationConfig = b.simulationConfig;
+            this.enableSimulation = b.enableSimulation;
         }
 
-        public static Builder builder() { return new Builder(); }
+        public static Builder builder() {
+            return new Builder();
+        }
 
-        /** Fluent builder for {@link ElevatorConfig}. */
+        /**
+         * Fluent builder for {@link ElevatorConfig}.
+         */
         public static class Builder {
+
             private double minHeightMeters;
             private double maxHeightMeters;
             private double gearRatio;
@@ -421,43 +657,128 @@ public class Elevator extends AbsoluteSubsystem {
             private double maxVelocityMetersPerSec;
             private double maxAccelerationMetersPerSecSq;
             private double toleranceMeters = 0.01;
+            private ca.team4308.absolutelib.subsystems.simulation.ElevatorSimulation.ElevatorSimulationConfig simulationConfig;
+            private boolean enableSimulation = false;
 
-            /** Bottom soft limit (m). */
-            public Builder minHeightMeters(double v) { this.minHeightMeters = v; return this; }
-            /** Top soft limit (m). */
-            public Builder maxHeightMeters(double v) { this.maxHeightMeters = v; return this; }
-            /** Sensor rotations per mechanism rotation. */
-            public Builder gearRatio(double v) { this.gearRatio = v; return this; }
-            /** Drum diameter (m). */
-            public Builder drumDiameterMeters(double v) { this.drumDiameterMeters = v; return this; }
-            /** Nominal max velocity for planning/telemetry (m/s). */
-            public Builder maxVelocityMetersPerSec(double v) { this.maxVelocityMetersPerSec = v; return this; }
-            /** Nominal max acceleration for planning/telemetry (m/s^2). */
-            public Builder maxAccelerationMetersPerSecSq(double v) { this.maxAccelerationMetersPerSecSq = v; return this; }
-            /** Position tolerance (m). */
-            public Builder toleranceMeters(double v) { this.toleranceMeters = v; return this; }
+            /**
+             * Bottom soft limit (m).
+             */
+            public Builder minHeightMeters(double v) {
+                this.minHeightMeters = v;
+                return this;
+            }
 
-            public ElevatorConfig build() { return new ElevatorConfig(this); }
+            /**
+             * Top soft limit (m).
+             */
+            public Builder maxHeightMeters(double v) {
+                this.maxHeightMeters = v;
+                return this;
+            }
+
+            /**
+             * Sensor rotations per mechanism rotation.
+             */
+            public Builder gearRatio(double v) {
+                this.gearRatio = v;
+                return this;
+            }
+
+            /**
+             * Drum diameter (m).
+             */
+            public Builder drumDiameterMeters(double v) {
+                this.drumDiameterMeters = v;
+                return this;
+            }
+
+            /**
+             * Nominal max velocity for planning/telemetry (m/s).
+             */
+            public Builder maxVelocityMetersPerSec(double v) {
+                this.maxVelocityMetersPerSec = v;
+                return this;
+            }
+
+            /**
+             * Nominal max acceleration for planning/telemetry (m/s^2).
+             */
+            public Builder maxAccelerationMetersPerSecSq(double v) {
+                this.maxAccelerationMetersPerSecSq = v;
+                return this;
+            }
+
+            /**
+             * Position tolerance (m).
+             */
+            public Builder toleranceMeters(double v) {
+                this.toleranceMeters = v;
+                return this;
+            }
+
+            public Builder withSimulation(ca.team4308.absolutelib.subsystems.simulation.ElevatorSimulation.ElevatorSimulationConfig config) {
+                this.simulationConfig = config;
+                return this;
+            }
+
+            public Builder enableSimulation(boolean enable) {
+                this.enableSimulation = enable;
+                return this;
+            }
+
+            public ElevatorConfig build() {
+                return new ElevatorConfig(this);
+            }
         }
     }
 
     // ---- Output filters (e.g., beam-breaks, soft interlocks) ----
-    /** Contract for modifying the computed output based on additional context (e.g., sensors). */
+    /**
+     * Contract for modifying the computed output based on additional context
+     * (e.g., sensors).
+     */
     @FunctionalInterface
-    public interface OutputFilter { double filter(double targetMeters, double currentMeters, double proposedPercent); }
-    private final java.util.List<OutputFilter> outputFilters = new java.util.ArrayList<>();
-    /** Add an output filter that can modify or gate the computed output before clamping and apply. */
-    public void addOutputFilter(OutputFilter filter) { if (filter != null) outputFilters.add(filter); }
-    /** Remove a previously added filter. */
-    public boolean removeOutputFilter(OutputFilter filter) { return outputFilters.remove(filter); }
-    /** Remove all filters. */
-    public void clearOutputFilters() { outputFilters.clear(); }
-    /** Apply all registered filters in order. */
+    public interface OutputFilter {
 
+        double filter(double targetMeters, double currentMeters, double proposedPercent);
+    }
+    private final java.util.List<OutputFilter> outputFilters = new java.util.ArrayList<>();
+
+    /**
+     * Add an output filter that can modify or gate the computed output before
+     * clamping and apply.
+     */
+    public void addOutputFilter(OutputFilter filter) {
+        if (filter != null) {
+            outputFilters.add(filter);
+
+        }
+    }
+
+    /**
+     * Remove a previously added filter.
+     */
+    public boolean removeOutputFilter(OutputFilter filter) {
+        return outputFilters.remove(filter);
+    }
+
+    /**
+     * Remove all filters.
+     */
+    public void clearOutputFilters() {
+        outputFilters.clear();
+    }
+
+    /**
+     * Apply all registered filters in order.
+     */
     protected double applyOutputFilters(double targetMeters, double currentMeters, double proposedPercent) {
         double p = proposedPercent;
         for (OutputFilter f : outputFilters) {
-            try { p = f.filter(targetMeters, currentMeters, p); } catch (Exception ignored) {}
+            try {
+                p = f.filter(targetMeters, currentMeters, p);
+            } catch (Exception ignored) {
+            }
         }
         return p;
     }

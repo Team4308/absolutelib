@@ -27,13 +27,11 @@ public class Pivot extends AbsoluteSubsystem {
         public double gearRatio = 1.0;
         public double kP = 0.0, kI = 0.0, kD = 0.0;
         public double kS = 0.0, kG = 0.0, kV = 0.0, kA = 0.0;
-        
+
         public double minAngleDeg = -180.0;
         public double maxAngleDeg = 180.0;
-        
+
         public double toleranceDeg = 1.0;
-
-
 
         // Added simulation config
         public PivotSimulation.Config simulationConfig = null;
@@ -205,15 +203,13 @@ public class Pivot extends AbsoluteSubsystem {
     }
 
     protected void onInitialize() {
-        // For relative encoders, zero them
-        // For absolute encoders, keep their position
+
         if (!encoderIsAbsolute) {
             zeroEncoder();
         }
         setBrakeMode(true);
         if (simulation != null) {
             simulation.initialize();
-            // Initialize sim to match current encoder position
             if (cfg.encoder != null) {
                 double currentAngle = getAngleRad();
                 simulation.setSimulationPosition(currentAngle);
@@ -226,7 +222,6 @@ public class Pivot extends AbsoluteSubsystem {
         onPrePeriodic();
         onPeriodic();
 
-        // Only update simulation if present, do not call periodic recursively
         if (simulation != null) {
             simulation.setVoltage(lastAppliedVoltage);
             simulation.periodic();
@@ -330,7 +325,6 @@ public class Pivot extends AbsoluteSubsystem {
     public double getTargetRad() {
         return targetAngleRad;
     }
-
 
     public void disable() {
         enabled = false;

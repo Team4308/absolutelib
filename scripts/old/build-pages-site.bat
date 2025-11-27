@@ -38,8 +38,8 @@ echo Preparing ./site directory...
 rmdir /S /Q site 2>nul
 mkdir site
 
-REM Copy Maven repo to site root
-xcopy /E /I /Y build\pages-maven site\
+REM Copy Maven repo to site/lib
+xcopy /E /I /Y build\pages-maven site\lib\
 
 REM Copy vendor JSON to site root
 copy /Y absolutelib.json site\absolutelib.json >nul
