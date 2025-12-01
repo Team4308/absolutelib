@@ -277,7 +277,7 @@ public class Elevator extends AbsoluteSubsystem {
 
         if (simulation != null) {
             simulation.setInputVoltage(lastAppliedVoltage);
-            simulation.update(0.02);
+            simulation.simUpdate(0.02);
             // Update encoder wrapper with simulated position
             if (encoder != null) {
                 // If using a wrapper that supports setting position (like a sim wrapper), this helps.

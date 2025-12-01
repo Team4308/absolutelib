@@ -1,5 +1,8 @@
 # Changelog for AbsoluteLib V2
 
+# 1.1.4 
+- Simulation update / patch
+- added mech 3d
 # 1.1.3
 - Minor bug fixes 
 - Added javadocs
