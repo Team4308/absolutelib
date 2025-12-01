@@ -42,7 +42,7 @@ xcopy /E /I /Y build\docs\javadoc site\docs\javadoc\
 
 
 REM Copy vendor JSON to site root
-copy /Y absolutelib.json site\absolutelib.json >nul
+copy /Y absolutelib.json site\lib\absolutelib.json >nul
 
 echo.
 echo Please upload the static site yourself, via opening a terminal in the /site folder and then git init, git add, git commit, git push

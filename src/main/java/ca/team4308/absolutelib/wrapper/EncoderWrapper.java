@@ -9,81 +9,103 @@ import com.ctre.phoenix6.hardware.TalonFX;
 import ca.team4308.absolutelib.math.EncoderConversion;
 import edu.wpi.first.wpilibj.DutyCycleEncoder;
 import edu.wpi.first.wpilibj.Encoder;
+import edu.wpi.first.wpilibj.simulation.DutyCycleEncoderSim;
+import edu.wpi.first.wpilibj.simulation.EncoderSim;
 
 /**
  * EncoderWrapper provides a minimal, vendor-agnostic interface for fetching and setting
- * linear position (in meters). Use the static factory helpers to create wrappers for
- * common encoder types, or implement the interface yourself for custom sensors.
+ * position. Supports both linear (meters) and rotational (rotations/radians) units.
  */
 public interface EncoderWrapper {
-    /** Current linear position in meters. */
+    /** Current linear position in meters. Requires drumDiameter to be configured. */
     double getPositionMeters();
 
-    /** Reset/report the linear position in meters (if supported by the underlying sensor). */
+    /** Reset/report the linear position in meters. */
     void setPositionMeters(double meters);
+
+    /** Current position in mechanism rotations. */
+    double getPositionMechanismRotations();
+
+    /** Reset/report position in mechanism rotations. */
+    void setPositionMechanismRotations(double rotations);
+
+    /** 
+     * Update the simulated sensor state (if applicable). 
+     * Used to feed simulation physics back into the sensor so control loops work in sim.
+     */
+    default void setSimulatedPositionMechanismRotations(double rotations) {}
+
+    /** Current position in radians. */
+    default double getPositionRadians() {
+        return getPositionMechanismRotations() * 2.0 * Math.PI;
+    }
+
+    /** Reset/report position in radians. */
+    default void setPositionRadians(double rads) {
+        setPositionMechanismRotations(rads / (2.0 * Math.PI));
+    }
 
     /** Returns true if this encoder is absolute (position persists across power cycles). */
     default boolean isAbsolute() { return false; }
 
-    /**
-     * Create a CANCoder-backed encoder wrapper.
-     * @param canId CAN ID of the CANCoder
-     * @param gearRatio Sensor rotations per mechanism rotation
-     * @param countsPerRev Native counts per encoder revolution (e.g. 4096 or 4028)
-     * @param drumDiameter Mechanism drum diameter (meters) for linear conversion
-     */
+    // --- Factories ---
+
     static EncoderWrapper canCoder(int canId, double gearRatio, double countsPerRev, double drumDiameter) {
         return new CANCoderImpl(canId, gearRatio, countsPerRev, drumDiameter);
     }
 
-    /** TalonFX integrated sensor (uses 2048 counts per rev by default). */
+    static EncoderWrapper canCoder(int canId, double gearRatio) {
+        return new CANCoderImpl(canId, gearRatio, 4096.0, 0.0);
+    }
+
     static EncoderWrapper talonFXIntegrated(int canId, double gearRatio, double drumDiameter) {
         return talonFXIntegrated(canId, gearRatio, 2048.0, drumDiameter);
     }
 
-    /** TalonFX integrated sensor with custom counts per rev (normally 2048). */
+    static EncoderWrapper talonFXIntegrated(int canId, double gearRatio) {
+        return new TalonFXIntegratedImpl(canId, gearRatio, 2048.0, 0.0);
+    }
+
     static EncoderWrapper talonFXIntegrated(int canId, double gearRatio, double countsPerRev, double drumDiameter) {
         return new TalonFXIntegratedImpl(canId, gearRatio, countsPerRev, drumDiameter);
     }
 
-    // Phoenix 5 SRX/VictorSPX quadrature not supported in Phoenix 6-only build.
-
-    /** DIO-based WPILib Encoder (incremental). */
     static EncoderWrapper dioEncoder(int channelA, int channelB, boolean reversed,
                                      double gearRatio, double countsPerRev, double drumDiameter) {
         return new DioEncoderImpl(channelA, channelB, reversed, gearRatio, countsPerRev, drumDiameter);
     }
 
-    /** DutyCycleEncoder absolute position (adds offset for setPositionMeters). */
     static EncoderWrapper dutyCycleEncoder(int channel, double gearRatio, double drumDiameter) {
         return new DutyCycleEncoderImpl(channel, gearRatio, drumDiameter);
     }
 
-    /** Generic factory from raw encoder counts (ticks). */
+    static EncoderWrapper dutyCycleEncoder(int channel, double gearRatio) {
+        return new DutyCycleEncoderImpl(channel, gearRatio, 0.0);
+    }
+
     static EncoderWrapper ofEncoderCounts(Supplier<Double> getCounts, DoubleConsumer setCounts,
                                           double gearRatio, double countsPerRev, double drumDiameter) {
         return new GenericCountsImpl(getCounts, setCounts, gearRatio, countsPerRev, drumDiameter);
     }
 
-    /** Generic factory from mechanism rotations directly. */
     static EncoderWrapper ofMechanismRotations(Supplier<Double> getMechanismRotations,
                                                DoubleConsumer setMechanismRotations,
                                                double drumDiameter) {
         return new GenericMechanismRotationsImpl(getMechanismRotations, setMechanismRotations, drumDiameter);
     }
 
-    /**
-     * Generic factory for absolute sensors that report position as sensor rotations in [0,1).
-     * Maintains an internal offset to emulate setPositionMeters.
-     */
-    
     static EncoderWrapper ofAbsoluteRotations0To1(Supplier<Double> getSensorRotations,
                                                   double gearRatio,
                                                   double drumDiameter) {
         return new GenericAbsoluteRotationsImpl(getSensorRotations, gearRatio, drumDiameter);
     }
 
-    /** Simple CANCoder implementation performing unit conversions to meters. */
+    static EncoderWrapper ofAbsoluteRotations0To1(Supplier<Double> getSensorRotations, double gearRatio) {
+        return new GenericAbsoluteRotationsImpl(getSensorRotations, gearRatio, 0.0);
+    }
+
+    // --- Implementations ---
+
     class CANCoderImpl implements EncoderWrapper {
         private final CANcoder encoder;
         private final double gearRatio;
@@ -99,26 +121,35 @@ public interface EncoderWrapper {
         public boolean isAbsolute() { return true; }
 
         @Override
+        public double getPositionMechanismRotations() {
+            return encoder.getPosition().getValueAsDouble() / gearRatio;
+        }
+
+        @Override
+        public void setPositionMechanismRotations(double rotations) {
+            encoder.setPosition(rotations * gearRatio);
+        }
+
+        @Override
+        public void setSimulatedPositionMechanismRotations(double rotations) {
+            encoder.getSimState().setRawPosition(rotations * gearRatio);
+        }
+
+        @Override
         public double getPositionMeters() {
-            // Phoenix 6 CANcoder position is in rotations by default
-            double sensorRot = encoder.getPosition().getValueAsDouble();
-            double mechRot = sensorRot / gearRatio;
-            return mechRot * Math.PI * drumDiameter;
+            return getPositionMechanismRotations() * Math.PI * drumDiameter;
         }
 
         @Override
         public void setPositionMeters(double meters) {
-            double rotations = meters / (Math.PI * drumDiameter); // mechanism rotations
-            double sensorRot = rotations * gearRatio;
-            encoder.setPosition(sensorRot);
+            if (drumDiameter != 0) setPositionMechanismRotations(meters / (Math.PI * drumDiameter));
         }
     }
 
-    /** TalonFX integrated sensor implementation. */
     class TalonFXIntegratedImpl implements EncoderWrapper {
-    private final TalonFX talon;
-    private final double gearRatio;
-    private final double drumDiameter;
+        private final TalonFX talon;
+        private final double gearRatio;
+        private final double drumDiameter;
 
         public TalonFXIntegratedImpl(int canId, double gearRatio, double countsPerRev, double drumDiameter) {
             this.talon = new TalonFX(canId);
@@ -127,66 +158,97 @@ public interface EncoderWrapper {
         }
 
         @Override
-        public boolean isAbsolute() { return false; } // Relative encoder
+        public boolean isAbsolute() { return false; }
+
+        @Override
+        public double getPositionMechanismRotations() {
+            return talon.getPosition().getValueAsDouble() / gearRatio;
+        }
+
+        @Override
+        public void setPositionMechanismRotations(double rotations) {
+            talon.setPosition(rotations * gearRatio);
+        }
+
+        @Override
+        public void setSimulatedPositionMechanismRotations(double rotations) {
+            talon.getSimState().setRawRotorPosition(rotations * gearRatio);
+        }
 
         @Override
         public double getPositionMeters() {
-            // Phoenix 6 TalonFX position is reported in rotations
-            double sensorRot = talon.getPosition().getValueAsDouble();
-            double mechRot = sensorRot / gearRatio;
-            return mechRot * Math.PI * drumDiameter;
+            return getPositionMechanismRotations() * Math.PI * drumDiameter;
         }
 
         @Override
         public void setPositionMeters(double meters) {
-            double rotations = meters / (Math.PI * drumDiameter); // mechanism rotations
-            double sensorRot = rotations * gearRatio;
-            talon.setPosition(sensorRot);
+            if (drumDiameter != 0) setPositionMechanismRotations(meters / (Math.PI * drumDiameter));
         }
     }
 
-    // TalonSRX/VictorSPX implementation removed for Phoenix 6-only build
-
-    /** WPILib DIO encoder implementation with offset for setPositionMeters. */
     class DioEncoderImpl implements EncoderWrapper {
         private final Encoder encoder;
+        private final EncoderSim sim;
         private final double drumDiameter;
-        private double offsetMeters = 0.0;
+        private final double gearRatio;
+        private final double countsPerRev;
+        private double offsetRotations = 0.0;
 
         public DioEncoderImpl(int channelA, int channelB, boolean reversed,
                               double gearRatio, double countsPerRev, double drumDiameter) {
             this.encoder = new Encoder(channelA, channelB, reversed);
+            this.sim = new EncoderSim(encoder);
             this.drumDiameter = drumDiameter;
-            // Compute meters per pulse using conversion utilities.
-            double mechanismDegreesPerPulse = 360.0 / (countsPerRev * gearRatio);
-            double metersPerPulse = EncoderConversion.degreesToMeters(mechanismDegreesPerPulse, drumDiameter);
-            this.encoder.setDistancePerPulse(metersPerPulse);
+            this.gearRatio = gearRatio;
+            this.countsPerRev = countsPerRev;
+            this.encoder.setDistancePerPulse(1.0);
         }
 
         @Override
-        public boolean isAbsolute() { return false; } // Relative encoder
+        public boolean isAbsolute() { return false; }
+
+        @Override
+        public double getPositionMechanismRotations() {
+            double ticks = encoder.getDistance();
+            double sensorRot = ticks / countsPerRev;
+            return offsetRotations + (sensorRot / gearRatio);
+        }
+
+        @Override
+        public void setPositionMechanismRotations(double rotations) {
+            encoder.reset();
+            offsetRotations = rotations;
+        }
+
+        @Override
+        public void setSimulatedPositionMechanismRotations(double rotations) {
+            // Back-calculate distance (ticks)
+            double sensorRot = (rotations - offsetRotations) * gearRatio;
+            double ticks = sensorRot * countsPerRev;
+            sim.setDistance(ticks);
+        }
 
         @Override
         public double getPositionMeters() {
-            return offsetMeters + encoder.getDistance();
+            return getPositionMechanismRotations() * Math.PI * drumDiameter;
         }
 
         @Override
         public void setPositionMeters(double meters) {
-            encoder.reset();
-            offsetMeters = meters;
+            if (drumDiameter != 0) setPositionMechanismRotations(meters / (Math.PI * drumDiameter));
         }
     }
 
-    /** WPILib DutyCycleEncoder absolute implementation with offset for setPositionMeters. */
     class DutyCycleEncoderImpl implements EncoderWrapper {
         private final DutyCycleEncoder encoder;
+        private final DutyCycleEncoderSim sim;
         private final double gearRatio;
         private final double drumDiameter;
-        private double offsetMeters = 0.0;
+        private double offsetRotations = 0.0;
 
         public DutyCycleEncoderImpl(int channel, double gearRatio, double drumDiameter) {
             this.encoder = new DutyCycleEncoder(channel);
+            this.sim = new DutyCycleEncoderSim(encoder);
             this.gearRatio = gearRatio;
             this.drumDiameter = drumDiameter;
         }
@@ -195,22 +257,35 @@ public interface EncoderWrapper {
         public boolean isAbsolute() { return true; }
 
         @Override
-        public double getPositionMeters() {
-            double sensorRot = encoder.get(); // 0-1 sensor rotations
-            double mechanismRot = sensorRot / gearRatio;
-            double meters = mechanismRot * Math.PI * drumDiameter;
-            return meters + offsetMeters;
+        public double getPositionMechanismRotations() {
+            double sensorRot = encoder.get();
+            double mechRot = sensorRot / gearRatio;
+            return mechRot + offsetRotations;
         }
 
-        
+        @Override
+        public void setPositionMechanismRotations(double rotations) {
+            offsetRotations = rotations - (encoder.get() / gearRatio);
+        }
+
+        @Override
+        public void setSimulatedPositionMechanismRotations(double rotations) {
+            // Set raw sensor value (0-1 usually, but can wrap)
+            double sensorRot = (rotations - offsetRotations) * gearRatio;
+            sim.set(sensorRot);
+        }
+
+        @Override
+        public double getPositionMeters() {
+            return getPositionMechanismRotations() * Math.PI * drumDiameter;
+        }
 
         @Override
         public void setPositionMeters(double meters) {
-            offsetMeters = meters - getPositionMeters();
+            if (drumDiameter != 0) setPositionMechanismRotations(meters / (Math.PI * drumDiameter));
         }
     }
 
-    /** Generic counts-based implementation. */
     class GenericCountsImpl implements EncoderWrapper {
         private final Supplier<Double> countsSupplier;
         private final DoubleConsumer countsSetter;
@@ -228,26 +303,29 @@ public interface EncoderWrapper {
         }
 
         @Override
-        public boolean isAbsolute() { return false; } // Generic assumed relative
+        public boolean isAbsolute() { return false; }
+
+        @Override
+        public double getPositionMechanismRotations() {
+            return (countsSupplier.get() / countsPerRev) / gearRatio;
+        }
+
+        @Override
+        public void setPositionMechanismRotations(double rotations) {
+            countsSetter.accept(rotations * gearRatio * countsPerRev);
+        }
 
         @Override
         public double getPositionMeters() {
-            double counts = countsSupplier.get();
-            double deg = EncoderConversion.encoderUnitsToDegrees(counts, gearRatio, countsPerRev);
-            return EncoderConversion.degreesToMeters(deg, drumDiameter);
+            return getPositionMechanismRotations() * Math.PI * drumDiameter;
         }
 
         @Override
         public void setPositionMeters(double meters) {
-            double circumference = Math.PI * drumDiameter;
-            double rotations = meters / circumference;
-            double deg = rotations * 360.0;
-            double counts = deg * countsPerRev * gearRatio / 360.0;
-            countsSetter.accept(counts);
+            if (drumDiameter != 0) setPositionMechanismRotations(meters / (Math.PI * drumDiameter));
         }
     }
 
-    /** Generic mechanism-rotations implementation. */
     class GenericMechanismRotationsImpl implements EncoderWrapper {
         private final Supplier<Double> rotationsSupplier;
         private final DoubleConsumer rotationsSetter;
@@ -262,25 +340,31 @@ public interface EncoderWrapper {
         }
 
         @Override
+        public double getPositionMechanismRotations() {
+            return rotationsSupplier.get();
+        }
+
+        @Override
+        public void setPositionMechanismRotations(double rotations) {
+            rotationsSetter.accept(rotations);
+        }
+
+        @Override
         public double getPositionMeters() {
-            double rotations = rotationsSupplier.get();
-            return rotations * Math.PI * drumDiameter;
+            return getPositionMechanismRotations() * Math.PI * drumDiameter;
         }
 
         @Override
         public void setPositionMeters(double meters) {
-            double circumference = Math.PI * drumDiameter;
-            double rotations = meters / circumference;
-            rotationsSetter.accept(rotations);
+            if (drumDiameter != 0) setPositionMechanismRotations(meters / (Math.PI * drumDiameter));
         }
     }
 
-    /** Generic absolute rotations-based implementation (sensor rotations in [0,1)). */
     class GenericAbsoluteRotationsImpl implements EncoderWrapper {
         private final Supplier<Double> absoluteRotationsSupplier;
         private final double gearRatio;
         private final double drumDiameter;
-        private double offsetMeters = 0.0;
+        private double offsetRotations = 0.0;
 
         public GenericAbsoluteRotationsImpl(Supplier<Double> absoluteRotationsSupplier,
                                             double gearRatio,
@@ -294,17 +378,23 @@ public interface EncoderWrapper {
         public boolean isAbsolute() { return true; }
 
         @Override
+        public double getPositionMechanismRotations() {
+            return (absoluteRotationsSupplier.get() / gearRatio) + offsetRotations;
+        }
+
+        @Override
+        public void setPositionMechanismRotations(double rotations) {
+            offsetRotations = rotations - (absoluteRotationsSupplier.get() / gearRatio);
+        }
+
+        @Override
         public double getPositionMeters() {
-            double sensorRot = absoluteRotationsSupplier.get(); // 0..1 sensor rotations
-            double mechRot = sensorRot / gearRatio;
-            double meters = mechRot * Math.PI * drumDiameter;
-            return meters + offsetMeters;
+            return getPositionMechanismRotations() * Math.PI * drumDiameter;
         }
 
         @Override
         public void setPositionMeters(double meters) {
-            // Cannot set absolute sensor; emulate by offset
-            offsetMeters = meters - getPositionMeters();
+            if (drumDiameter != 0) setPositionMechanismRotations(meters / (Math.PI * drumDiameter));
         }
     }
 }

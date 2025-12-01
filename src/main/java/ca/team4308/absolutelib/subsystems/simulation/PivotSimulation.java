@@ -103,6 +103,14 @@ public class PivotSimulation extends SimulationBase {
         this("pivot", config);
     }
 
+    /**
+     * Public update method called by subsystems.
+     */
+    public void simUpdate(double dtSeconds) {
+        updateSimulation(dtSeconds);
+        onSimulationPeriodic(dtSeconds);
+    }
+
     @Override
     protected void onSimulationInit() {
         armSim.setState(config.startAngleRad, 0.0);

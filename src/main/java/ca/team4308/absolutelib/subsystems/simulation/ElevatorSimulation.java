@@ -17,7 +17,6 @@ public class ElevatorSimulation extends SimulationBase {
         public double drumRadiusMeters;
         public boolean simulateGravity = true;
         public double startHeightMeters = 0.0;
-        // optional tuning knob; not used directly by ElevatorSim
         public double dampingNmPerRadPerSec = 0.0;
     }
 
@@ -77,14 +76,12 @@ public class ElevatorSimulation extends SimulationBase {
         elevatorSim.setInputVoltage(clamped);
         elevatorSim.update(dtSeconds);
 
-        // Update state snapshot
         state.positionMeters = elevatorSim.getPositionMeters();
         state.velocityMetersPerSec = elevatorSim.getVelocityMetersPerSecond();
         state.appliedVoltage = appliedVoltage;
         state.currentDrawAmps = elevatorSim.getCurrentDrawAmps();
         state.temperatureCelsius = 20.0 + state.currentDrawAmps * 1.5;
 
-        // Update mech2d
         elevatorLigament.setLength(elevatorSim.getPositionMeters());
 
         recordOutput("positionMeters", state.positionMeters);

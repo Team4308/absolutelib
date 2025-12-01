@@ -7,6 +7,9 @@ import edu.wpi.first.util.sendable.Sendable;
 /**
  * Endeffector subsystem base class. Extend this class to create
  * endeffector subsystems (intakes, claws, etc.).
+ * There is no default code you have to implement this class
+ * @start - Set the leader to a speed
+ * @stop - set the leader to 0 
  */
 public class EndEffector extends AbsoluteSubsystem {
 
@@ -29,8 +32,10 @@ public class EndEffector extends AbsoluteSubsystem {
 		public Config inverted(boolean inv){inverted=inv;return this;}
 	}
 
-	public EndEffector() {
+	private final Config config;
 
+	public EndEffector(Config config) {
+		this.config = config;
 	}
 
 	public final void initialize() {
@@ -38,6 +43,10 @@ public class EndEffector extends AbsoluteSubsystem {
 	}
 
 	protected void onInitialize() {
+		config.leader.setInverted(config.inverted);
+		for (MotorWrapper follower : config.followers) {
+			follower.follow(config.leader);
+		}
 	}
 
 	@Override
@@ -56,12 +65,20 @@ public class EndEffector extends AbsoluteSubsystem {
 	protected void onPostPeriodic() {
 	}
 
-	@Override
+
+	/**
+	 * Stops the end effector.
+	 */
 	public void stop() {
-		onStop();
+		config.leader.set(0);
 	}
 
-	protected void onStop() {
+	/**
+	 * Sets the speed of the end effector.
+	 * @param speed -1.0 to 1.0
+	 */
+	public void start(double speed) {
+		config.leader.set(speed);
 	}
 
 	@Override

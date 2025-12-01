@@ -1,5 +1,12 @@
 # Changelog for AbsoluteLib V2
 
+
+# 1.1.5
+Simulation Rework
+Finally Fixed EncoderWrapper 
+Fix alled subsystem simulation
+Fixxed All Subsystems
+
 # 1.1.4 
 - Simulation update / patch
 - added mech 3d

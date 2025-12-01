@@ -4,6 +4,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 import edu.wpi.first.math.geometry.Pose3d;
+import edu.wpi.first.math.geometry.Pose2d;
+import edu.wpi.first.math.geometry.Rotation2d;
 import edu.wpi.first.math.geometry.Rotation3d;
 import edu.wpi.first.math.system.plant.DCMotor;
 import edu.wpi.first.wpilibj.simulation.SingleJointedArmSim;
@@ -22,7 +24,6 @@ public class ArmSimulation extends SimulationBase {
         public double maxAngleRad = Math.PI;
         public boolean simulateGravity = true;
         public double startAngleRad = 0.0;
-        // optional tuning knob; not used directly by SingleJointedArmSim
         public double dampingNmPerRadPerSec = 0.0;
 
         public JointSimConfig gearbox(DCMotor motor) { this.gearbox = motor; return this; }
@@ -67,6 +68,7 @@ public class ArmSimulation extends SimulationBase {
     private final List<JointSim> joints = new ArrayList<>();
     private final Config config;
     private final SimState currentState = new SimState();
+    private final String name;
 
     // Mechanism2d visualization fields
     private final Mechanism2d mech2d = new Mechanism2d(3.0, 3.0);
@@ -75,6 +77,7 @@ public class ArmSimulation extends SimulationBase {
 
     public ArmSimulation(String name, Config config) {
         super(name);
+        this.name = name;
         this.config = config;
         for (JointSimConfig jcfg : config.joints) {
             joints.add(new JointSim(jcfg));
@@ -157,11 +160,11 @@ public class ArmSimulation extends SimulationBase {
             velocities[i] = Math.toDegrees(j.sim.getVelocityRadPerSec());
             currents[i] = j.sim.getCurrentDrawAmps();
 
-            recordOutput("joint" + i + "/angleDeg", angles[i]);
-            recordOutput("joint" + i + "/velocityDegPerSec", velocities[i]);
-            recordOutput("joint" + i + "/currentAmps", currents[i]);
-            recordOutput("joint" + i + "/hitLowerLimit", j.sim.hasHitLowerLimit());
-            recordOutput("joint" + i + "/hitUpperLimit", j.sim.hasHitUpperLimit());
+            recordOutput(name + "/joint" + i + "/angleDeg", angles[i]);
+            recordOutput(name + "/joint" + i + "/velocityDegPerSec", velocities[i]);
+            recordOutput(name + "/joint" + i + "/currentAmps", currents[i]);
+            recordOutput(name + "/joint" + i + "/hitLowerLimit", j.sim.hasHitLowerLimit());
+            recordOutput(name + "/joint" + i + "/hitUpperLimit", j.sim.hasHitUpperLimit());
         }
 
         // Update Mechanism2d joint ligaments
@@ -169,19 +172,18 @@ public class ArmSimulation extends SimulationBase {
             jointLigaments.get(i).setAngle(angles[i]);
         }
 
-        logJointAngles(toRadians(angles));
+        recordOutput(name + "/jointAngles", toRadians(angles));
 
         // Forward kinematics for end effector
         double[] fk = computeForwardKinematics();
-        logPose2d("endEffector", fk[0], fk[1], fk[2]);
+        recordOutput(name + "/endEffector", new Pose2d(fk[0], fk[1], new Rotation2d(fk[2])));
 
         // Log mechanism2d data using built-in recordOutput
-        recordOutput("mechanism2d/angles", angles);
-        recordOutput("mechanism2d/object", mech2d);
+        recordOutput(name + "/mechanism2d", mech2d);
 
         // 3D Visualization (Simple single joint approximation)
         if (!joints.isEmpty()) {
-            recordOutput("3d/pose", new Pose3d(0, 0, 1.0, new Rotation3d(0, -joints.get(0).sim.getAngleRads(), 0)));
+            recordOutput(name + "/3d/pose", new Pose3d(0, 0, 1.0, new Rotation3d(0, -joints.get(0).sim.getAngleRads(), 0)));
         }
     }
 

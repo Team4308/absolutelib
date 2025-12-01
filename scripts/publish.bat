@@ -74,55 +74,9 @@ git restore --staged site >nul 2>&1
 git commit -m "%COMMIT_MSG%"
 git push origin %CURRENT_BRANCH% --force
 
-echo Main branch pushed.
+echo Master branch pushed.
 echo.
 
-
-:: ========================================================
-:: PUSH SITE CONTENT 
-:: ========================================================
-
-echo === Deploying site/lib (Maven repo) and site/absolutelib.json (vendor JSON) to origin/gh-pages ===
-
-:: Create a temporary index
-set TEMP_INDEX=%TEMP%\ghpages_index_%RANDOM%.tmp
-set TEMP_TREE=%TEMP%\ghpages_tree_%RANDOM%.tmp
-
-set GIT_INDEX_FILE=%TEMP_INDEX%
-
-:: Reset temp index
-git read-tree --empty
-
-:: Add all files inside /site recursively
-if not exist site (
-    echo ERROR: site folder missing.
-    pause
-    exit /b
-)
-
-echo Adding files inside /site ...
-set FILECOUNT=0
-for /r "site" %%f in (*) do (
-    git add "%%f"
-    set /a FILECOUNT+=1
-)
-
-echo Added !FILECOUNT! files from /site.
-echo.
-
-:: Create a tree object from the temporary index
-git write-tree > "%TEMP_TREE%"
-set /p TREE_HASH=<"%TEMP_TREE%"
-
-echo Using tree %TREE_HASH% for gh-pages deployment...
-
-git commit-tree %TREE_HASH% -m "%COMMIT_MSG%" > "%TEMP_TREE%_commit"
-set /p COMMIT_HASH=<"%TEMP_TREE%_commit"
-
-git push origin %COMMIT_HASH%:refs/heads/gh-pages --force
-
-echo GH-PAGES pushed successfully.
-echo.
 
 :: Cleanup
 set GIT_INDEX_FILE=

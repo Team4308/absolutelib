@@ -62,8 +62,6 @@ public class Elevator extends AbsoluteSubsystem {
     private final java.util.List<java.util.function.BiFunction<Double, Double, Double>> outputAugmentors = new java.util.ArrayList<>();
 
     /**
-     * Backward-compatible convenience constructor using a CTRE CANCoder as the
-     * sensor.
      *
      * @param leaderMotor configured leader motor
      * @param motorConfig optional motor config applied to leader and followers
@@ -278,15 +276,8 @@ public class Elevator extends AbsoluteSubsystem {
         if (simulation != null) {
             simulation.setInputVoltage(lastAppliedVoltage);
             simulation.simUpdate(0.02);
-            // Update encoder wrapper with simulated position
             if (encoder != null) {
-                // If using a wrapper that supports setting position (like a sim wrapper), this helps.
-                // But typically we need to mock the hardware or use the wrapper's sim features.
-                // For now, we assume the user might read from sim state or the wrapper handles sim.
-                // However, AbsoluteLib's EncoderWrapper might not automatically link to this sim.
-                // We can try to force it if possible, or just rely on the user to use SimDevice.
-                // But for "deployable code", we should probably update the encoder if it's a sim-compatible one.
-                // Actually, let's just expose the sim state.
+
             }
         }
 
@@ -354,6 +345,7 @@ public class Elevator extends AbsoluteSubsystem {
             case POSITION: {
                 double ffVolts = feedforward.calculate(desiredVelocity, desiredAcceleration);
                 double ffPercent = nominalVoltage != 0.0 ? ffVolts / nominalVoltage : 0.0;
+                // Lowkey a lil werid since were using Percent instead of voltage but this should work \_(ツ)_/
                 double pidPercent = positionPid.calculate(currentMeters, targetMeters);
                 basePercent = ffPercent + pidPercent;
                 break;
@@ -368,15 +360,11 @@ public class Elevator extends AbsoluteSubsystem {
             default:
                 basePercent = 0.0;
         }
-        // Allow subclasses to adjust after base computation (without replacing it).
         double afterBase = afterBaseCompute(mode, targetMeters, currentMeters, basePercent);
-        // Apply augmentors inside the single computation path
         double withAugment = applyAugmentors(afterBase, targetMeters, currentMeters);
-        // Allow subclasses to adjust after augmentors
         double afterAugment = afterAugmentCompute(mode, targetMeters, currentMeters, withAugment);
-        // Apply output filters (e.g., beam breaks) supplied at runtime
+        // Output Filters SHOULD be where beambreaks go i highly doubt people will use that properly but its here if you want it
         double filtered = applyOutputFilters(targetMeters, currentMeters, afterAugment);
-        // Post-compute hook
         onPostComputeOutput(mode, targetMeters, currentMeters, filtered);
         return clampPercent(filtered);
     }
