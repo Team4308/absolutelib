@@ -285,6 +285,7 @@ public class Pivot extends AbsoluteSubsystem {
         recordOutput("at Target", atTarget());
         recordOutput("Is EncoderAbsolute", encoderIsAbsolute);
         recordOutput("Enabled", enabled);
+        recordOutput("Last Applied Voltage", lastAppliedVoltage);
 
     }
 

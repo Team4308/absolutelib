@@ -225,13 +225,6 @@ public class PivotSimulation extends SimulationBase {
         logInfo("Pivot simulation reset");
     }
 
-    /**
-     * Apply a percent output (-1.0 to 1.0) converted to voltage
-     */
-    public void setPercentOutput(double percent) {
-        setVoltage(clamp(percent, -1.0, 1.0) * 12.0);
-    }
-
     @Override
     protected void onStop() {
         appliedVoltage = 0.0;
