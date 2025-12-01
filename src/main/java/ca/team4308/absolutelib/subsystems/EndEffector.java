@@ -8,8 +8,8 @@ import edu.wpi.first.util.sendable.Sendable;
  * Endeffector subsystem base class. Extend this class to create
  * endeffector subsystems (intakes, claws, etc.).
  * There is no default code you have to implement this class
- * @start - Set the leader to a speed
- * @stop - set the leader to 0 
+ * start - Set the leader to a speed
+ * stop - set the leader to 0 
  */
 public class EndEffector extends AbsoluteSubsystem {
 

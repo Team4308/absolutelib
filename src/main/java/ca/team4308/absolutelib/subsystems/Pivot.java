@@ -270,20 +270,20 @@ public class Pivot extends AbsoluteSubsystem {
                 pid.setGoal(targetAngleRad);
             }
 
-            double pidOut = pid.calculate(currentRad);
-            
-            double setpointPos = pid.getSetpoint().position;
-            double setpointVel = pid.getSetpoint().velocity;
-            
-            double ffVolts = ff.calculate(setpointPos, setpointVel);
+            double pidOut = pid.calculate(currentRad, targetAngleRad);
+            double ffVolts = ff.calculate(targetAngleRad, pid.getSetpoint().velocity);
             double volts = pidOut + ffVolts;
             applyVoltage(volts);
+            recordOutput("PIDOutput", pidOut);
+            recordOutput("FFOutput", ffVolts);
         }
         // Telemetry
         recordOutput("angleDeg", getAngleDeg());
         recordOutput("targetDeg", Math.toDegrees(targetAngleRad));
         recordOutput("atTarget", atTarget());
         recordOutput("encoderAbsolute", encoderIsAbsolute);
+        recordOutput("Enabled", enabled);
+
     }
 
     protected void onPostPeriodic() {
