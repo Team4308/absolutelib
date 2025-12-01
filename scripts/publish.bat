@@ -11,10 +11,10 @@ set /p NEW_VERSION="Enter new version (e.g. 1.0.7): "
 :: ========================================================
 echo Updating absolutelib.json to version %NEW_VERSION% ...
 set JSON_FILE=absolutelib.json
-set SITE_JSON=site\absolutelib.json
+set SITE_JSON=site\lib\absolutelib.json
 
 REM Use PowerShell to update the version, javaDependencies, mavenUrls, and jsonUrl in the JSON file
-powershell -Command " $json = Get-Content %JSON_FILE% | ConvertFrom-Json; $json.version = '%NEW_VERSION%'; if ($json.javaDependencies.Count -gt 0) { $json.javaDependencies[0].version = '%NEW_VERSION%' }; $json.mavenUrls = @('https://team4308.github.io/absolutelib', 'https://jitpack.io'); $json.jsonUrl = 'https://team4308.github.io/absolutelib/absolutelib.json'; $json | ConvertTo-Json -Depth 10 | Set-Content %JSON_FILE% "
+powershell -Command " $json = Get-Content %JSON_FILE% | ConvertFrom-Json; $json.version = '%NEW_VERSION%'; if ($json.javaDependencies.Count -gt 0) { $json.javaDependencies[0].version = '%NEW_VERSION%' }; $json.mavenUrls = @('https://team4308.github.io/absolutelib\lib', 'https://jitpack.io'); $json.jsonUrl = 'https://team4308.github.io/absolutelib/lib/absolutelib.json'; $json | ConvertTo-Json -Depth 10 | Set-Content %JSON_FILE% "
 
 REM Copy updated JSON to site
 if not exist site mkdir site

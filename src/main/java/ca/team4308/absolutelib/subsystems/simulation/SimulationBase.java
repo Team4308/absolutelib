@@ -53,13 +53,10 @@ public abstract class SimulationBase extends AbsoluteSubsystem {
         if (dt <= 0.0) dt = DEFAULT_DT; // fallback
         lastSimTimeSeconds = currentTime;
 
-        // Update simulation physics
         updateSimulation(dt);
         
-        // Log all simulation state
         logSimulationState();
         
-        // Custom periodic logic
         onSimulationPeriodic(dt);
         
         onPostPeriodic();

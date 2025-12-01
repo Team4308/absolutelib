@@ -3,6 +3,7 @@ package ca.team4308.absolutelib.subsystems;
 import java.util.ArrayList;
 import java.util.List;
 
+import ca.team4308.absolutelib.subsystems.Arm.Joint.Mode;
 import ca.team4308.absolutelib.subsystems.simulation.PivotSimulation;
 import ca.team4308.absolutelib.wrapper.AbsoluteSubsystem;
 import ca.team4308.absolutelib.wrapper.EncoderWrapper;
@@ -186,8 +187,8 @@ public class Pivot extends AbsoluteSubsystem {
                     cfg,
                     edu.wpi.first.math.system.plant.DCMotor.getNEO(1),
                     1 + cfg.followers.length,
-                    0.5, // default arm length
-                    5.0 // default arm mass
+                    0.5, // default 
+                    5.0 // default 
             );
             logWarn("Auto-generated simulation config with defaults. Use withSimulation() for accuracy.");
         }
@@ -239,7 +240,7 @@ public class Pivot extends AbsoluteSubsystem {
         onPrePeriodic();
         onPeriodic();
 
-        if (simulation != null) {
+        if (cfg.enableSimulation == true) {
             simulation.setVoltage(lastAppliedVoltage);
             simulation.simUpdate(0.02);
 
@@ -276,12 +277,13 @@ public class Pivot extends AbsoluteSubsystem {
             applyVoltage(volts);
             recordOutput("PIDOutput", pidOut);
             recordOutput("FFOutput", ffVolts);
+            recordOutput("TotalVoltage", volts);
         }
-        // Telemetry
+        recordOutput("Simulation Enabled", cfg.enableSimulation);
         recordOutput("angleDeg", getAngleDeg());
-        recordOutput("targetDeg", Math.toDegrees(targetAngleRad));
-        recordOutput("atTarget", atTarget());
-        recordOutput("encoderAbsolute", encoderIsAbsolute);
+        recordOutput("target Deg", Math.toDegrees(targetAngleRad));
+        recordOutput("at Target", atTarget());
+        recordOutput("Is EncoderAbsolute", encoderIsAbsolute);
         recordOutput("Enabled", enabled);
 
     }

@@ -51,7 +51,7 @@ public class MotorWrapper {
 
     private final List<MotorWrapper> followers = new ArrayList<>();
 
-    // Motion magic control (Phoenix 6)
+    // Motion magic control (Phoenix 6)`
     private final MotionMagicVoltage fxMMVoltage = new MotionMagicVoltage(0);
 
     /**

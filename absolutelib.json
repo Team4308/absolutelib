@@ -5,10 +5,10 @@
     "frcYear":  "2025",
     "uuid":  "a604c6de-3573-4ba6-ae4f-32778238b9de",
     "mavenUrls":  [
-                      "https://team4308.github.io/absolutelib",
+                      "https://team4308.github.io/absolutelib\\lib",
                       "https://jitpack.io"
                   ],
-    "jsonUrl":  "https://team4308.github.io/absolutelib/absolutelib.json",
+    "jsonUrl":  "https://team4308.github.io/absolutelib/lib/absolutelib.json",
     "javaDependencies":  [
                              {
                                  "groupId":  "ca.team4308",

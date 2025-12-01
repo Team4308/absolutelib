@@ -120,6 +120,7 @@ public class PivotSimulation extends SimulationBase {
     @Override
     protected void updateSimulation(double dtSeconds) {
         double clampedVoltage = clamp(appliedVoltage, -12.0, 12.0);
+        
         armSim.setInputVoltage(clampedVoltage);
 
         armSim.update(dtSeconds);
