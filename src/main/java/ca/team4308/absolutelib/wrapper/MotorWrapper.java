@@ -14,6 +14,8 @@ import com.revrobotics.spark.SparkBase.PersistMode;
 import com.revrobotics.spark.SparkBase.ResetMode;
 import com.revrobotics.spark.config.SparkMaxConfig;
 import com.revrobotics.spark.config.SparkBaseConfig.IdleMode;
+
+import edu.wpi.first.units.measure.Voltage;
 import edu.wpi.first.wpilibj.DriverStation;
 import com.ctre.phoenix6.configs.MotorOutputConfigs;
 import com.ctre.phoenix6.configs.MotionMagicConfigs;
@@ -129,8 +131,7 @@ public class MotorWrapper {
      * Approximate voltage control (converts volts to percent based on 12V nominal).
      */
     public void setVoltage(double volts) {
-        double pct = volts / 12.0;
-        set(pct);
+        set(volts / 12); 
     }
 
     /**
@@ -437,7 +438,114 @@ public class MotorWrapper {
         }
     }
 
-        public MotorWrapper getMotorbyID(int id){
+
+
+        public double getAppliedVoltage(MotorWrapper motor) {
+            if (motor.getType() == MotorType.TALONFX) {
+                return motor.asTalonFX().getMotorVoltage().getValueAsDouble();
+            }
+            if (motor.getType() == MotorType.SPARKMAX) {
+                return motor.asSparkMax().getAppliedOutput() * 12.0;
+            }
+            if (motor.getType() == MotorType.TALONSRX) {
+                return motor.asTalonSRX().getMotorOutputVoltage();
+            }
+            if (motor.getType() == MotorType.VICTORSPX) {
+                return motor.asVictorSPX().getMotorOutputVoltage();
+            }
+            return 0.0;
+        }
+        public double getOutputPercent(MotorWrapper motor) {
+            switch (motor.getType()) {
+                case TALONFX:
+                    return motor.asTalonFX().getMotorVoltage().getValueAsDouble() / 12;
+                case SPARKMAX:
+                    return motor.asSparkMax().getAppliedOutput();
+                case TALONSRX:
+                    return motor.asTalonSRX().getMotorOutputPercent();
+                case VICTORSPX:
+                    return motor.asVictorSPX().getMotorOutputPercent();
+                default:
+                    return 0.0;
+            }
+        }
+
+        public double getCurrent(MotorWrapper motor) {
+            switch (motor.getType()) {
+                case TALONFX:
+                    return motor.asTalonFX().getStatorCurrent().getValueAsDouble();
+                case SPARKMAX:
+                    return motor.asSparkMax().getOutputCurrent();
+                case TALONSRX:
+                    return motor.asTalonSRX().getStatorCurrent();
+                case VICTORSPX:
+                    throw new UnsupportedOperationException("VictorSPX does not support current sensing");
+                default:
+                    return 0.0;
+            }
+        }
+
+        public double getTemperature(MotorWrapper motor) {
+            switch (motor.getType()) {
+                case TALONFX:
+                    return motor.asTalonFX().getDeviceTemp().getValueAsDouble();
+                case SPARKMAX:
+                    return motor.asSparkMax().getMotorTemperature();
+                case TALONSRX:
+                    return motor.asTalonSRX().getTemperature();
+                case VICTORSPX:
+                    return motor.asVictorSPX().getTemperature();
+                default:
+                    return 0.0;
+            }
+        }
+
+        public double getPosition(MotorWrapper motor) {
+            switch (motor.getType()) {
+                case TALONFX:
+                    return motor.asTalonFX().getPosition().getValueAsDouble();
+                case SPARKMAX:
+                    return motor.asSparkMax().getAbsoluteEncoder().getPosition();
+                case TALONSRX:
+                    return motor.asTalonSRX().getSelectedSensorPosition();
+                case VICTORSPX:
+                    return motor.asVictorSPX().getSelectedSensorPosition();
+                default:
+                    return 0.0;
+            }
+        }
+
+        public double getVelocity(MotorWrapper motor) {
+            switch (motor.getType()) {
+                case TALONFX:
+                    return motor.asTalonFX().getVelocity().getValueAsDouble();
+                case SPARKMAX:
+                    return motor.asSparkMax().getAbsoluteEncoder().getVelocity();
+                case TALONSRX:
+                    return motor.asTalonSRX().getSelectedSensorVelocity();
+                case VICTORSPX:
+                    return motor.asVictorSPX().getSelectedSensorVelocity();
+                default:
+                    return 0.0;
+            }
+        }
+
+        public boolean isConnected(MotorWrapper motor) {
+            switch (motor.getType()) {
+                case TALONFX:
+                    return motor.asTalonFX().getDeviceTemp().getStatus().isOK();
+                case SPARKMAX:
+                    return motor.asSparkMax().getFirmwareString() != null;
+                case TALONSRX:
+                    return motor.asTalonSRX().getLastError() == com.ctre.phoenix.ErrorCode.OK;
+                case VICTORSPX:
+                    return motor.asVictorSPX().getLastError() == com.ctre.phoenix.ErrorCode.OK;
+                default:
+                    return false;
+            }
+        }
+
+        public MotorWrapper getMotorbyID(int id) {
             for (MotorWrapper mw : motorWrappers.values()){
                 if (mw.getId() == id){
                     return mw;
@@ -445,6 +553,4 @@ public class MotorWrapper {
             }
             return null;
         }
-
-
 }

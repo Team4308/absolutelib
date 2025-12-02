@@ -1,5 +1,7 @@
 # Changelog for AbsoluteLib V2
 
+## 1.1.7
+Rework of Encoder Wrapper, to support further simulation
 
 # 1.1.6
 Simulation works!?
