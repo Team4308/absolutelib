@@ -17,6 +17,8 @@ import com.revrobotics.spark.config.SparkBaseConfig.IdleMode;
 
 import edu.wpi.first.units.measure.Voltage;
 import edu.wpi.first.wpilibj.DriverStation;
+import edu.wpi.first.wpilibj.RobotBase;
+
 import com.ctre.phoenix6.configs.MotorOutputConfigs;
 import com.ctre.phoenix6.configs.MotionMagicConfigs;
 import com.ctre.phoenix6.configs.Slot0Configs;
@@ -120,6 +122,10 @@ public class MotorWrapper {
      * Percent output [-1, 1].
      */
     public void set(double output) {
+
+        if (RobotBase.isReal()) {
+
+        } else {
         switch (type) {
             case TALONFX ->
                 talonFX.setControl(fxDuty.withOutput(output));
@@ -130,6 +136,7 @@ public class MotorWrapper {
             case SPARKMAX ->
                 sparkMax.set(output);
         }
+    }
     }
 
     /**

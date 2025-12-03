@@ -304,6 +304,52 @@ public class Elevator extends AbsoluteSubsystem {
     protected void onPreComputeOutput(Mode mode, double targetMeters, double currentMeters) {
     }
 
+
+    public void computeOutputPercent() {
+        double currentMeters = getCurrentPosition();
+        double outputPercent = 0.0;
+
+        onPreComputeOutput(mode, targetPositionMeters, currentMeters);
+
+        switch (mode) {
+            case MANUAL:
+                outputPercent = manualPercentOutput;
+                break;
+            case POSITION:
+                double pidOutput = positionPid.calculate(currentMeters, targetPositionMeters);
+                double ffOutput = feedforward.calculate(desiredVelocity, desiredAcceleration) / nominalVoltage;
+                double basePercent = pidOutput + ffOutput;
+                basePercent = afterBaseCompute(mode, targetPositionMeters, currentMeters, basePercent);
+                double augmentedPercent = applyAugmentors(basePercent, targetPositionMeters, currentMeters);
+                augmentedPercent = afterAugmentCompute(mode, targetPositionMeters, currentMeters, augmentedPercent);
+                outputPercent = augmentedPercent;
+                break;
+            case HOLDING:
+                double holdPidOutput = holdPid.calculate(currentMeters, targetPositionMeters);
+                outputPercent = holdPidOutput;
+                break;
+            case IDLE:
+            default:
+                outputPercent = 0.0;
+                break;
+        }
+
+        // Apply filters
+        outputPercent = applyOutputFilters(targetPositionMeters, currentMeters, outputPercent);
+
+        // Clamp
+        outputPercent = clampPercent(outputPercent);
+
+        applyPercentOutput(outputPercent);
+
+        onPostComputeOutput(mode, targetPositionMeters, currentMeters, outputPercent);
+
+        // Target reached event
+        if (mode == Mode.POSITION && atTarget()) {
+            onTargetReached(targetPositionMeters);
+        }
+    }
+
     /**
      * Called after computing and filtering output in
      * {@link #computeOutputPercent}.

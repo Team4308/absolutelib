@@ -126,7 +126,6 @@ public class PivotSimulation extends SimulationBase {
         currentState.accelerationMetersPerSecSq = 0.0;
         currentState.temperatureCelsius = 20.0 + (currentState.currentDrawAmps * 2.0);
         armSim.update(dtSeconds);
-
     }
 
     @Override
@@ -156,7 +155,7 @@ public class PivotSimulation extends SimulationBase {
      * Apply voltage to the simulated motor
      */
     @Override
-    protected void applyInputVoltage(double volts) {
+    public void applyInputVoltage(double volts) {
         this.appliedVoltage = volts;
     }
 
