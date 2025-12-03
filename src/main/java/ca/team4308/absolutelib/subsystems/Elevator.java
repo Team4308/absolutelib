@@ -244,7 +244,7 @@ public class Elevator extends AbsoluteSubsystem {
             simCfg.simulateGravity = true;
             logWarn("Auto-generated simulation config with defaults. Use withSimulation() for accuracy.");
         }
-        simulation = new ca.team4308.absolutelib.subsystems.simulation.ElevatorSimulation(simCfg);
+        simulation = new ca.team4308.absolutelib.subsystems.simulation.ElevatorSimulation("/subsystems/" + (getName() != null ? getName() : "Elevator") + "/Simulation", simCfg);
         simulation.initialize();
     }
 
@@ -253,199 +253,6 @@ public class Elevator extends AbsoluteSubsystem {
         if (edu.wpi.first.wpilibj.RobotBase.isSimulation() && config.enableSimulation) {
             initSimulation();
         }
-    }
-
-    @Override
-    public void periodic() {
-        onPrePeriodic();
-        switch (mode) {
-            case IDLE:
-                runIdle();
-                break;
-            case MANUAL:
-                runManual();
-                break;
-            case POSITION:
-                runPosition();
-                break;
-            case HOLDING:
-                runHolding();
-                break;
-        }
-
-        if (simulation != null) {
-            simulation.setInputVoltage(lastAppliedVoltage);
-            simulation.simUpdate(0.02);
-            if (encoder != null) {
-
-            }
-        }
-
-        onPostPeriodic();
-    }
-
-    /**
-     * Default idle behavior: ensure zero output. Override to customize idle
-     * handling.
-     */
-    protected void runIdle() {
-        applyPercentOutput(computeOutputPercent(Mode.IDLE, targetPositionMeters, getCurrentPosition()));
-    }
-
-    /**
-     * Default manual behavior: apply requested percent output.
-     */
-    protected void runManual() {
-        applyPercentOutput(computeOutputPercent(Mode.MANUAL, targetPositionMeters, getCurrentPosition()));
-    }
-
-    /**
-     * Default position behavior: compute output via single overridable method,
-     * then transition to HOLDING when within tolerance.
-     */
-    protected void runPosition() {
-        double output = computeOutputPercent(Mode.POSITION, targetPositionMeters, getCurrentPosition());
-        applyPercentOutput(output);
-        if (atTarget()) {
-            setMode(Mode.HOLDING);
-            holdPid.reset();
-            onTargetReached(targetPositionMeters);
-        }
-    }
-
-    /**
-     * Default holding behavior: compute output via single overridable method.
-     */
-    protected void runHolding() {
-        double output = computeOutputPercent(Mode.HOLDING, targetPositionMeters, getCurrentPosition());
-        applyPercentOutput(output);
-    }
-
-    /**
-     * Single overridable output computation: includes PID, feedforward,
-     * augmentors, and clamping. Override this one method if you want fully
-     * custom control for any mode.
-     *
-     * @param mode current control mode
-     * @param targetMeters target position (m)
-     * @param currentMeters measured position (m)
-     * @return motor percent output in configured limits
-     */
-    protected double computeOutputPercent(Mode mode, double targetMeters, double currentMeters) {
-        // Pre-compute hook (can read sensors, prime state, etc.)
-        onPreComputeOutput(mode, targetMeters, currentMeters);
-        double basePercent;
-        switch (mode) {
-            case IDLE:
-                basePercent = 0.0;
-                break;
-            case MANUAL:
-                basePercent = manualPercentOutput;
-                break;
-            case POSITION: {
-                double ffVolts = feedforward.calculate(desiredVelocity, desiredAcceleration);
-                double ffPercent = nominalVoltage != 0.0 ? ffVolts / nominalVoltage : 0.0;
-                // Lowkey a lil werid since were using Percent instead of voltage but this should work \_(ツ)_/
-                double pidPercent = positionPid.calculate(currentMeters, targetMeters);
-                basePercent = ffPercent + pidPercent;
-                break;
-            }
-            case HOLDING: {
-                double ffVolts = feedforward.calculate(0.0, 0.0);
-                double ffPercent = nominalVoltage != 0.0 ? ffVolts / nominalVoltage : 0.0;
-                double pidPercent = holdPid.calculate(currentMeters, targetMeters);
-                basePercent = ffPercent + pidPercent;
-                break;
-            }
-            default:
-                basePercent = 0.0;
-        }
-        double afterBase = afterBaseCompute(mode, targetMeters, currentMeters, basePercent);
-        double withAugment = applyAugmentors(afterBase, targetMeters, currentMeters);
-        double afterAugment = afterAugmentCompute(mode, targetMeters, currentMeters, withAugment);
-        // Output Filters SHOULD be where beambreaks go i highly doubt people will use that properly but its here if you want it
-        double filtered = applyOutputFilters(targetMeters, currentMeters, afterAugment);
-        onPostComputeOutput(mode, targetMeters, currentMeters, filtered);
-        return clampPercent(filtered);
-    }
-
-    /**
-     * Backwards-compatible wrappers that delegate to
-     * {@link #computeOutputPercent(Mode, double, double)}. Prefer overriding
-     * {@code computeOutputPercent}.
-     */
-    @Deprecated
-    protected double computePositionOutput(double targetMeters, double currentMeters) {
-        return computeOutputPercent(Mode.POSITION, targetMeters, currentMeters);
-    }
-
-    @Deprecated
-    protected double computeHoldOutput(double targetMeters, double currentMeters) {
-        return computeOutputPercent(Mode.HOLDING, targetMeters, currentMeters);
-    }
-
-    /**
-     * Send percent output to the leader motor via {@link MotorWrapper}, if
-     * present. (Previously referenced MotorAdapter which no longer exists.)
-     *
-     * @param percent output (-1 to 1)
-     */
-    public void setPercent(double percent) {
-        applyPercentOutput(percent);
-    }
-
-    // --- Output limits (soft-code clamp range) ---
-    private double minOutputPercent = -1.0;
-    private double maxOutputPercent = 1.0;
-
-    /**
-     * Configure output clamp range (inclusive).
-     */
-    public void setOutputLimits(double minPercent, double maxPercent) {
-        this.minOutputPercent = Math.min(minPercent, maxPercent);
-        this.maxOutputPercent = Math.max(minPercent, maxPercent);
-    }
-
-    /**
-     * Current minimum output clamp.
-     */
-    public double getMinOutputPercent() {
-        return minOutputPercent;
-    }
-
-    /**
-     * Current maximum output clamp.
-     */
-    public double getMaxOutputPercent() {
-        return maxOutputPercent;
-    }
-
-    /**
-     * Helper to clamp to configured output range.
-     */
-    protected double clampPercent(double percent) {
-        return DoubleUtils.clamp(percent, minOutputPercent, maxOutputPercent);
-    }
-
-    // Augmentor application helper
-    protected double applyAugmentors(double basePercent, double targetMeters, double currentMeters) {
-        double augmented = basePercent;
-        for (var fn : outputAugmentors) {
-            try {
-                augmented += fn.apply(targetMeters, currentMeters);
-            } catch (Exception ignored) {
-            }
-        }
-        return augmented;
-    }
-
-    // Public tuning and configuration methods
-    public void setPositionPID(double kP, double kI, double kD) {
-        positionPid.setPID(kP, kI, kD);
-    }
-
-    public void setHoldPID(double kP, double kI, double kD) {
-        holdPid.setPID(kP, kI, kD);
     }
 
     public void setFeedforwardGains(double kS, double kG, double kV, double kA) {
@@ -578,6 +385,51 @@ public class Elevator extends AbsoluteSubsystem {
 
     public ca.team4308.absolutelib.subsystems.simulation.ElevatorSimulation getSimulation() {
         return simulation;
+    }
+
+    // --- Output limits (soft-code clamp range) ---
+    private double minOutputPercent = -1.0;
+    private double maxOutputPercent = 1.0;
+
+    /**
+     * Configure output clamp range (inclusive).
+     */
+    public void setOutputLimits(double minPercent, double maxPercent) {
+        this.minOutputPercent = Math.min(minPercent, maxPercent);
+        this.maxOutputPercent = Math.max(minPercent, maxPercent);
+    }
+
+    /**
+     * Current minimum output clamp.
+     */
+    public double getMinOutputPercent() {
+        return minOutputPercent;
+    }
+
+    /**
+     * Current maximum output clamp.
+     */
+    public double getMaxOutputPercent() {
+        return maxOutputPercent;
+    }
+
+    /**
+     * Helper to clamp to configured output range.
+     */
+    protected double clampPercent(double percent) {
+        return DoubleUtils.clamp(percent, minOutputPercent, maxOutputPercent);
+    }
+
+    // Augmentor application helper
+    protected double applyAugmentors(double basePercent, double targetMeters, double currentMeters) {
+        double augmented = basePercent;
+        for (var fn : outputAugmentors) {
+            try {
+                augmented += fn.apply(targetMeters, currentMeters);
+            } catch (Exception ignored) {
+            }
+        }
+        return augmented;
     }
 
     /**

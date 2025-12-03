@@ -9,6 +9,7 @@ import edu.wpi.first.wpilibj.smartdashboard.MechanismRoot2d;
 public class ElevatorSimulation extends SimulationBase {
 
     public static class ElevatorSimulationConfig {
+
         public DCMotor leader;
         public double gearing;
         public double carriageMassKg;
@@ -29,29 +30,35 @@ public class ElevatorSimulation extends SimulationBase {
 
     private double appliedVoltage = 0.0;
 
-    public ElevatorSimulation(ElevatorSimulationConfig config) {
-        super("elevator");
+    public ElevatorSimulation(String name, ElevatorSimulationConfig config) {
+        super(name, true);
         this.config = config;
 
         elevatorSim = new ElevatorSim(
-            config.leader,
-            config.gearing,
-            config.carriageMassKg,
-            config.drumRadiusMeters,
-            config.minHeightMeters,
-            config.maxHeightMeters,
-            config.simulateGravity,
-            config.startHeightMeters
+                config.leader,
+                config.gearing,
+                config.carriageMassKg,
+                config.drumRadiusMeters,
+                config.minHeightMeters,
+                config.maxHeightMeters,
+                config.simulateGravity,
+                config.startHeightMeters
         );
 
         mech2d = new Mechanism2d(2.0, config.maxHeightMeters + 0.5);
         root = mech2d.getRoot("ElevatorBase", 1.0, config.minHeightMeters);
         elevatorLigament = root.append(
-            new MechanismLigament2d("Carriage", config.startHeightMeters, 90)
+                new MechanismLigament2d("Carriage", config.startHeightMeters, 90)
         );
     }
 
-    /** Command voltage to the simulated elevator motor. */
+    public ElevatorSimulation(ElevatorSimulationConfig config) {
+        this("elevator", config);
+    }
+
+    /**
+     * Command voltage to the simulated elevator motor.
+     */
     public void setInputVoltage(double volts) {
         appliedVoltage = volts;
     }

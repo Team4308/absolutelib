@@ -82,15 +82,13 @@ public class PivotSimulation extends SimulationBase {
     private final SimState currentState = new SimState();
 
     public PivotSimulation(String name, Config config) {
-        super(name);
+        super(name, true);
         this.config = config;
-
-        double moi = (1.0 / 3.0) * config.armMassKg * config.armLengthMeters * config.armLengthMeters;
 
         this.armSim = new SingleJointedArmSim(
                 config.gearbox,
                 config.gearRatio,
-                moi,
+                SingleJointedArmSim.estimateMOI(config.armLengthMeters, config.armMassKg),
                 config.armLengthMeters,
                 config.minAngleRad,
                 config.maxAngleRad,
@@ -120,17 +118,14 @@ public class PivotSimulation extends SimulationBase {
     @Override
     protected void updateSimulation(double dtSeconds) {
         double clampedVoltage = clamp(appliedVoltage, -12.0, 12.0);
-        
         armSim.setInputVoltage(clampedVoltage);
-
-        armSim.update(dtSeconds);
-
         currentState.positionMeters = armSim.getAngleRads();
         currentState.velocityMetersPerSec = armSim.getVelocityRadPerSec();
         currentState.appliedVoltage = clampedVoltage;
         currentState.currentDrawAmps = armSim.getCurrentDrawAmps();
         currentState.accelerationMetersPerSecSq = 0.0;
         currentState.temperatureCelsius = 20.0 + (currentState.currentDrawAmps * 2.0);
+        armSim.update(dtSeconds);
 
     }
 
@@ -145,6 +140,7 @@ public class PivotSimulation extends SimulationBase {
         recordOutput("velocityDegPerSec", Math.toDegrees(armSim.getVelocityRadPerSec()));
         recordOutput("hasHitLowerLimit", armSim.hasHitLowerLimit());
         recordOutput("hasHitUpperLimit", armSim.hasHitUpperLimit());
+        recordOutput("Arm Input Voltage", appliedVoltage);
 
         double angle = armSim.getAngleRads();
         double endX = config.armLengthMeters * Math.cos(angle);
@@ -234,8 +230,7 @@ public class PivotSimulation extends SimulationBase {
     public static Config fromPivotConfig(ca.team4308.absolutelib.subsystems.Pivot.Config pivotCfg,
             DCMotor motor, int motorCount, double armLengthM, double armMassKg) {
         Config simCfg = new Config();
-        simCfg.gearbox = DCMotor.getNEO(motorCount); // or pass motor type
-        simCfg.gearRatio = pivotCfg.gearRatio;
+        simCfg.gearbox = DCMotor.getNEO(motorCount);
         simCfg.minAngleRad = Math.toRadians(pivotCfg.minAngleDeg);
         simCfg.maxAngleRad = Math.toRadians(pivotCfg.maxAngleDeg);
         simCfg.startAngleRad = Math.toRadians(pivotCfg.angleOffsetDeg);

@@ -34,7 +34,7 @@ public class Pivot extends AbsoluteSubsystem {
         public double maxAngleDeg = 180.0;
 
         public double toleranceDeg = 1.0;
-        
+
         public double maxVelocityDegPerSec = 360.0;
         public double maxAccelerationDegPerSecSq = 720.0;
 
@@ -80,7 +80,7 @@ public class Pivot extends AbsoluteSubsystem {
             kA = a;
             return this;
         }
-        
+
         public Config motion(double maxVelDeg, double maxAccelDeg) {
             this.maxVelocityDegPerSec = maxVelDeg;
             this.maxAccelerationDegPerSecSq = maxAccelDeg;
@@ -122,9 +122,9 @@ public class Pivot extends AbsoluteSubsystem {
 
     private final MotorWrapper leader;
     private final List<MotorWrapper> followers = new ArrayList<>();
-    
+
     private final ProfiledPIDController pid;
-    
+
     private ArmFeedforward ff;
     private final Config cfg;
 
@@ -146,15 +146,15 @@ public class Pivot extends AbsoluteSubsystem {
             f.follow(leader);
             followers.add(f);
         }
-        
+
         pid = new ProfiledPIDController(
-            cfg.kP, cfg.kI, cfg.kD,
-            new TrapezoidProfile.Constraints(
-                Math.toRadians(cfg.maxVelocityDegPerSec),
-                Math.toRadians(cfg.maxAccelerationDegPerSecSq)
-            )
+                cfg.kP, cfg.kI, cfg.kD,
+                new TrapezoidProfile.Constraints(
+                        Math.toRadians(cfg.maxVelocityDegPerSec),
+                        Math.toRadians(cfg.maxAccelerationDegPerSecSq)
+                )
         );
-        
+
         pid.setTolerance(Math.toRadians(cfg.toleranceDeg));
         ff = new ArmFeedforward(cfg.kS, cfg.kG, cfg.kV, cfg.kA);
 
@@ -179,7 +179,7 @@ public class Pivot extends AbsoluteSubsystem {
      */
     private void initSimulation() {
         if (simulation != null) {
-            return; 
+            return;
         }
         PivotSimulation.Config simCfg = cfg.simulationConfig;
         if (simCfg == null) {
@@ -193,7 +193,7 @@ public class Pivot extends AbsoluteSubsystem {
             logWarn("Auto-generated simulation config with defaults. Use withSimulation() for accuracy.");
         }
 
-        simulation = new PivotSimulation(getName() != null ? getName() : "pivot", simCfg);
+        simulation = new PivotSimulation("/subsystems/" + (getName() != null ? getName() : "Pivot") + "/Simulation", simCfg);
         simulation.initialize();
         logInfo("Simulation initialized and linked to Pivot (encoder type: "
                 + (encoderIsAbsolute ? "absolute" : "relative") + ")");
@@ -204,18 +204,6 @@ public class Pivot extends AbsoluteSubsystem {
      */
     public void setSimulation(PivotSimulation sim) {
         this.simulation = sim;
-    }
-
-    /**
-     * Get the linked simulation (null if not in sim mode or disabled)
-     */
-    public PivotSimulation getSimulation() {
-        return simulation;
-    }
-
-    // Lifecycle
-    public final void initialize() {
-        onInitialize();
     }
 
     protected void onInitialize() {
@@ -231,7 +219,7 @@ public class Pivot extends AbsoluteSubsystem {
                 simulation.setSimulationPosition(currentAngle);
             }
         }
-        
+
         pid.reset(getAngleRad());
     }
 
@@ -307,6 +295,9 @@ public class Pivot extends AbsoluteSubsystem {
     }
 
     public double getAngleRad() {
+        if (RobotBase.isSimulation() && simulation != null) {
+            return simulation.getAngleRad();
+        }
         if (cfg.encoder == null) {
             return 0.0;
         }

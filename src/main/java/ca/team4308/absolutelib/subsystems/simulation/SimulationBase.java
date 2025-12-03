@@ -13,8 +13,11 @@ import edu.wpi.first.wpilibj.simulation.RoboRioSim;
  */
 public abstract class SimulationBase extends AbsoluteSubsystem {
 
-    /** Simulation state container for a single mechanism */
+    /**
+     * Simulation state container for a single mechanism
+     */
     public static class SimState {
+
         public double positionMeters = 0.0;
         public double velocityMetersPerSec = 0.0;
         public double accelerationMetersPerSecSq = 0.0;
@@ -33,6 +36,14 @@ public abstract class SimulationBase extends AbsoluteSubsystem {
         this.simLogPrefix = "/simulation/" + name;
     }
 
+    public SimulationBase(String name, boolean isFullPrefix) {
+        if (isFullPrefix) {
+            this.simLogPrefix = name;
+        } else {
+            this.simLogPrefix = "/simulation/" + name;
+        }
+    }
+
     public SimulationBase() {
         this("default");
     }
@@ -47,54 +58,70 @@ public abstract class SimulationBase extends AbsoluteSubsystem {
     @Override
     public void periodic() {
         onPrePeriodic();
-        
+
         double currentTime = getCurrentTimeSeconds();
         double dt = currentTime - lastSimTimeSeconds;
-        if (dt <= 0.0) dt = DEFAULT_DT; // fallback
-        lastSimTimeSeconds = currentTime;
+        if (dt <= 0.0) {
+            dt = DEFAULT_DT; // fallback
+
+                }lastSimTimeSeconds = currentTime;
 
         updateSimulation(dt);
-        
+
         logSimulationState();
-        
+
         onSimulationPeriodic(dt);
-        
+
         onPostPeriodic();
     }
 
-    /** Override to provide simulation state for logging */
+    /**
+     * Override to provide simulation state for logging
+     */
     protected abstract SimState getSimulationState();
 
-    /** Override to update physics simulation each cycle */
+    /**
+     * Override to update physics simulation each cycle
+     */
     protected abstract void updateSimulation(double dtSeconds);
 
-    /** Hook: called once during simulation initialization */
-    protected void onSimulationInit() {}
+    /**
+     * Hook: called once during simulation initialization
+     */
+    protected void onSimulationInit() {
+    }
 
-    /** Hook: called every periodic cycle with delta time */
-    protected void onSimulationPeriodic(double dtSeconds) {}
+    /**
+     * Hook: called every periodic cycle with delta time
+     */
+    protected void onSimulationPeriodic(double dtSeconds) {
+    }
 
-    /** Logs all simulation data to AdvantageKit */
+    /**
+     * Logs all simulation data to AdvantageKit
+     */
     private void logSimulationState() {
         SimState state = getSimulationState();
-        if (state == null) return;
+        if (state == null) {
+            return;
+        }
 
         String prefix = simLogPrefix;
-        
+
         // Core mechanical state
         recordOutput(prefix + "/positionMeters", state.positionMeters);
         recordOutput(prefix + "/velocityMPS", state.velocityMetersPerSec);
         recordOutput(prefix + "/accelerationMPSS", state.accelerationMetersPerSecSq);
-        
+
         // Electrical state
         recordOutput(prefix + "/voltage", state.appliedVoltage);
         recordOutput(prefix + "/currentAmps", state.currentDrawAmps);
         recordOutput(prefix + "/temperatureC", state.temperatureCelsius);
-        
+
         // Power consumption
         double powerWatts = state.appliedVoltage * state.currentDrawAmps;
         recordOutput(prefix + "/powerWatts", powerWatts);
-        
+
         // Custom data
         if (state.customData != null && state.customDataKeys != null) {
             int n = Math.min(state.customData.length, state.customDataKeys.length);
@@ -102,34 +129,44 @@ public abstract class SimulationBase extends AbsoluteSubsystem {
                 recordOutput(prefix + "/custom/" + state.customDataKeys[i], state.customData[i]);
             }
         }
-        
+
         // Battery effects (optional, can be overridden)
         if (shouldSimulateBatteryEffects()) {
             simulateBatteryDraw(state.currentDrawAmps);
         }
     }
 
-    /** Helper: apply input voltage to simulation (override for custom behavior) */
+    /**
+     * Helper: apply input voltage to simulation (override for custom behavior)
+     */
     protected void applyInputVoltage(double volts) {
         // Subclasses implement motor/mechanism response
     }
 
-    /** Helper: set simulation position directly (for testing/init) */
+    /**
+     * Helper: set simulation position directly (for testing/init)
+     */
     protected void setSimulationPosition(double meters) {
         // Subclasses implement
     }
 
-    /** Helper: set simulation velocity directly (for testing/init) */
+    /**
+     * Helper: set simulation velocity directly (for testing/init)
+     */
     protected void setSimulationVelocity(double metersPerSec) {
         // Subclasses implement
     }
 
-    /** Override to enable battery voltage simulation (default: false in sim) */
+    /**
+     * Override to enable battery voltage simulation (default: false in sim)
+     */
     protected boolean shouldSimulateBatteryEffects() {
         return false;
     }
 
-    /** Simulate battery drain from current draw */
+    /**
+     * Simulate battery drain from current draw
+     */
     private void simulateBatteryDraw(double currentAmps) {
         try {
             // Use WPILib's battery sim
@@ -142,17 +179,23 @@ public abstract class SimulationBase extends AbsoluteSubsystem {
         }
     }
 
-    /** Get current simulation time in seconds */
+    /**
+     * Get current simulation time in seconds
+     */
     protected double getCurrentTimeSeconds() {
         return RobotController.getFPGATime() / 1_000_000.0;
     }
 
-    /** Helper: clamp value to range */
+    /**
+     * Helper: clamp value to range
+     */
     protected double clamp(double value, double min, double max) {
         return Math.max(min, Math.min(max, value));
     }
 
-    /** Log a simulation event (throttled to avoid spam) */
+    /**
+     * Log a simulation event (throttled to avoid spam)
+     */
     protected void logSimEvent(String event) {
         logThrottle("sim_event_" + event, 1000, "Sim event: " + event);
     }
@@ -169,10 +212,11 @@ public abstract class SimulationBase extends AbsoluteSubsystem {
     }
 
     // Helpers for common simulation patterns
-
-    /** Create a simple 1-DOF state for rotational mechanisms */
-    protected SimState createRotationalState(double angleRad, double velocityRadPerSec, 
-                                            double voltage, double current) {
+    /**
+     * Create a simple 1-DOF state for rotational mechanisms
+     */
+    protected SimState createRotationalState(double angleRad, double velocityRadPerSec,
+            double voltage, double current) {
         SimState state = new SimState();
         state.positionMeters = angleRad; // treat as radians
         state.velocityMetersPerSec = velocityRadPerSec;
@@ -181,9 +225,11 @@ public abstract class SimulationBase extends AbsoluteSubsystem {
         return state;
     }
 
-    /** Create a simple 1-DOF state for linear mechanisms */
+    /**
+     * Create a simple 1-DOF state for linear mechanisms
+     */
     protected SimState createLinearState(double positionM, double velocityMPS,
-                                        double voltage, double current) {
+            double voltage, double current) {
         SimState state = new SimState();
         state.positionMeters = positionM;
         state.velocityMetersPerSec = velocityMPS;
@@ -192,20 +238,26 @@ public abstract class SimulationBase extends AbsoluteSubsystem {
         return state;
     }
 
-    /** Add custom telemetry to simulation state */
+    /**
+     * Add custom telemetry to simulation state
+     */
     protected void addCustomData(SimState state, String[] keys, double[] values) {
         state.customDataKeys = keys;
         state.customData = values;
     }
 
-    /** Log a 2D pose for visualization (e.g., arm end effector) */
+    /**
+     * Log a 2D pose for visualization (e.g., arm end effector)
+     */
     protected void logPose2d(String key, double x, double y, double rotationRad) {
         recordOutput(simLogPrefix + "/" + key + "/x", x);
         recordOutput(simLogPrefix + "/" + key + "/y", y);
         recordOutput(simLogPrefix + "/" + key + "/rotationRad", rotationRad);
     }
 
-    /** Log multiple joint angles for multi-DOF mechanisms */
+    /**
+     * Log multiple joint angles for multi-DOF mechanisms
+     */
     protected void logJointAngles(double... anglesRad) {
         recordOutput(simLogPrefix + "/jointAngles", anglesRad);
     }
