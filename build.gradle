@@ -19,6 +19,10 @@ repositories {
   maven { url "https://3015rangerrobotics.github.io/pathplannerlib/repo" } // PathPlanner
   maven { url "https://frcmaven.wpi.edu/release" } // WPILib fallback
   maven { url "https://frcmaven.wpi.edu/artifactory/littletonrobotics-mvn-release/" } // AdvantageKit
+  maven {url "https://maven.photonvision.org/repository/internal"} // Photon Vision
+  maven {url "https://maven.photonvision.org/repository/snapshots"}
+  maven {url "https://broncbotz3481.github.io/YAGSL-Lib/yagsl/repos"} // YAGSL
+
 }
 
 if (project.hasProperty('releaseMode')) {
@@ -78,6 +82,13 @@ dependencies {
 
     // PathPlanner 
     implementation "com.pathplanner.lib:PathplannerLib-java:2025.2.7"
+
+    // PhotonVision
+    implementation "org.photonvision:photonlib-java:v2025.3.1-rc3"
+    implementation "org.photonvision:photontargeting-java:v2025.3.1-rc3"
+
+    // Swerve 
+    implementation "swervelib:YAGSL-java:2025.8.0"
 
     //  Testing
     testImplementation 'org.junit.jupiter:junit-jupiter:5.10.1'

@@ -20,6 +20,7 @@ import edu.wpi.first.wpilibj.RobotBase;
 public class Pivot extends AbsoluteSubsystem {
 
     public static class Config {
+
         // MOTORS AND ENCODER
         public MotorWrapper leader;
         public MotorWrapper[] followers = new MotorWrapper[0];
@@ -45,6 +46,7 @@ public class Pivot extends AbsoluteSubsystem {
         public PivotSimulation.Config simulationConfig = null;
         public boolean enableSimulation = true;
 
+        public boolean useSmartMotion = false;
 
         public Config withWeightKG(double kg) {
             weightKG = kg;
@@ -132,6 +134,11 @@ public class Pivot extends AbsoluteSubsystem {
             this.enableSimulation = enable;
             return this;
         }
+
+        public Config useSmartMotion(boolean enable) {
+            this.useSmartMotion = enable;
+            return this;
+        }
     }
 
     private final MotorWrapper leader;
@@ -147,11 +154,13 @@ public class Pivot extends AbsoluteSubsystem {
     private boolean manualMode = false;
     private double manualVoltage = 0.0;
 
-    private PivotSimulation simulation = null;
     private double lastAppliedVoltage = 0.0;
 
     private final boolean encoderIsAbsolute;
     private double absoluteEncoderInitialOffset = 0.0;
+
+    // Simulation
+    private PivotSimulation simulation;
 
     public Pivot(Config config) {
         this.cfg = config;
@@ -175,46 +184,26 @@ public class Pivot extends AbsoluteSubsystem {
             absoluteEncoderInitialOffset = cfg.encoder.getPositionMeters();
         }
 
-        if (RobotBase.isSimulation() && cfg.enableSimulation) {
-            initSimulation();
+        if (cfg.useSmartMotion) {
+
+            double cruiseRotPerSec = cfg.maxVelocityDegPerSec / 360.0 * cfg.gearRatio;
+            double accelRotPerSecSq = cfg.maxAccelerationDegPerSecSq / 360.0 * cfg.gearRatio;
+
+            // Apply PID to motor
+            MotorWrapper.UnifiedMotorConfig motorCfg = MotorWrapper.UnifiedMotorConfig.builder()
+                    .kP(cfg.kP)
+                    .kI(cfg.kI)
+                    .kD(cfg.kD)
+                    .kF(cfg.kV) // Using kV as kF for now, though often kF is 0 for position control
+                    .motionCruiseVelocity(cruiseRotPerSec)
+                    .motionAcceleration(accelRotPerSecSq);
+
+            leader.applyMotorConfig(motorCfg);
         }
     }
 
     public Pivot() {
         throw new IllegalStateException("Use Pivot(new Config().withLeader(...).withEncoder(...))");
-    }
-
-    /**
-     * Initialize simulation 
-     */
-    private void initSimulation() {
-        if (simulation != null) {
-            return;
-        }
-        PivotSimulation.Config simCfg = cfg.simulationConfig;
-        if (simCfg == null) {
-            simCfg = PivotSimulation.Config.fromPivotConfig(
-                    cfg,
-                    edu.wpi.first.math.system.plant.DCMotor.getNEO(1),
-                    1 + cfg.followers.length,
-                    cfg.lengthMeters, // default
-                    cfg.weightKG // default
-            );
-            logWarn("Auto-generated simulation config with defaults. Use withSimulation() for accuracy.");
-        }
-
-        simulation = new PivotSimulation("/subsystems/" + (getName() != null ? getName() : "Pivot") + "/Simulation",
-                simCfg);
-        simulation.initialize();
-        logInfo("Simulation initialized and linked to Pivot (encoder type: "
-                + (encoderIsAbsolute ? "absolute" : "relative") + ")");
-    }
-
-    /**
-     * Manually set simulation config (useful for tuning)
-     */
-    public void setSimulation(PivotSimulation sim) {
-        this.simulation = sim;
     }
 
     protected void onInitialize() {
@@ -225,20 +214,23 @@ public class Pivot extends AbsoluteSubsystem {
 
         // Makes the pivot motors brake
         setBrakeMode(true);
-        if (simulation != null) {
-            simulation.initialize();
-            if (cfg.encoder != null) {
-                double currentAngle = getAngleRad();
-                simulation.setSimulationPosition(currentAngle);
-            }
-        }
 
+        if (RobotBase.isSimulation() && cfg.enableSimulation && cfg.simulationConfig != null) {
+            simulation = new PivotSimulation("Pivot", cfg.simulationConfig, this);
+            simulation.initialize();
+        }
     }
 
     @Override
     public void periodic() {
         onPrePeriodic();
         onPeriodic();
+
+        if (simulation != null) {
+            simulation.setVoltage(lastAppliedVoltage);
+            simulation.periodic();
+        }
+
         onPostPeriodic();
     }
 
@@ -257,26 +249,31 @@ public class Pivot extends AbsoluteSubsystem {
                 pid.setGoal(targetAngleRad);
             }
 
+            if (cfg.useSmartMotion) {
+                // Gravity feedforward: kG * cos(theta)
+                double gravityFF = cfg.kG * Math.cos(currentRad);
 
-            // Real control
-            double pidOut = pid.calculate(currentRad, targetAngleRad);
-            double ffVolts = ff.calculate(targetAngleRad, pid.getSetpoint().velocity);
-            double volts = pidOut + ffVolts;
-            applyVoltage(volts);
-            
-            // Simulation Control
+                // Convert target angle (radians) to motor rotations
+                // motorRot = (angleRad * gearRatio) / 2PI
+                double targetMotorRot = targetAngleRad * cfg.gearRatio / (2.0 * Math.PI);
 
-            if (cfg.enableSimulation == true) {
-                simulation.applyInputVoltage(volts);
-                simulation.simUpdate(0.02);
+                leader.setSmartPosition(targetMotorRot, gravityFF);
+
+                lastAppliedVoltage = gravityFF;
+
+                recordOutput("SmartMotion/TargetRot", targetMotorRot);
+                recordOutput("SmartMotion/GravityFF", gravityFF);
+
+            } else {
+                double pidOut = pid.calculate(currentRad, targetAngleRad);
+                double ffVolts = ff.calculate(targetAngleRad, pid.getSetpoint().velocity);
+                double volts = pidOut + ffVolts;
+                applyVoltage(volts);
+
+                recordOutput("PIDOutput", pidOut);
+                recordOutput("FFOutput", ffVolts);
+                recordOutput("TotalVoltage", volts);
             }
-
-
-
-
-            recordOutput("PIDOutput", pidOut);
-            recordOutput("FFOutput", ffVolts);
-            recordOutput("TotalVoltage", volts);
         }
         // Logging
         recordOutput("Simulation Enabled", cfg.enableSimulation);
@@ -296,9 +293,6 @@ public class Pivot extends AbsoluteSubsystem {
     @Override
     public void stop() {
         onStop();
-        if (simulation != null) {
-            simulation.stop();
-        }
     }
 
     protected void onStop() {
@@ -308,9 +302,6 @@ public class Pivot extends AbsoluteSubsystem {
     }
 
     public double getAngleRad() {
-        if (RobotBase.isSimulation() && simulation != null) {
-            return simulation.getAngleRad();
-        }
         if (cfg.encoder == null) {
             return 0.0;
         }
@@ -334,9 +325,6 @@ public class Pivot extends AbsoluteSubsystem {
                 logWarn("Attempted to zero absolute encoder - this sets an offset, not true zero");
             }
             cfg.encoder.setPositionMechanismRotations(0);
-        }
-        if (simulation != null) {
-            simulation.setSimulationPosition(0.0);
         }
     }
 
@@ -407,5 +395,19 @@ public class Pivot extends AbsoluteSubsystem {
     @Override
     public Sendable log() {
         return (Sendable) null;
+    }
+
+    /**
+     * Get the leader motor for simulation access.
+     */
+    public MotorWrapper getLeaderMotor() {
+        return leader;
+    }
+
+    /**
+     * Get the encoder for simulation access.
+     */
+    public EncoderWrapper getEncoder() {
+        return cfg.encoder;
     }
 }

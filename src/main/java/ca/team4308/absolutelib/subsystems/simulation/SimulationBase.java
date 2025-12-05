@@ -32,6 +32,24 @@ public abstract class SimulationBase extends AbsoluteSubsystem {
     private double lastSimTimeSeconds = 0.0;
     private static final double DEFAULT_DT = 0.02; // 20ms default
 
+    public enum LogLevel {
+        LOW, // Minimal data (Setpoint, Position)
+        MEDIUM, // Standard data (Velocity, Current, Voltage)
+        HIGH    // Verbose data (Debug, Raw sensors)
+    }
+
+    private LogLevel logLevel = LogLevel.MEDIUM;
+
+    public void setLogLevel(LogLevel level) {
+        this.logLevel = level;
+    }
+
+    protected void log(LogLevel level, String key, Object value) {
+        if (level.ordinal() <= logLevel.ordinal()) {
+            recordOutput(key, value);
+        }
+    }
+
     public SimulationBase(String name) {
         this.simLogPrefix = "/simulation/" + name;
     }
@@ -64,7 +82,8 @@ public abstract class SimulationBase extends AbsoluteSubsystem {
         if (dt <= 0.0) {
             dt = DEFAULT_DT; // fallback
 
-                }lastSimTimeSeconds = currentTime;
+        }
+        lastSimTimeSeconds = currentTime;
 
         updateSimulation(dt);
 
@@ -108,25 +127,27 @@ public abstract class SimulationBase extends AbsoluteSubsystem {
 
         String prefix = simLogPrefix;
 
-        // Core mechanical state
-        recordOutput(prefix + "/positionMeters", state.positionMeters);
-        recordOutput(prefix + "/velocityMPS", state.velocityMetersPerSec);
-        recordOutput(prefix + "/accelerationMPSS", state.accelerationMetersPerSecSq);
+        // Core mechanical state (LOW)
+        log(LogLevel.LOW, prefix + "/positionMeters", state.positionMeters);
 
-        // Electrical state
-        recordOutput(prefix + "/voltage", state.appliedVoltage);
-        recordOutput(prefix + "/currentAmps", state.currentDrawAmps);
-        recordOutput(prefix + "/temperatureC", state.temperatureCelsius);
+        // Standard state (MEDIUM)
+        log(LogLevel.MEDIUM, prefix + "/velocityMPS", state.velocityMetersPerSec);
+        log(LogLevel.MEDIUM, prefix + "/accelerationMPSS", state.accelerationMetersPerSecSq);
 
-        // Power consumption
+        // Electrical state (MEDIUM/HIGH)
+        log(LogLevel.MEDIUM, prefix + "/voltage", state.appliedVoltage);
+        log(LogLevel.MEDIUM, prefix + "/currentAmps", state.currentDrawAmps);
+        log(LogLevel.HIGH, prefix + "/temperatureC", state.temperatureCelsius);
+
+        // Power consumption (HIGH)
         double powerWatts = state.appliedVoltage * state.currentDrawAmps;
-        recordOutput(prefix + "/powerWatts", powerWatts);
+        log(LogLevel.HIGH, prefix + "/powerWatts", powerWatts);
 
-        // Custom data
+        // Custom data (HIGH)
         if (state.customData != null && state.customDataKeys != null) {
             int n = Math.min(state.customData.length, state.customDataKeys.length);
             for (int i = 0; i < n; i++) {
-                recordOutput(prefix + "/custom/" + state.customDataKeys[i], state.customData[i]);
+                log(LogLevel.HIGH, prefix + "/custom/" + state.customDataKeys[i], state.customData[i]);
             }
         }
 

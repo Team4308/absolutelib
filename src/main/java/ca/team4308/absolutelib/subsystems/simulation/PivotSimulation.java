@@ -80,10 +80,12 @@ public class PivotSimulation extends SimulationBase {
     private final Config config;
     private double appliedVoltage = 0.0;
     private final SimState currentState = new SimState();
+    private final ca.team4308.absolutelib.subsystems.Pivot realPivot;
 
-    public PivotSimulation(String name, Config config) {
+    public PivotSimulation(String name, Config config, ca.team4308.absolutelib.subsystems.Pivot realPivot) {
         super(name, true);
         this.config = config;
+        this.realPivot = realPivot;
 
         this.armSim = new SingleJointedArmSim(
                 config.gearbox,
@@ -97,8 +99,8 @@ public class PivotSimulation extends SimulationBase {
         );
     }
 
-    public PivotSimulation(Config config) {
-        this("pivot", config);
+    public PivotSimulation(Config config, ca.team4308.absolutelib.subsystems.Pivot realPivot) {
+        this("pivot", config, realPivot);
     }
 
     /**
@@ -117,15 +119,41 @@ public class PivotSimulation extends SimulationBase {
 
     @Override
     protected void updateSimulation(double dtSeconds) {
-        double clampedVoltage = clamp(appliedVoltage, -12.0, 12.0);
-        armSim.setInputVoltage(clampedVoltage);
+        // Sync with Real Pivot
+        if (realPivot != null) {
+            // 1. Get Voltage from Real Motor
+            appliedVoltage = realPivot.getLeaderMotor().getAppliedVoltage();
+
+            double clampedVoltage = clamp(appliedVoltage, -12.0, 12.0);
+            armSim.setInputVoltage(clampedVoltage);
+            armSim.update(dtSeconds);
+
+            double angleRad = armSim.getAngleRads();
+
+            // motorRot = jointRot * gearRatio
+            // motorRot = (rad / 2PI) * gearRatio
+
+            double offsetRad = config.startAngleRad;
+            double relativeRad = angleRad - offsetRad;
+            double jointRot = relativeRad / (2.0 * Math.PI);
+            double motorRot = jointRot * config.gearRatio;
+            double motorVelRotPerSec = armSim.getVelocityRadPerSec() / (2.0 * Math.PI) * config.gearRatio;
+
+            realPivot.getEncoder().setSimulatedPositionMechanismRotations(motorRot);
+
+            realPivot.getLeaderMotor().updateSimState(motorRot, motorVelRotPerSec);
+        } else {
+            double clampedVoltage = clamp(appliedVoltage, -12.0, 12.0);
+            armSim.setInputVoltage(clampedVoltage);
+            armSim.update(dtSeconds);
+        }
+
         currentState.positionMeters = armSim.getAngleRads();
         currentState.velocityMetersPerSec = armSim.getVelocityRadPerSec();
-        currentState.appliedVoltage = clampedVoltage;
+        currentState.appliedVoltage = appliedVoltage; 
         currentState.currentDrawAmps = armSim.getCurrentDrawAmps();
         currentState.accelerationMetersPerSecSq = 0.0;
         currentState.temperatureCelsius = 20.0 + (currentState.currentDrawAmps * 2.0);
-        armSim.update(dtSeconds);
     }
 
     @Override
@@ -134,7 +162,8 @@ public class PivotSimulation extends SimulationBase {
     }
 
     @Override
-    protected void onSimulationPeriodic(double dtSeconds) {
+    protected void onSimulationPeriodic(double dtSeconds
+    ) {
         recordOutput("angleDeg", Math.toDegrees(armSim.getAngleRads()));
         recordOutput("velocityDegPerSec", Math.toDegrees(armSim.getVelocityRadPerSec()));
         recordOutput("hasHitLowerLimit", armSim.hasHitLowerLimit());
@@ -150,12 +179,12 @@ public class PivotSimulation extends SimulationBase {
         recordOutput(getLogChannelBase() + "/mechanism2d", ligament);
     }
 
-    // Public control methods
     /**
      * Apply voltage to the simulated motor
      */
     @Override
-    public void applyInputVoltage(double volts) {
+    public void applyInputVoltage(double volts
+    ) {
         this.appliedVoltage = volts;
     }
 

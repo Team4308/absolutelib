@@ -3,6 +3,7 @@ package ca.team4308.absolutelib.wrapper;
 import com.ctre.phoenix6.controls.DutyCycleOut;
 import com.ctre.phoenix6.controls.Follower;
 import com.ctre.phoenix6.controls.MotionMagicVoltage;
+import com.ctre.phoenix6.controls.VoltageOut;
 import com.ctre.phoenix6.hardware.TalonFX;
 
 import com.ctre.phoenix.motorcontrol.ControlMode;
@@ -25,7 +26,6 @@ import com.ctre.phoenix6.configs.Slot0Configs;
 import com.ctre.phoenix6.signals.NeutralModeValue;
 import com.ctre.phoenix.motorcontrol.NeutralMode;
 
-import java.sql.Driver;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -49,14 +49,16 @@ public class MotorWrapper {
     private final TalonSRX talonSRX;
     private final VictorSPX victorSPX;
     private final SparkMax sparkMax;
-    private HashMap<Integer, MotorWrapper> motorWrappers = new HashMap();
+    private HashMap<Integer, MotorWrapper> motorWrappers = new HashMap<>();
     // Helpers
     private final DutyCycleOut fxDuty;
+    private final VoltageOut fxVoltage;
 
     private final List<MotorWrapper> followers = new ArrayList<>();
 
     // Motion magic control (Phoenix 6)`
     private final MotionMagicVoltage fxMMVoltage = new MotionMagicVoltage(0);
+    private boolean isSmartMotionConfigured = false;
 
     /**
      * Create a wrapper (SparkMax defaults to Brushless).
@@ -78,11 +80,13 @@ public class MotorWrapper {
         VictorSPX spx = null;
         SparkMax sp = null;
         DutyCycleOut duty = null;
+        VoltageOut volt = null;
 
         switch (type) {
             case TALONFX -> {
                 fx = new TalonFX(id);
                 duty = new DutyCycleOut(0.0);
+                volt = new VoltageOut(0.0);
             }
             case TALONSRX ->
                 srx = new TalonSRX(id);
@@ -97,6 +101,7 @@ public class MotorWrapper {
         this.victorSPX = spx;
         this.sparkMax = sp;
         this.fxDuty = duty;
+        this.fxVoltage = volt;
 
         motorWrappers.put(id, this);
 
@@ -123,9 +128,6 @@ public class MotorWrapper {
      */
     public void set(double output) {
 
-        if (RobotBase.isReal()) {
-
-        } else {
         switch (type) {
             case TALONFX ->
                 talonFX.setControl(fxDuty.withOutput(output));
@@ -137,14 +139,22 @@ public class MotorWrapper {
                 sparkMax.set(output);
         }
     }
-    }
 
     /**
      * Approximate voltage control (converts volts to percent based on 12V
      * nominal).
      */
     public void setVoltage(double volts) {
-        set(volts / 12);
+        switch (type) {
+            case TALONFX ->
+                talonFX.setControl(fxVoltage.withOutput(volts));
+            case TALONSRX ->
+                talonSRX.set(ControlMode.PercentOutput, volts / 12.0);
+            case VICTORSPX ->
+                victorSPX.set(ControlMode.PercentOutput, volts / 12.0);
+            case SPARKMAX ->
+                sparkMax.setVoltage(volts);
+        }
     }
 
     /**
@@ -438,7 +448,8 @@ public class MotorWrapper {
                 if (kF != null) {
                     slot0.kV = kF; // Treat feedforward as kV
 
-                                }w.asTalonFX().getConfigurator().apply(slot0);
+                }
+                w.asTalonFX().getConfigurator().apply(slot0);
             } else if (w.isTalonSRX()) {
                 if (kP != null) {
                     w.asTalonSRX().config_kP(0, kP);
@@ -502,13 +513,16 @@ public class MotorWrapper {
         followers.add(follower);
     }
 
-    // Motion Magic (Phoenix / CTRE) and MAXMotion (REV)
     /**
      * Configure Motion Magic parameters (TalonFX Phoenix 6 or
-     * TalonSRX/VictorSPX Phoenix 5). Units: TalonFX: rotations/sec (cruise),
-     * rotations/sec^2 (accel), rotations/sec^3 (jerk optional)
-     * TalonSRX/VictorSPX: native sensor units per 100ms (velocity), per
-     * 100ms/sec (accel)
+     * TalonSRX/VictorSPX Phoenix 5).
+     *
+     * @param cruiseVelocity Cruise velocity. Units: TalonFX: rotations/sec,
+     * TalonSRX/VictorSPX: native units per 100ms.
+     * @param acceleration Acceleration. Units: TalonFX: rotations/sec^2,
+     * TalonSRX/VictorSPX: native units per 100ms/sec.
+     * @param optionalJerk Jerk (optional). Units: TalonFX: rotations/sec^3.
+     * Ignored for Phoenix 5.
      */
     public void configureMotionMagic(double cruiseVelocity, double acceleration, Double optionalJerk) {
         if (isTalonFX()) {
@@ -526,62 +540,88 @@ public class MotorWrapper {
             asVictorSPX().configMotionCruiseVelocity((int) cruiseVelocity);
             asVictorSPX().configMotionAcceleration((int) acceleration);
         }
+        isSmartMotionConfigured = true;
     }
 
     /**
-     * Set a Motion Magic position target. TalonFX: position (rotations).
-     * TalonSRX/VictorSPX: raw sensor units (caller must supply).
+     * Set a Motion Magic position target.
+     *
+     * @param position Target position. Units: TalonFX: rotations,
+     * TalonSRX/VictorSPX: native sensor units.
+     * @param arbFF Arbitrary feedforward. Units: Volts (Phoenix 6), Percent
+     * Output (Phoenix 5).
      */
-    public void setMotionMagicPosition(double position) {
+    public void setMotionMagicPosition(double position, double arbFF) {
         if (isTalonFX()) {
-            talonFX.setControl(fxMMVoltage.withPosition(position));
+            talonFX.setControl(fxMMVoltage.withPosition(position).withFeedForward(arbFF));
         } else if (isTalonSRX()) {
-            talonSRX.set(ControlMode.MotionMagic, position);
+            // Phoenix 5 arbFF is percent output [-1, 1]
+            double arbFFPercent = arbFF / 12.0;
+            talonSRX.set(ControlMode.MotionMagic, position, com.ctre.phoenix.motorcontrol.DemandType.ArbitraryFeedForward, arbFFPercent);
         } else if (isVictorSPX()) {
-            victorSPX.set(ControlMode.MotionMagic, position);
-        } else {
+            double arbFFPercent = arbFF / 12.0;
+            victorSPX.set(ControlMode.MotionMagic, position, com.ctre.phoenix.motorcontrol.DemandType.ArbitraryFeedForward, arbFFPercent);
         }
     }
 
+    public void setMotionMagicPosition(double position) {
+        setMotionMagicPosition(position, 0.0);
+    }
+
     /**
-     * Configure REV MAXMotion (SparkMax). Units expected: rotations/sec
-     * (velocity), rotations/sec^2 (acceleration).
+     * Configure REV MAXMotion (SparkMax).
+     *
+     * @param cruiseVelocity Max velocity. Units: rotations/sec.
+     * @param acceleration Max acceleration. Units: rotations/sec^2.
      */
     public void configureMaxMotion(double cruiseVelocity, double acceleration) {
         if (!isSparkMax()) {
             return;
         }
         SparkMaxConfig cfg = new SparkMaxConfig();
-        // REV 2025 API: closedLoop.maxMotion.* (adjust if API changes)
         cfg.closedLoop.maxMotion.maxVelocity(cruiseVelocity);
         cfg.closedLoop.maxMotion.maxAcceleration(acceleration);
         sparkMax.configure(cfg, ResetMode.kNoResetSafeParameters, PersistMode.kPersistParameters);
+        isSmartMotionConfigured = true;
     }
 
     /**
-     * Set MAXMotion position target (rotations).
+     * Set MAXMotion position target.
+     *
+     * @param position Target position. Units: rotations.
+     * @param arbFF Arbitrary feedforward. Units: Volts.
      */
-    public void setMaxMotionPosition(double position) {
+    public void setMaxMotionPosition(double position, double arbFF) {
         if (!isSparkMax()) {
             return;
         }
-        // Using new closed loop controller (assumes position units are rotations)
-        sparkMax.getClosedLoopController().setReference(position, com.revrobotics.spark.SparkBase.ControlType.kMAXMotionPositionControl);
+        sparkMax.getClosedLoopController().setReference(position, com.revrobotics.spark.SparkBase.ControlType.kMAXMotionPositionControl, com.revrobotics.spark.ClosedLoopSlot.kSlot0, arbFF);
+    }
+
+    public void setMaxMotionPosition(double position) {
+        setMaxMotionPosition(position, 0.0);
     }
 
     /**
      * Generic smart position setter choosing appropriate vendor motion mode.
      * Falls back to percent output if unsupported.
+     *
+     * @param position Target position. Units: Rotations (TalonFX/SparkMax),
+     * Native Units (TalonSRX/VictorSPX).
+     * @param arbFF Arbitrary feedforward. Units: Volts.
      */
-    public void setSmartPosition(double position) {
+    public void setSmartPosition(double position, double arbFF) {
         if (isTalonFX() || isTalonSRX() || isVictorSPX()) {
-            setMotionMagicPosition(position);
+            setMotionMagicPosition(position, arbFF);
         } else if (isSparkMax()) {
-            setMaxMotionPosition(position);
+            setMaxMotionPosition(position, arbFF);
         } else {
-            // not supported
             set(0.0);
         }
+    }
+
+    public void setSmartPosition(double position) {
+        setSmartPosition(position, 0.0);
     }
 
     public double getAppliedVoltage() {
@@ -600,94 +640,109 @@ public class MotorWrapper {
         return 0.0;
     }
 
-    public double getOutputPercent() {
-        switch (type) {
-            case TALONFX:
-                return talonFX.getMotorVoltage().getValueAsDouble() / 12;
-            case SPARKMAX:
-                return sparkMax.getAppliedOutput();
-            case TALONSRX:
-                return talonSRX.getMotorOutputPercent();
-            case VICTORSPX:
-                return victorSPX.getMotorOutputPercent();
-            default:
-                return 0.0;
+    /**
+     * Get the applied voltage for simulation. This is a robust way to get
+     * voltage even if the hardware getter fails in sim.
+     */
+    public double getSimVoltage() {
+        // In simulation, getAppliedVoltage() usually works if the sim state is updated.
+        // But for SparkMax, getAppliedOutput() might rely on the spark max sim object.
+        return getAppliedVoltage();
+    }
+
+    /**
+     * Update the vendor-specific simulation state from the physics simulation.
+     *
+     * @param mechRotations Mechanism position in rotations.
+     * @param mechVelRotPerSec Mechanism velocity in rotations per second.
+     */
+    public void updateSimState(double mechRotations, double mechVelRotPerSec) {
+        if (isTalonFX()) {
+            var sim = talonFX.getSimState();
+            sim.setRawRotorPosition(mechRotations); // 1:1 in simulation
+            sim.setRotorVelocity(mechVelRotPerSec);
+            sim.setSupplyVoltage(12.0);
+        } else if (isSparkMax()) {
+            // Like simulation of a spark max is dumb
         }
+    }
+
+    public double getOutputPercent() {
+        return switch (type) {
+            case TALONFX ->
+                talonFX.getMotorVoltage().getValueAsDouble() / 12;
+            case SPARKMAX ->
+                sparkMax.getAppliedOutput();
+            case TALONSRX ->
+                talonSRX.getMotorOutputPercent();
+            case VICTORSPX ->
+                victorSPX.getMotorOutputPercent();
+        };
     }
 
     public double getCurrent() {
-        switch (type) {
-            case TALONFX:
-                return talonFX.getStatorCurrent().getValueAsDouble();
-            case SPARKMAX:
-                return sparkMax.getOutputCurrent();
-            case TALONSRX:
-                return talonSRX.getStatorCurrent();
-            case VICTORSPX:
+        return switch (type) {
+            case TALONFX ->
+                talonFX.getStatorCurrent().getValueAsDouble();
+            case SPARKMAX ->
+                sparkMax.getOutputCurrent();
+            case TALONSRX ->
+                talonSRX.getStatorCurrent();
+            case VICTORSPX ->
                 throw new UnsupportedOperationException("VictorSPX does not support current sensing");
-            default:
-                return 0.0;
-        }
+        };
     }
 
     public double getTemperature() {
-        switch (type) {
-            case TALONFX:
-                return talonFX.getDeviceTemp().getValueAsDouble();
-            case SPARKMAX:
-                return sparkMax.getMotorTemperature();
-            case TALONSRX:
-                return talonSRX.getTemperature();
-            case VICTORSPX:
-                return victorSPX.getTemperature();
-            default:
-                return 0.0;
-        }
+        return switch (type) {
+            case TALONFX ->
+                talonFX.getDeviceTemp().getValueAsDouble();
+            case SPARKMAX ->
+                sparkMax.getMotorTemperature();
+            case TALONSRX ->
+                talonSRX.getTemperature();
+            case VICTORSPX ->
+                victorSPX.getTemperature();
+        };
     }
 
     public double getPosition() {
-        switch (type) {
-            case TALONFX:
-                return talonFX.getPosition().getValueAsDouble();
-            case SPARKMAX:
-                return sparkMax.getAbsoluteEncoder().getPosition();
-            case TALONSRX:
-                return talonSRX.getSelectedSensorPosition();
-            case VICTORSPX:
-                return victorSPX.getSelectedSensorPosition();
-            default:
-                return 0.0;
-        }
+        return switch (type) {
+            case TALONFX ->
+                talonFX.getPosition().getValueAsDouble();
+            case SPARKMAX ->
+                sparkMax.getAbsoluteEncoder().getPosition();
+            case TALONSRX ->
+                talonSRX.getSelectedSensorPosition();
+            case VICTORSPX ->
+                victorSPX.getSelectedSensorPosition();
+        };
     }
 
     public double getVelocity() {
-        switch (type) {
-            case TALONFX:
-                return talonFX.getVelocity().getValueAsDouble();
-            case SPARKMAX:
-                return sparkMax.getAbsoluteEncoder().getVelocity();
-            case TALONSRX:
-                return talonSRX.getSelectedSensorVelocity();
-            case VICTORSPX:
-                return victorSPX.getSelectedSensorVelocity();
-            default:
-                return 0.0;
-        }
+        return switch (type) {
+            case TALONFX ->
+                talonFX.getVelocity().getValueAsDouble();
+            case SPARKMAX ->
+                sparkMax.getAbsoluteEncoder().getVelocity();
+            case TALONSRX ->
+                talonSRX.getSelectedSensorVelocity();
+            case VICTORSPX ->
+                victorSPX.getSelectedSensorVelocity();
+        };
     }
 
     public boolean isConnected() {
-        switch (type) {
-            case TALONFX:
-                return talonFX.getDeviceTemp().getStatus().isOK();
-            case SPARKMAX:
-                return sparkMax.getFirmwareString() != null;
-            case TALONSRX:
-                return talonSRX.getLastError() == com.ctre.phoenix.ErrorCode.OK;
-            case VICTORSPX:
-                return victorSPX.getLastError() == com.ctre.phoenix.ErrorCode.OK;
-            default:
-                return false;
-        }
+        return switch (type) {
+            case TALONFX ->
+                talonFX.getDeviceTemp().getStatus().isOK();
+            case SPARKMAX ->
+                sparkMax.getFirmwareString() != null;
+            case TALONSRX ->
+                talonSRX.getLastError() == com.ctre.phoenix.ErrorCode.OK;
+            case VICTORSPX ->
+                victorSPX.getLastError() == com.ctre.phoenix.ErrorCode.OK;
+        };
     }
 
     public MotorWrapper getMotorbyID(int id) {
@@ -695,6 +750,17 @@ public class MotorWrapper {
             if (mw.getId() == id) {
                 return mw;
             }
+        }
+        return null;
+    }
+
+    public boolean isSmartMotionConfigured() {
+        return isSmartMotionConfigured;
+    }
+
+    public com.ctre.phoenix6.sim.TalonFXSimState getTalonFXSimState() {
+        if (isTalonFX()) {
+            return talonFX.getSimState();
         }
         return null;
     }

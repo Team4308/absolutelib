@@ -9,7 +9,7 @@ import edu.wpi.first.util.sendable.Sendable;
  * endeffector subsystems (intakes, claws, etc.).
  * There is no default code you have to implement this class
  * start - Set the leader to a speed
- * stop - set the leader to 0 
+ * stop set the leader to 0 
  */
 public class EndEffector extends AbsoluteSubsystem {
 

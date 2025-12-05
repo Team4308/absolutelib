@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import ca.team4308.absolutelib.math.DoubleUtils;
+import ca.team4308.absolutelib.subsystems.simulation.ArmSimulation;
 import ca.team4308.absolutelib.wrapper.EncoderWrapper;
 import ca.team4308.absolutelib.wrapper.AbsoluteSubsystem;
 import ca.team4308.absolutelib.wrapper.MotorWrapper;
@@ -133,6 +134,10 @@ public class Arm extends AbsoluteSubsystem {
          * Single overridable computation for arm output including PID, FF,
          * augmentors, and clamping.
          */
+        /**
+         * Single overridable computation for arm output including PID, FF,
+         * augmentors, and clamping.
+         */
         protected double computeOutputPercent(Mode mode, double target, double current) {
             onPreComputeOutput(mode, target, current);
             double base;
@@ -144,17 +149,40 @@ public class Arm extends AbsoluteSubsystem {
                     base = manualPercent;
                     break;
                 case POSITION: {
-                    double ffVolts = feedforward.calculate(current, desiredVelocityRadPerSec);
-                    double ffPercent = nominalVoltage != 0 ? ffVolts / nominalVoltage : 0.0;
-                    double pidPercent = positionPid.calculate(current, target);
-                    base = ffPercent + pidPercent;
+                    if (config.useSmartMotion) {
+                        // Calculate Feedforward (Volts)
+                        double ffVolts = feedforward.calculate(current, desiredVelocityRadPerSec);
+
+                        // Convert target (radians) to motor rotations
+                        // targetNative = target / metersToRadians
+                        // Note: metersToRadians is used as the conversion factor from encoder units to radians.
+                        // If encoder units are rotations, then metersToRadians = 2PI / gearRatio.
+                        // So targetNative = target / (2PI / gearRatio) = target * gearRatio / 2PI.
+                        // This assumes metersToRadians is correctly configured for the joint.
+                        double targetNative = target / config.metersToRadians;
+
+                        motor.setSmartPosition(targetNative, ffVolts);
+                        base = 0; // Output handled by motor
+                    } else {
+                        double ffVolts = feedforward.calculate(current, desiredVelocityRadPerSec);
+                        double ffPercent = nominalVoltage != 0 ? ffVolts / nominalVoltage : 0.0;
+                        double pidPercent = positionPid.calculate(current, target);
+                        base = ffPercent + pidPercent;
+                    }
                     break;
                 }
                 case HOLDING: {
-                    double ffVolts = feedforward.calculate(current, 0.0);
-                    double ffPercent = nominalVoltage != 0 ? ffVolts / nominalVoltage : 0.0;
-                    double pidPercent = holdPid.calculate(current, target);
-                    base = ffPercent + pidPercent;
+                    if (config.useSmartMotion) {
+                        double ffVolts = feedforward.calculate(current, 0.0);
+                        double targetNative = target / config.metersToRadians;
+                        motor.setSmartPosition(targetNative, ffVolts);
+                        base = 0;
+                    } else {
+                        double ffVolts = feedforward.calculate(current, 0.0);
+                        double ffPercent = nominalVoltage != 0 ? ffVolts / nominalVoltage : 0.0;
+                        double pidPercent = holdPid.calculate(current, target);
+                        base = ffPercent + pidPercent;
+                    }
                     break;
                 }
                 default:
@@ -182,7 +210,9 @@ public class Arm extends AbsoluteSubsystem {
 
         protected void applyPercentOutput(double percent) {
             onPreApplyOutput(percent);
-            motor.set(percent);
+            if (!config.useSmartMotion) {
+                motor.set(percent);
+            }
             lastAppliedVoltage = percent * nominalVoltage;
             onPostApplyOutput(percent);
         }
@@ -305,6 +335,20 @@ public class Arm extends AbsoluteSubsystem {
             }
             return p;
         }
+
+        /**
+         * Get the motor for simulation access.
+         */
+        public MotorWrapper getMotor() {
+            return motor;
+        }
+
+        /**
+         * Get the encoder for simulation access.
+         */
+        public EncoderWrapper getEncoder() {
+            return encoder;
+        }
     }
 
     public static class JointConfig {
@@ -316,12 +360,15 @@ public class Arm extends AbsoluteSubsystem {
         // Added for IK
         public final double linkLengthMeters;
 
+        public boolean useSmartMotion = false;
+
         private JointConfig(Builder b) {
             minAngleRad = b.minAngleRad;
             maxAngleRad = b.maxAngleRad;
             toleranceRad = b.toleranceRad;
             metersToRadians = b.metersToRadians;
             linkLengthMeters = b.linkLengthMeters;
+            useSmartMotion = b.useSmartMotion;
         }
 
         public static Builder builder() {
@@ -332,6 +379,7 @@ public class Arm extends AbsoluteSubsystem {
 
             private double minAngleRad = 0.0, maxAngleRad = Math.PI, toleranceRad = Math.toRadians(2), metersToRadians = 1.0;
             private double linkLengthMeters = 1.0;
+            private boolean useSmartMotion = false;
 
             public Builder minAngleRad(double v) {
                 minAngleRad = v;
@@ -355,6 +403,11 @@ public class Arm extends AbsoluteSubsystem {
 
             public Builder linkLengthMeters(double v) {
                 linkLengthMeters = v;
+                return this;
+            }
+
+            public Builder useSmartMotion(boolean v) {
+                useSmartMotion = v;
                 return this;
             }
 
@@ -382,6 +435,14 @@ public class Arm extends AbsoluteSubsystem {
         Joint j = new Joint(motor, config, encoder, jointConfig, initialAngle);
         joints.add(j);
         cachedIKAngles = new double[joints.size()]; // resize cache
+
+        if (jointConfig.useSmartMotion) {
+            // Configure motor for smart motion (assuming config passed has PID values)
+            // Note: MotorConfig passed in `config` should have kP, kI, kD etc.
+            // We also need to set motion magic parameters if they are not in `config`.
+            // Assuming user configures `config` with motion parameters if using smart motion.
+        }
+
         return j;
     }
 
@@ -549,7 +610,7 @@ public class Arm extends AbsoluteSubsystem {
         recordOutput("ik/theta2Deg", Math.toDegrees(theta2));
         recordOutput("ik/solved", true);
         for (int i = 2; i < joints.size(); i++) {
-            // Additional joints are ignored in 2-link analytic mode
+            // Add ltr joints at current angles
         }
     }
 
@@ -582,8 +643,8 @@ public class Arm extends AbsoluteSubsystem {
         ca.team4308.absolutelib.subsystems.simulation.ArmSimulation.Config simCfg = new ca.team4308.absolutelib.subsystems.simulation.ArmSimulation.Config();
         for (Joint j : joints) {
             ca.team4308.absolutelib.subsystems.simulation.ArmSimulation.JointSimConfig jCfg = new ca.team4308.absolutelib.subsystems.simulation.ArmSimulation.JointSimConfig();
-            jCfg.gearbox = edu.wpi.first.math.system.plant.DCMotor.getNEO(1); // Default
-            jCfg.gearRatio = 100.0; // Default guess
+            jCfg.gearbox = edu.wpi.first.math.system.plant.DCMotor.getNEO(1);
+            jCfg.gearRatio = 100.0;
             jCfg.linkLengthMeters = j.config.linkLengthMeters;
             jCfg.linkMassKg = 2.0;
             jCfg.minAngleRad = j.config.minAngleRad;
@@ -592,7 +653,7 @@ public class Arm extends AbsoluteSubsystem {
             simCfg.addJoint(jCfg);
         }
 
-        simulation = new ca.team4308.absolutelib.subsystems.simulation.ArmSimulation(simCfg);
+        simulation = new ArmSimulation("Arm", simCfg, this);
         simulation.initialize();
     }
 
@@ -625,7 +686,6 @@ public class Arm extends AbsoluteSubsystem {
         return null;
     }
 
-    // Helper: compute end effector from angle array
     private Translation2d computeEndEffector(double[] angles) {
         double x = 0.0, y = 0.0, accAngle = 0.0;
         for (int i = 0; i < joints.size(); i++) {
@@ -636,7 +696,6 @@ public class Arm extends AbsoluteSubsystem {
         }
         return new Translation2d(x, y);
     }
-    // Helper: position of joint i (its anchor)
 
     private Translation2d computeJointPosition(double[] angles, int jointIndex) {
         double x = 0.0, y = 0.0, accAngle = 0.0;

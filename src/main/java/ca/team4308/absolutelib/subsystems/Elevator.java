@@ -218,41 +218,8 @@ public class Elevator extends AbsoluteSubsystem {
      * then calls post-hook. Override the run or compute/apply methods for
      * custom control.
      */
-    // Simulation integration
-    private ca.team4308.absolutelib.subsystems.simulation.ElevatorSimulation simulation;
-    private double lastAppliedVoltage = 0.0;
-
-    /**
-     * Initialize simulation (called automatically if enableSimulation=true in
-     * sim)
-     */
-    private void initSimulation() {
-        if (simulation != null) {
-            return;
-        }
-
-        ca.team4308.absolutelib.subsystems.simulation.ElevatorSimulation.ElevatorSimulationConfig simCfg = config.simulationConfig;
-        if (simCfg == null) {
-            // Auto-generate defaults
-            simCfg = new ca.team4308.absolutelib.subsystems.simulation.ElevatorSimulation.ElevatorSimulationConfig();
-            simCfg.leader = edu.wpi.first.math.system.plant.DCMotor.getNEO(1);
-            simCfg.gearing = config.gearRatio;
-            simCfg.carriageMassKg = 5.0;
-            simCfg.minHeightMeters = config.minHeightMeters;
-            simCfg.maxHeightMeters = config.maxHeightMeters;
-            simCfg.drumRadiusMeters = config.drumDiameterMeters / 2.0;
-            simCfg.simulateGravity = true;
-            logWarn("Auto-generated simulation config with defaults. Use withSimulation() for accuracy.");
-        }
-        simulation = new ca.team4308.absolutelib.subsystems.simulation.ElevatorSimulation("/subsystems/" + (getName() != null ? getName() : "Elevator") + "/Simulation", simCfg);
-        simulation.initialize();
-    }
-
     @Override
     protected void onInitialize() {
-        if (edu.wpi.first.wpilibj.RobotBase.isSimulation() && config.enableSimulation) {
-            initSimulation();
-        }
     }
 
     public void setFeedforwardGains(double kS, double kG, double kV, double kA) {
@@ -304,7 +271,6 @@ public class Elevator extends AbsoluteSubsystem {
     protected void onPreComputeOutput(Mode mode, double targetMeters, double currentMeters) {
     }
 
-
     public void computeOutputPercent() {
         double currentMeters = getCurrentPosition();
         double outputPercent = 0.0;
@@ -316,17 +282,39 @@ public class Elevator extends AbsoluteSubsystem {
                 outputPercent = manualPercentOutput;
                 break;
             case POSITION:
-                double pidOutput = positionPid.calculate(currentMeters, targetPositionMeters);
-                double ffOutput = feedforward.calculate(desiredVelocity, desiredAcceleration) / nominalVoltage;
-                double basePercent = pidOutput + ffOutput;
-                basePercent = afterBaseCompute(mode, targetPositionMeters, currentMeters, basePercent);
-                double augmentedPercent = applyAugmentors(basePercent, targetPositionMeters, currentMeters);
-                augmentedPercent = afterAugmentCompute(mode, targetPositionMeters, currentMeters, augmentedPercent);
-                outputPercent = augmentedPercent;
+                if (config.useSmartMotion) {
+                    // Calculate Feedforward (Volts)
+                    // ElevatorFeedforward.calculate(v, a) returns kS * sign(v) + kG + kV * v + kA * a
+                    // For Smart Motion, we typically provide the arbitrary feedforward for gravity (kG).
+                    // calculate(0, 0) gives us kG (assuming kS is 0 at 0 velocity or handled by controller).
+                    double gravityFF = feedforward.calculate(0.0, 0.0);
+
+                    // Convert target meters to motor rotations
+                    // rotations = (meters / (drumDiameter * PI)) * gearRatio
+                    double targetRotations = (targetPositionMeters / (config.drumDiameterMeters * Math.PI)) * config.gearRatio;
+
+                    leaderMotor.setSmartPosition(targetRotations, gravityFF);
+                    outputPercent = 0.0; // Output handled by motor
+                } else {
+                    double pidOutput = positionPid.calculate(currentMeters, targetPositionMeters);
+                    double ffOutput = feedforward.calculate(desiredVelocity, desiredAcceleration) / nominalVoltage;
+                    double basePercent = pidOutput + ffOutput;
+                    basePercent = afterBaseCompute(mode, targetPositionMeters, currentMeters, basePercent);
+                    double augmentedPercent = applyAugmentors(basePercent, targetPositionMeters, currentMeters);
+                    augmentedPercent = afterAugmentCompute(mode, targetPositionMeters, currentMeters, augmentedPercent);
+                    outputPercent = augmentedPercent;
+                }
                 break;
             case HOLDING:
-                double holdPidOutput = holdPid.calculate(currentMeters, targetPositionMeters);
-                outputPercent = holdPidOutput;
+                if (config.useSmartMotion) {
+                    double gravityFF = feedforward.calculate(0.0, 0.0);
+                    double targetRotations = (targetPositionMeters / (config.drumDiameterMeters * Math.PI)) * config.gearRatio;
+                    leaderMotor.setSmartPosition(targetRotations, gravityFF);
+                    outputPercent = 0.0;
+                } else {
+                    double holdPidOutput = holdPid.calculate(currentMeters, targetPositionMeters);
+                    outputPercent = holdPidOutput;
+                }
                 break;
             case IDLE:
             default:
@@ -423,14 +411,10 @@ public class Elevator extends AbsoluteSubsystem {
     protected void applyPercentOutput(double percent) {
         onPreApplyOutput(percent);
         double clamped = clampPercent(percent);
-        leaderMotor.set(clamped);
-        // Estimate voltage for simulation
-        lastAppliedVoltage = clamped * nominalVoltage;
+        if (!config.useSmartMotion) {
+            leaderMotor.set(clamped);
+        }
         onPostApplyOutput(percent);
-    }
-
-    public ca.team4308.absolutelib.subsystems.simulation.ElevatorSimulation getSimulation() {
-        return simulation;
     }
 
     // --- Output limits (soft-code clamp range) ---
@@ -479,6 +463,20 @@ public class Elevator extends AbsoluteSubsystem {
     }
 
     /**
+     * Get the leader motor for simulation access.
+     */
+    public MotorWrapper getLeaderMotor() {
+        return leaderMotor;
+    }
+
+    /**
+     * Get the encoder for simulation access.
+     */
+    public EncoderWrapper getEncoder() {
+        return encoder;
+    }
+
+    /**
      * All units are meters, meters/sec, or meters/sec^2 unless noted.
      */
     public static class ElevatorConfig {
@@ -514,6 +512,7 @@ public class Elevator extends AbsoluteSubsystem {
 
         public final ca.team4308.absolutelib.subsystems.simulation.ElevatorSimulation.ElevatorSimulationConfig simulationConfig;
         public final boolean enableSimulation;
+        public final boolean useSmartMotion;
 
         private ElevatorConfig(Builder b) {
             this.minHeightMeters = b.minHeightMeters;
@@ -525,6 +524,7 @@ public class Elevator extends AbsoluteSubsystem {
             this.toleranceMeters = b.toleranceMeters;
             this.simulationConfig = b.simulationConfig;
             this.enableSimulation = b.enableSimulation;
+            this.useSmartMotion = b.useSmartMotion;
         }
 
         public static Builder builder() {
@@ -545,6 +545,7 @@ public class Elevator extends AbsoluteSubsystem {
             private double toleranceMeters = 0.01;
             private ca.team4308.absolutelib.subsystems.simulation.ElevatorSimulation.ElevatorSimulationConfig simulationConfig;
             private boolean enableSimulation = false;
+            private boolean useSmartMotion = false;
 
             /**
              * Bottom soft limit (m).
@@ -609,6 +610,11 @@ public class Elevator extends AbsoluteSubsystem {
 
             public Builder enableSimulation(boolean enable) {
                 this.enableSimulation = enable;
+                return this;
+            }
+
+            public Builder useSmartMotion(boolean enable) {
+                this.useSmartMotion = enable;
                 return this;
             }
 

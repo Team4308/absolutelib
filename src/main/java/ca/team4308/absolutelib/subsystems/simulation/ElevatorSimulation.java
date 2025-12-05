@@ -27,12 +27,14 @@ public class ElevatorSimulation extends SimulationBase {
     private final MechanismLigament2d elevatorLigament;
     private final ElevatorSimulationConfig config;
     private final SimState state = new SimState();
+    private final ca.team4308.absolutelib.subsystems.Elevator realElevator;
 
     private double appliedVoltage = 0.0;
 
-    public ElevatorSimulation(String name, ElevatorSimulationConfig config) {
+    public ElevatorSimulation(String name, ElevatorSimulationConfig config, ca.team4308.absolutelib.subsystems.Elevator realElevator) {
         super(name, true);
         this.config = config;
+        this.realElevator = realElevator;
 
         elevatorSim = new ElevatorSim(
                 config.leader,
@@ -52,8 +54,8 @@ public class ElevatorSimulation extends SimulationBase {
         );
     }
 
-    public ElevatorSimulation(ElevatorSimulationConfig config) {
-        this("elevator", config);
+    public ElevatorSimulation(ElevatorSimulationConfig config, ca.team4308.absolutelib.subsystems.Elevator realElevator) {
+        this("elevator", config, realElevator);
     }
 
     /**
@@ -79,9 +81,25 @@ public class ElevatorSimulation extends SimulationBase {
 
     @Override
     protected void updateSimulation(double dtSeconds) {
-        double clamped = clamp(appliedVoltage, -12.0, 12.0);
-        elevatorSim.setInputVoltage(clamped);
-        elevatorSim.update(dtSeconds);
+        if (realElevator != null) {
+            appliedVoltage = realElevator.getLeaderMotor().getAppliedVoltage();
+            double clamped = clamp(appliedVoltage, -12.0, 12.0);
+            elevatorSim.setInputVoltage(clamped);
+            elevatorSim.update(dtSeconds);
+            double posMeters = elevatorSim.getPositionMeters();
+            double drumRotations = posMeters / (Math.PI * config.drumRadiusMeters * 2.0);
+            double sensorRotations = drumRotations * config.gearing;
+            double sensorVelRotPerSec = elevatorSim.getVelocityMetersPerSecond() / (Math.PI * config.drumRadiusMeters * 2.0) * config.gearing;
+
+            realElevator.getEncoder().setSimulatedPositionMechanismRotations(sensorRotations);
+
+            // Update motor wrapper sim state (TalonFX, etc.)
+            realElevator.getLeaderMotor().updateSimState(sensorRotations, sensorVelRotPerSec);
+        } else {
+            double clamped = clamp(appliedVoltage, -12.0, 12.0);
+            elevatorSim.setInputVoltage(clamped);
+            elevatorSim.update(dtSeconds);
+        }
 
         state.positionMeters = elevatorSim.getPositionMeters();
         state.velocityMetersPerSec = elevatorSim.getVelocityMetersPerSecond();
@@ -95,7 +113,7 @@ public class ElevatorSimulation extends SimulationBase {
         recordOutput("velocityMetersPerSec", state.velocityMetersPerSec);
         recordOutput("currentAmps", state.currentDrawAmps);
         recordOutput("appliedVoltage", state.appliedVoltage);
-        recordOutput("mechanism2d/object", mech2d);
+        recordOutput("mechanism2d", mech2d);
     }
 
     @Override

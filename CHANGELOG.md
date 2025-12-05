@@ -1,5 +1,15 @@
 # Changelog for AbsoluteLib V2
 
+
+
+
+
+## 1.1.8-1.2.0
+- Rework of the simulation and subsystems 
+- Mech3D
+- Motion Magic and Max Motion Intagration 
+- Photon Vision Added (No Simulation Currently)
+
 ## 1.1.7
 Rework of Encoder Wrapper, to support further simulation
 
