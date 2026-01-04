@@ -4,6 +4,7 @@ import java.sql.Driver;
 import java.util.ArrayList;
 import java.util.List;
 
+import ca.team4308.absolutelib.math.DoubleUtils;
 import ca.team4308.absolutelib.subsystems.Arm.Joint.Mode;
 import ca.team4308.absolutelib.subsystems.simulation.PivotSimulation;
 import ca.team4308.absolutelib.wrapper.AbsoluteSubsystem;
@@ -16,6 +17,7 @@ import edu.wpi.first.math.trajectory.TrapezoidProfile;
 import edu.wpi.first.util.sendable.Sendable;
 import edu.wpi.first.wpilibj.DriverStation;
 import edu.wpi.first.wpilibj.RobotBase;
+import edu.wpi.first.wpilibj2.command.Command;
 
 public class Pivot extends AbsoluteSubsystem {
 
@@ -194,7 +196,7 @@ public class Pivot extends AbsoluteSubsystem {
                     .kP(cfg.kP)
                     .kI(cfg.kI)
                     .kD(cfg.kD)
-                    .kF(cfg.kV) // Using kV as kF for now, though often kF is 0 for position control
+                    .kF(cfg.kV) // Kf is velocity gain kV (Volts per (rad/s))
                     .motionCruiseVelocity(cruiseRotPerSec)
                     .motionAcceleration(accelRotPerSecSq);
 
@@ -237,18 +239,21 @@ public class Pivot extends AbsoluteSubsystem {
     protected void onPrePeriodic() {
     }
 
+
+    /**
+     *  Sets the targetAngle In rads to the given angle in degrees untill it reaches its goal
+     *  @param angleDeg The target angle in degrees
+     *  @return A command that will run until the pivot reaches the target angle
+     */
+    public Command setPosition(double angleDeg) {
+        return run(() -> targetAngleRad = Math.toRadians(DoubleUtils.clamp(angleDeg, cfg.minAngleDeg, cfg.maxAngleDeg))).until(() -> atTarget());
+    }
+
     protected void onPeriodic() {
         double currentRad = getAngleRad();
         if (manualMode) {
             applyVoltage(manualVoltage);
         } else if (enabled) {
-            double clampedTarget = MathUtil.clamp(
-                    targetAngleRad, Math.toRadians(cfg.minAngleDeg), Math.toRadians(cfg.maxAngleDeg));
-            if (clampedTarget != targetAngleRad) {
-                targetAngleRad = clampedTarget;
-                pid.setGoal(targetAngleRad);
-            }
-
             if (cfg.useSmartMotion) {
                 // Gravity feedforward: kG * cos(theta)
                 double gravityFF = cfg.kG * Math.cos(currentRad);
@@ -329,14 +334,17 @@ public class Pivot extends AbsoluteSubsystem {
     }
 
     public void setTargetAngleDeg(double deg) {
-        setTargetAngleRad(Math.toRadians(deg));
+        enabled = true;
+        manualMode = false;
+        targetAngleRad = Math.toRadians(deg);
+        setPosition(deg);
     }
 
     public void setTargetAngleRad(double rad) {
         targetAngleRad = rad;
         enabled = true;
         manualMode = false;
-        pid.setGoal(rad);
+        setPosition(Math.toDegrees(rad));
     }
 
     public boolean atTarget() {

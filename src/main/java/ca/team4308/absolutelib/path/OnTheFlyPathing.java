@@ -374,14 +374,13 @@ public final class OnTheFlyPathing {
 
         // t is distance from start to intersection along v1
         // u is distance from end to intersection along v2
-        // We want t > 0 (ahead of start) and u < 0 (behind end, so we approach end)
         if (t <= 0.1 || u >= -0.1) {
             return direct(start, end, constraints, endHeading, endVelocityMps, preventFlipping);
         }
 
         Translation2d intersection = p1.plus(v1.times(t));
 
-        // Check if intersection is unreasonably far (e.g. > 2x direct distance)
+        // Check if intersection is far
         if (intersection.getDistance(p1) > p1.getDistance(p2) * 2.5) {
             return direct(start, end, constraints, endHeading, endVelocityMps, preventFlipping);
         }

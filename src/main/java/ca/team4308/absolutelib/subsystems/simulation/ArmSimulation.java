@@ -184,17 +184,6 @@ public class ArmSimulation extends SimulationBase {
 
                 double velocityRotPerSec = simJoint.sim.getVelocityRadPerSec() / (2.0 * Math.PI);
 
-                // Update motor wrapper sim state (TalonFX, etc.)
-                // Note: MotorWrapper.updateSimState expects mechanism rotations and velocity
-                // It handles the gear ratio internally if we pass mechanism units?
-                // Wait, MotorWrapper.updateSimState implementation I wrote:
-                // sim.setRawRotorPosition(mechRotations); // Assumes 1:1 or pre-scaled
-                // Actually, TalonFX SimState expects ROTOR rotations.
-                // So I should pass ROTOR rotations to updateSimState if I want it to be generic?
-                // Or I should pass mechanism rotations and let MotorWrapper handle gearing?
-                // In MotorWrapper.updateSimState, I wrote: "Assumes 1:1 or pre-scaled".
-                // So I should pass ROTOR rotations.
-                // rotorRot = mechRot * gearRatio
                 double rotorRot = angleRot * simJoint.config.gearRatio;
                 double rotorVel = velocityRotPerSec * simJoint.config.gearRatio;
 

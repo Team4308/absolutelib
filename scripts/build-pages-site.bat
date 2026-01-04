@@ -45,5 +45,17 @@ REM Copy vendor JSON to site root
 copy /Y absolutelib.json site\lib\absolutelib.json >nul
 
 echo.
-echo Please upload the static site yourself, via opening a terminal in the /site folder and then git init, git add, git commit, git push
+echo Added all files.
+
+cd site
+
+echo trying github push.
+
+git init 
+git remote add origin https://github.com/Team4308/absolutelib
+git add .
+git commit -m "%CURRENT_VERSION%"
+git push origin gh-pages
+
+
 endlocal

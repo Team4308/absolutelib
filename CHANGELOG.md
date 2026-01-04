@@ -1,8 +1,10 @@
 # Changelog for AbsoluteLib V2
 
-
-
-
+## 1.2.1
+- Minor Bugs fixes on subsystems.
+- New Docs!
+- More up to date readme
+- added requirements in the vendorop json
 
 ## 1.1.8-1.2.0
 - Rework of the simulation and subsystems 

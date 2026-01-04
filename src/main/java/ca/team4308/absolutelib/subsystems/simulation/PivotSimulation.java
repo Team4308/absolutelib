@@ -121,8 +121,6 @@ public class PivotSimulation extends SimulationBase {
     protected void updateSimulation(double dtSeconds) {
         // Sync with Real Pivot
         if (realPivot != null) {
-            // 1. Get Voltage from Real Motor
-            appliedVoltage = realPivot.getLeaderMotor().getAppliedVoltage();
 
             double clampedVoltage = clamp(appliedVoltage, -12.0, 12.0);
             armSim.setInputVoltage(clampedVoltage);
