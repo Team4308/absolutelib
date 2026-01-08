@@ -59,6 +59,7 @@ public class Arm extends AbsoluteSubsystem {
             if (motorConfig != null) {
                 motor.applyMotorConfig(motorConfig);
             }
+
             this.targetRadians = DoubleUtils.clamp(initialAngleRad, config.minAngleRad, config.maxAngleRad);
             this.mode = Mode.HOLDING;
             this.cachedAngleRad = initialAngleRad;
@@ -150,15 +151,7 @@ public class Arm extends AbsoluteSubsystem {
                     break;
                 case POSITION: {
                     if (config.useSmartMotion) {
-                        // Calculate Feedforward (Volts)
                         double ffVolts = feedforward.calculate(current, desiredVelocityRadPerSec);
-
-                        // Convert target (radians) to motor rotations
-                        // targetNative = target / metersToRadians
-                        // Note: metersToRadians is used as the conversion factor from encoder units to radians.
-                        // If encoder units are rotations, then metersToRadians = 2PI / gearRatio.
-                        // So targetNative = target / (2PI / gearRatio) = target * gearRatio / 2PI.
-                        // This assumes metersToRadians is correctly configured for the joint.
                         double targetNative = target / config.metersToRadians;
 
                         motor.setSmartPosition(targetNative, ffVolts);
@@ -437,10 +430,7 @@ public class Arm extends AbsoluteSubsystem {
         cachedIKAngles = new double[joints.size()]; // resize cache
 
         if (jointConfig.useSmartMotion) {
-            // Configure motor for smart motion (assuming config passed has PID values)
-            // Note: MotorConfig passed in `config` should have kP, kI, kD etc.
-            // We also need to set motion magic parameters if they are not in `config`.
-            // Assuming user configures `config` with motion parameters if using smart motion.
+
         }
 
         return j;

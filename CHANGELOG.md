@@ -1,5 +1,10 @@
 # Changelog for AbsoluteLib V2
 
+## 1.2.2
+
+- Simulation works on Pivot!
+- Added better /Example
+
 ## 1.2.1
 - Minor Bugs fixes on subsystems.
 - New Docs!

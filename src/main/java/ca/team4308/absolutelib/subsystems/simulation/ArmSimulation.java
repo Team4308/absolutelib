@@ -3,8 +3,8 @@ package ca.team4308.absolutelib.subsystems.simulation;
 import java.util.ArrayList;
 import java.util.List;
 
-import edu.wpi.first.math.geometry.Pose3d;
 import edu.wpi.first.math.geometry.Pose2d;
+import edu.wpi.first.math.geometry.Pose3d;
 import edu.wpi.first.math.geometry.Rotation2d;
 import edu.wpi.first.math.geometry.Rotation3d;
 import edu.wpi.first.math.system.plant.DCMotor;
@@ -104,7 +104,6 @@ public class ArmSimulation extends SimulationBase {
     private final List<JointSim> joints = new ArrayList<>();
     private final Config config;
     private final SimState currentState = new SimState();
-    private final String name;
     private final ca.team4308.absolutelib.subsystems.Arm realArm;
 
     private final Mechanism2d mech2d = new Mechanism2d(3.0, 3.0);
@@ -113,7 +112,6 @@ public class ArmSimulation extends SimulationBase {
 
     public ArmSimulation(String name, Config config, ca.team4308.absolutelib.subsystems.Arm realArm) {
         super(name);
-        this.name = name;
         this.config = config;
         this.realArm = realArm;
 
@@ -147,8 +145,7 @@ public class ArmSimulation extends SimulationBase {
      * Public update method called by subsystems.
      */
     public void simUpdate(double dtSeconds) {
-        updateSimulation(dtSeconds);
-        onSimulationPeriodic(dtSeconds);
+        super.update(dtSeconds);
     }
 
     @Override
@@ -228,26 +225,26 @@ public class ArmSimulation extends SimulationBase {
             velocities[i] = Math.toDegrees(j.sim.getVelocityRadPerSec());
             currents[i] = j.sim.getCurrentDrawAmps();
 
-            recordOutput(name + "/joint" + i + "/angleDeg", angles[i]);
-            recordOutput(name + "/joint" + i + "/velocityDegPerSec", velocities[i]);
-            recordOutput(name + "/joint" + i + "/currentAmps", currents[i]);
-            recordOutput(name + "/joint" + i + "/hitLowerLimit", j.sim.hasHitLowerLimit());
-            recordOutput(name + "/joint" + i + "/hitUpperLimit", j.sim.hasHitUpperLimit());
+            recordSimOutput("joint" + i + "/angleDeg", angles[i]);
+            recordSimOutput("joint" + i + "/velocityDegPerSec", velocities[i]);
+            recordSimOutput("joint" + i + "/currentAmps", currents[i]);
+            recordSimOutput("joint" + i + "/hitLowerLimit", j.sim.hasHitLowerLimit());
+            recordSimOutput("joint" + i + "/hitUpperLimit", j.sim.hasHitUpperLimit());
         }
 
         for (int i = 0; i < Math.min(jointLigaments.size(), joints.size()); i++) {
             jointLigaments.get(i).setAngle(angles[i]);
         }
 
-        recordOutput(name + "/jointAngles", toRadians(angles));
+        recordSimOutput("jointAngles", toRadians(angles));
 
         double[] fk = computeForwardKinematics();
-        recordOutput(name + "/endEffector", new Pose2d(fk[0], fk[1], new Rotation2d(fk[2])));
+        recordSimOutput("endEffector", new Pose2d(fk[0], fk[1], new Rotation2d(fk[2])));
 
-        recordOutput(name + "/mechanism2d", mech2d);
+        recordSimOutput("mechanism2d", mech2d);
 
         if (!joints.isEmpty()) {
-            recordOutput(name + "/3d/pose", new Pose3d(0, 0, 1.0, new Rotation3d(0, -joints.get(0).sim.getAngleRads(), 0)));
+            recordSimOutput("3d/pose", new Pose3d(0, 0, 1.0, new Rotation3d(0, -joints.get(0).sim.getAngleRads(), 0)));
         }
     }
 

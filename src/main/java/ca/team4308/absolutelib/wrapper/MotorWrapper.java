@@ -60,6 +60,13 @@ public class MotorWrapper {
     private final MotionMagicVoltage fxMMVoltage = new MotionMagicVoltage(0);
     private boolean isSmartMotionConfigured = false;
 
+    // Track applied voltage internally for simulation (some controllers don't report voltage in sim)
+    private double lastCommandedVoltage = 0.0;
+
+    // Simulation state for controllers without native sim support (SparkMax)
+    private double simPosition = 0.0;
+    private double simVelocity = 0.0;
+
     /**
      * Create a wrapper (SparkMax defaults to Brushless).
      */
@@ -127,7 +134,7 @@ public class MotorWrapper {
      * Percent output [-1, 1].
      */
     public void set(double output) {
-
+        lastCommandedVoltage = output * 12.0;
         switch (type) {
             case TALONFX ->
                 talonFX.setControl(fxDuty.withOutput(output));
@@ -145,6 +152,7 @@ public class MotorWrapper {
      * nominal).
      */
     public void setVoltage(double volts) {
+        lastCommandedVoltage = volts;
         switch (type) {
             case TALONFX ->
                 talonFX.setControl(fxVoltage.withOutput(volts));
@@ -625,28 +633,26 @@ public class MotorWrapper {
     }
 
     public double getAppliedVoltage() {
-        if (type == MotorType.TALONFX) {
-            return talonFX.getMotorVoltage().getValueAsDouble();
+        if (RobotBase.isSimulation()) {
+            if (type == MotorType.TALONFX) {
+                double hwVoltage = talonFX.getMotorVoltage().getValueAsDouble();
+                return hwVoltage != 0.0 ? hwVoltage : lastCommandedVoltage;
+            }
+            return lastCommandedVoltage;
         }
-        if (type == MotorType.SPARKMAX) {
-            return sparkMax.getAppliedOutput() * 12.0;
-        }
-        if (type == MotorType.TALONSRX) {
-            return talonSRX.getMotorOutputVoltage();
-        }
-        if (type == MotorType.VICTORSPX) {
-            return victorSPX.getMotorOutputVoltage();
-        }
-        return 0.0;
+        
+        return switch (type) {
+            case TALONFX -> talonFX.getMotorVoltage().getValueAsDouble();
+            case SPARKMAX -> sparkMax.getAppliedOutput() * 12.0;
+            case TALONSRX -> talonSRX.getMotorOutputVoltage();
+            case VICTORSPX -> victorSPX.getMotorOutputVoltage();
+        };
     }
 
     /**
-     * Get the applied voltage for simulation. This is a robust way to get
-     * voltage even if the hardware getter fails in sim.
+     * Get the applied voltage for simulation.
      */
     public double getSimVoltage() {
-        // In simulation, getAppliedVoltage() usually works if the sim state is updated.
-        // But for SparkMax, getAppliedOutput() might rely on the spark max sim object.
         return getAppliedVoltage();
     }
 
@@ -659,11 +665,17 @@ public class MotorWrapper {
     public void updateSimState(double mechRotations, double mechVelRotPerSec) {
         if (isTalonFX()) {
             var sim = talonFX.getSimState();
-            sim.setRawRotorPosition(mechRotations); // 1:1 in simulation
+            sim.setRawRotorPosition(mechRotations);
             sim.setRotorVelocity(mechVelRotPerSec);
             sim.setSupplyVoltage(12.0);
         } else if (isSparkMax()) {
-            // Like simulation of a spark max is dumb
+            // SparkMax doesn't have proper sim support - track state internally
+            simPosition = mechRotations;
+            simVelocity = mechVelRotPerSec;
+        } else {
+            // TalonSRX/VictorSPX - track state internally for sim
+            simPosition = mechRotations;
+            simVelocity = mechVelRotPerSec;
         }
     }
 
@@ -707,11 +719,15 @@ public class MotorWrapper {
     }
 
     public double getPosition() {
+        if (RobotBase.isSimulation() && type != MotorType.TALONFX) {
+            // Use internal sim state for controllers without native sim support
+            return simPosition;
+        }
         return switch (type) {
             case TALONFX ->
                 talonFX.getPosition().getValueAsDouble();
             case SPARKMAX ->
-                sparkMax.getAbsoluteEncoder().getPosition();
+                sparkMax.getEncoder().getPosition();
             case TALONSRX ->
                 talonSRX.getSelectedSensorPosition();
             case VICTORSPX ->
@@ -720,11 +736,15 @@ public class MotorWrapper {
     }
 
     public double getVelocity() {
+        if (RobotBase.isSimulation() && type != MotorType.TALONFX) {
+            // Use internal sim state for controllers without native sim support
+            return simVelocity;
+        }
         return switch (type) {
             case TALONFX ->
                 talonFX.getVelocity().getValueAsDouble();
             case SPARKMAX ->
-                sparkMax.getAbsoluteEncoder().getVelocity();
+                sparkMax.getEncoder().getVelocity();
             case TALONSRX ->
                 talonSRX.getSelectedSensorVelocity();
             case VICTORSPX ->

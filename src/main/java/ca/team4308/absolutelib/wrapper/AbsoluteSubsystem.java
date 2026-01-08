@@ -9,6 +9,7 @@ import java.util.Set;
 
 import org.littletonrobotics.junction.Logger;
 
+import edu.wpi.first.networktables.NetworkTableInstance;
 import edu.wpi.first.util.sendable.Sendable;
 import edu.wpi.first.wpilibj.DriverStation;
 import edu.wpi.first.wpilibj.Timer;
@@ -37,6 +38,27 @@ public abstract class AbsoluteSubsystem extends SubsystemBase {
     /*
      * Returns the base log channel for this subsystem.
      */
+    private static boolean loggerAvailable = false;
+    private static boolean loggerChecked = false;
+
+    private static boolean isLoggerAvailable() {
+        if (!loggerChecked) {
+            loggerChecked = true;
+            try {
+                Logger.recordOutput("/Test/Post", true);
+                NetworkTableInstance defaultInst = NetworkTableInstance.getDefault();
+                if (true) {
+                    loggerAvailable = true;
+                } else {
+                    loggerAvailable = false;
+                }
+            } catch (Exception | NoClassDefFoundError e) {
+                loggerAvailable = false;
+            }
+        }
+        return loggerAvailable;
+    }
+
     protected String getLogChannelBase() {
         String n = getName();
         if (n == null || n.isEmpty()) {
@@ -47,28 +69,54 @@ public abstract class AbsoluteSubsystem extends SubsystemBase {
 
     /**
      * Record an output value for logging/telemetry. Uses AdvantageKit's Logger
-     * for primitives, which is best for AdvantageScope. For Sendables (like
-     * Choosers), it falls back to SmartDashboard as Logger doesn't support them
-     * directly.
+     * if available, otherwise falls back to SmartDashboard.
      */
     protected void recordOutput(String name, Object value) {
         String fullKey = getLogChannelBase() + "/" + name;
-        if (value instanceof Double) {
-            Logger.recordOutput(fullKey, (Double) value);
-        } else if (value instanceof Integer) {
-            Logger.recordOutput(fullKey, (Integer) value);
-        } else if (value instanceof Boolean) {
-            Logger.recordOutput(fullKey, (Boolean) value);
-        } else if (value instanceof String) {
-            Logger.recordOutput(fullKey, (String) value);
-        } else if (value instanceof Sendable) {
-            SmartDashboard.putData(fullKey, (Sendable) value);
+        if (isLoggerAvailable()) {
+            recordToLogger(fullKey, value);
         } else {
-            try {
-                Logger.recordOutput(fullKey, value.toString());
-            } catch (Exception e) {
-                throw new IllegalArgumentException("Unsupported data type for logging: " + value.getClass().getName());
+            recordToSmartDashboard(fullKey, value);
+        }
+    }
+
+    private void recordToLogger(String key, Object value) {
+        try {
+            if (value instanceof Double) {
+                Logger.recordOutput(key, (Double) value);
+            } else if (value instanceof Integer) {
+                Logger.recordOutput(key, (Integer) value);
+            } else if (value instanceof Boolean) {
+                Logger.recordOutput(key, (Boolean) value);
+            } else if (value instanceof String) {
+                Logger.recordOutput(key, (String) value);
+            } else if (value instanceof Sendable) {
+                SmartDashboard.putData(key, (Sendable) value);
+            } else if (value instanceof double[]) {
+                Logger.recordOutput(key, (double[]) value);
+            } else if (value != null) {
+                Logger.recordOutput(key, value.toString());
             }
+        } catch (Exception e) {
+            recordToSmartDashboard(key, value);
+        }
+    }
+
+    private void recordToSmartDashboard(String key, Object value) {
+        if (value instanceof Double) {
+            SmartDashboard.putNumber(key, (Double) value);
+        } else if (value instanceof Integer) {
+            SmartDashboard.putNumber(key, (Integer) value);
+        } else if (value instanceof Boolean) {
+            SmartDashboard.putBoolean(key, (Boolean) value);
+        } else if (value instanceof String) {
+            SmartDashboard.putString(key, (String) value);
+        } else if (value instanceof Sendable) {
+            SmartDashboard.putData(key, (Sendable) value);
+        } else if (value instanceof double[]) {
+            SmartDashboard.putNumberArray(key, (double[]) value);
+        } else if (value != null) {
+            SmartDashboard.putString(key, value.toString());
         }
     }
 

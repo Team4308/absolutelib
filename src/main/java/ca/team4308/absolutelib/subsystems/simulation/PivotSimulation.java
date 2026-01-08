@@ -2,7 +2,6 @@ package ca.team4308.absolutelib.subsystems.simulation;
 
 import edu.wpi.first.math.system.plant.DCMotor;
 import edu.wpi.first.wpilibj.simulation.SingleJointedArmSim;
-import org.littletonrobotics.junction.Logger;
 
 public class PivotSimulation extends SimulationBase {
 
@@ -21,7 +20,18 @@ public class PivotSimulation extends SimulationBase {
         public double startAngleRad = 0.0;
 
         public Config gearbox(DCMotor motor, int count) {
-            this.gearbox = DCMotor.getNEO(count);
+            if (count > 1) {
+                this.gearbox = new DCMotor(
+                    motor.nominalVoltageVolts,
+                    motor.stallTorqueNewtonMeters * count,
+                    motor.stallCurrentAmps * count,
+                    motor.freeCurrentAmps * count,
+                    motor.freeSpeedRadPerSec,
+                    count
+                );
+            } else {
+                this.gearbox = motor;
+            }
             return this;
         }
 
@@ -83,7 +93,7 @@ public class PivotSimulation extends SimulationBase {
     private final ca.team4308.absolutelib.subsystems.Pivot realPivot;
 
     public PivotSimulation(String name, Config config, ca.team4308.absolutelib.subsystems.Pivot realPivot) {
-        super(name, true);
+        super(name);
         this.config = config;
         this.realPivot = realPivot;
 
@@ -100,15 +110,14 @@ public class PivotSimulation extends SimulationBase {
     }
 
     public PivotSimulation(Config config, ca.team4308.absolutelib.subsystems.Pivot realPivot) {
-        this("pivot", config, realPivot);
+        this("Pivot", config, realPivot);
     }
 
     /**
      * Public update method called by subsystems.
      */
     public void simUpdate(double dtSeconds) {
-        updateSimulation(dtSeconds);
-        onSimulationPeriodic(dtSeconds);
+        super.update(dtSeconds);
     }
 
     @Override
@@ -119,36 +128,38 @@ public class PivotSimulation extends SimulationBase {
 
     @Override
     protected void updateSimulation(double dtSeconds) {
-        // Sync with Real Pivot
+        double voltageToApply = appliedVoltage;
+
+        if (realPivot != null && realPivot.getConfig().useSmartMotion) {
+            double targetRad = realPivot.getTargetRad();
+            double currentRad = armSim.getAngleRads();
+            double error = targetRad - currentRad;
+            double simKP = 12.0;
+            voltageToApply += error * simKP;
+        }
+
+        double clampedVoltage = clamp(voltageToApply, -12.0, 12.0);
+        armSim.setInputVoltage(clampedVoltage);
+        armSim.update(dtSeconds);
+
         if (realPivot != null) {
-
-            double clampedVoltage = clamp(appliedVoltage, -12.0, 12.0);
-            armSim.setInputVoltage(clampedVoltage);
-            armSim.update(dtSeconds);
-
             double angleRad = armSim.getAngleRads();
-
-            // motorRot = jointRot * gearRatio
-            // motorRot = (rad / 2PI) * gearRatio
-
-            double offsetRad = config.startAngleRad;
-            double relativeRad = angleRad - offsetRad;
+            double relativeRad = angleRad - config.startAngleRad;
             double jointRot = relativeRad / (2.0 * Math.PI);
             double motorRot = jointRot * config.gearRatio;
             double motorVelRotPerSec = armSim.getVelocityRadPerSec() / (2.0 * Math.PI) * config.gearRatio;
 
             realPivot.getEncoder().setSimulatedPositionMechanismRotations(motorRot);
-
             realPivot.getLeaderMotor().updateSimState(motorRot, motorVelRotPerSec);
-        } else {
-            double clampedVoltage = clamp(appliedVoltage, -12.0, 12.0);
-            armSim.setInputVoltage(clampedVoltage);
-            armSim.update(dtSeconds);
+            
+            // Debug logging
+            recordSimOutput("debug/motorRotWritten", motorRot);
+            recordSimOutput("debug/motorVelWritten", motorVelRotPerSec);
         }
 
         currentState.positionMeters = armSim.getAngleRads();
         currentState.velocityMetersPerSec = armSim.getVelocityRadPerSec();
-        currentState.appliedVoltage = appliedVoltage; 
+        currentState.appliedVoltage = clampedVoltage;
         currentState.currentDrawAmps = armSim.getCurrentDrawAmps();
         currentState.accelerationMetersPerSecSq = 0.0;
         currentState.temperatureCelsius = 20.0 + (currentState.currentDrawAmps * 2.0);
@@ -160,13 +171,13 @@ public class PivotSimulation extends SimulationBase {
     }
 
     @Override
-    protected void onSimulationPeriodic(double dtSeconds
-    ) {
-        recordOutput("angleDeg", Math.toDegrees(armSim.getAngleRads()));
-        recordOutput("velocityDegPerSec", Math.toDegrees(armSim.getVelocityRadPerSec()));
-        recordOutput("hasHitLowerLimit", armSim.hasHitLowerLimit());
-        recordOutput("hasHitUpperLimit", armSim.hasHitUpperLimit());
-        recordOutput("Arm Input Voltage", appliedVoltage);
+    protected void onSimulationPeriodic(double dtSeconds) {
+        recordSimOutput("angleDeg", Math.toDegrees(armSim.getAngleRads()));
+        recordSimOutput("velocityDegPerSec", Math.toDegrees(armSim.getVelocityRadPerSec()));
+        recordSimOutput("hasHitLowerLimit", armSim.hasHitLowerLimit());
+        recordSimOutput("hasHitUpperLimit", armSim.hasHitUpperLimit());
+        recordSimOutput("inputVoltage", appliedVoltage);
+        recordSimOutput("actualVoltageApplied", currentState.appliedVoltage);
 
         double angle = armSim.getAngleRads();
         double endX = config.armLengthMeters * Math.cos(angle);
@@ -174,7 +185,7 @@ public class PivotSimulation extends SimulationBase {
         logPose2d("endEffector", endX, endY, angle);
 
         double[] ligament = new double[]{config.armLengthMeters, Math.toDegrees(angle)};
-        recordOutput(getLogChannelBase() + "/mechanism2d", ligament);
+        recordSimOutput("mechanism2d", ligament);
     }
 
     /**

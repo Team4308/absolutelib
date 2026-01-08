@@ -2,14 +2,13 @@ package ca.team4308.absolutelib.subsystems.simulation;
 
 import ca.team4308.absolutelib.wrapper.AbsoluteSubsystem;
 import edu.wpi.first.util.sendable.Sendable;
-import org.littletonrobotics.junction.Logger;
 import edu.wpi.first.wpilibj.RobotController;
 import edu.wpi.first.wpilibj.simulation.BatterySim;
 import edu.wpi.first.wpilibj.simulation.RoboRioSim;
 
 /**
- * Base class for subsystem simulations with automatic AdvantageKit logging.
- * Extend this to create physics-based simulations that report all state.
+ * Base class for subsystem simulations with automatic logging.
+ * All outputs are logged under the subsystem's path: /subsystems/(name)/simulation/...
  */
 public abstract class SimulationBase extends AbsoluteSubsystem {
 
@@ -28,49 +27,51 @@ public abstract class SimulationBase extends AbsoluteSubsystem {
         public String[] customDataKeys = new String[0];
     }
 
-    private final String simLogPrefix;
+    private static final String SIM_PREFIX = "simulation/";
     private double lastSimTimeSeconds = 0.0;
-    private static final double DEFAULT_DT = 0.02; // 20ms default
+    private static final double DEFAULT_DT = 0.02;
 
     public enum LogLevel {
-        LOW, // Minimal data (Setpoint, Position)
-        MEDIUM, // Standard data (Velocity, Current, Voltage)
-        HIGH    // Verbose data (Debug, Raw sensors)
+        LOW,
+        MEDIUM,
+        HIGH
     }
 
-    private LogLevel logLevel = LogLevel.MEDIUM;
+    private LogLevel logLevel = LogLevel.HIGH;
 
     public void setLogLevel(LogLevel level) {
         this.logLevel = level;
     }
 
-    protected void log(LogLevel level, String key, Object value) {
+    /**
+     * Log simulation data with level filtering.
+     */
+    protected void logSim(LogLevel level, String key, Object value) {
         if (level.ordinal() <= logLevel.ordinal()) {
-            recordOutput(key, value);
+            recordOutput(SIM_PREFIX + key, value);
         }
+    }
+
+    /**
+     * Record simulation output. Automatically prefixes with "simulation/".
+     */
+    protected void recordSimOutput(String key, Object value) {
+        recordOutput(SIM_PREFIX + key, value);
     }
 
     public SimulationBase(String name) {
-        this.simLogPrefix = "/simulation/" + name;
-    }
-
-    public SimulationBase(String name, boolean isFullPrefix) {
-        if (isFullPrefix) {
-            this.simLogPrefix = name;
-        } else {
-            this.simLogPrefix = "/simulation/" + name;
-        }
+        setName(name);
     }
 
     public SimulationBase() {
-        this("default");
+        this("Simulation");
     }
 
     @Override
     protected void onInitialize() {
         lastSimTimeSeconds = getCurrentTimeSeconds();
         onSimulationInit();
-        logInfo("Simulation initialized: " + simLogPrefix);
+        logInfo("Simulation initialized");
     }
 
     @Override
@@ -92,6 +93,16 @@ public abstract class SimulationBase extends AbsoluteSubsystem {
         onSimulationPeriodic(dt);
 
         onPostPeriodic();
+    }
+
+    /**
+     * Update the simulation with a specific delta time.
+     * Use this if driving the simulation manually from a subsystem.
+     */
+    public void update(double dtSeconds) {
+        updateSimulation(dtSeconds);
+        logSimulationState();
+        onSimulationPeriodic(dtSeconds);
     }
 
     /**
@@ -117,7 +128,7 @@ public abstract class SimulationBase extends AbsoluteSubsystem {
     }
 
     /**
-     * Logs all simulation data to AdvantageKit
+     * Logs all simulation data
      */
     private void logSimulationState() {
         SimState state = getSimulationState();
@@ -125,33 +136,31 @@ public abstract class SimulationBase extends AbsoluteSubsystem {
             return;
         }
 
-        String prefix = simLogPrefix;
-
         // Core mechanical state (LOW)
-        log(LogLevel.LOW, prefix + "/positionMeters", state.positionMeters);
+        logSim(LogLevel.LOW, "positionMeters", state.positionMeters);
 
         // Standard state (MEDIUM)
-        log(LogLevel.MEDIUM, prefix + "/velocityMPS", state.velocityMetersPerSec);
-        log(LogLevel.MEDIUM, prefix + "/accelerationMPSS", state.accelerationMetersPerSecSq);
+        logSim(LogLevel.MEDIUM, "velocityMPS", state.velocityMetersPerSec);
+        logSim(LogLevel.MEDIUM, "accelerationMPSS", state.accelerationMetersPerSecSq);
 
         // Electrical state (MEDIUM/HIGH)
-        log(LogLevel.MEDIUM, prefix + "/voltage", state.appliedVoltage);
-        log(LogLevel.MEDIUM, prefix + "/currentAmps", state.currentDrawAmps);
-        log(LogLevel.HIGH, prefix + "/temperatureC", state.temperatureCelsius);
+        logSim(LogLevel.MEDIUM, "voltage", state.appliedVoltage);
+        logSim(LogLevel.MEDIUM, "currentAmps", state.currentDrawAmps);
+        logSim(LogLevel.HIGH, "temperatureC", state.temperatureCelsius);
 
         // Power consumption (HIGH)
         double powerWatts = state.appliedVoltage * state.currentDrawAmps;
-        log(LogLevel.HIGH, prefix + "/powerWatts", powerWatts);
+        logSim(LogLevel.HIGH, "powerWatts", powerWatts);
 
         // Custom data (HIGH)
         if (state.customData != null && state.customDataKeys != null) {
             int n = Math.min(state.customData.length, state.customDataKeys.length);
             for (int i = 0; i < n; i++) {
-                log(LogLevel.HIGH, prefix + "/custom/" + state.customDataKeys[i], state.customData[i]);
+                logSim(LogLevel.HIGH, "custom/" + state.customDataKeys[i], state.customData[i]);
             }
         }
 
-        // Battery effects (optional, can be overridden)
+        // Battery effects (optional)
         if (shouldSimulateBatteryEffects()) {
             simulateBatteryDraw(state.currentDrawAmps);
         }
@@ -190,11 +199,9 @@ public abstract class SimulationBase extends AbsoluteSubsystem {
      */
     private void simulateBatteryDraw(double currentAmps) {
         try {
-            // Use WPILib's battery sim
-            double batteryVoltage = RoboRioSim.getVInVoltage();
             double newVoltage = BatterySim.calculateDefaultBatteryLoadedVoltage(currentAmps);
             RoboRioSim.setVInVoltage(newVoltage);
-            recordOutput(simLogPrefix + "/batteryVoltage", newVoltage);
+            recordSimOutput("batteryVoltage", newVoltage);
         } catch (Exception e) {
             // Graceful fallback if battery sim not available
         }
@@ -271,15 +278,15 @@ public abstract class SimulationBase extends AbsoluteSubsystem {
      * Log a 2D pose for visualization (e.g., arm end effector)
      */
     protected void logPose2d(String key, double x, double y, double rotationRad) {
-        recordOutput(simLogPrefix + "/" + key + "/x", x);
-        recordOutput(simLogPrefix + "/" + key + "/y", y);
-        recordOutput(simLogPrefix + "/" + key + "/rotationRad", rotationRad);
+        recordSimOutput(key + "/x", x);
+        recordSimOutput(key + "/y", y);
+        recordSimOutput(key + "/rotationRad", rotationRad);
     }
 
     /**
      * Log multiple joint angles for multi-DOF mechanisms
      */
     protected void logJointAngles(double... anglesRad) {
-        recordOutput(simLogPrefix + "/jointAngles", anglesRad);
+        recordSimOutput("jointAngles", anglesRad);
     }
 }

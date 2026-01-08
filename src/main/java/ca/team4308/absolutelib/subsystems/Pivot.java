@@ -1,11 +1,9 @@
 package ca.team4308.absolutelib.subsystems;
 
-import java.sql.Driver;
 import java.util.ArrayList;
 import java.util.List;
 
 import ca.team4308.absolutelib.math.DoubleUtils;
-import ca.team4308.absolutelib.subsystems.Arm.Joint.Mode;
 import ca.team4308.absolutelib.subsystems.simulation.PivotSimulation;
 import ca.team4308.absolutelib.wrapper.AbsoluteSubsystem;
 import ca.team4308.absolutelib.wrapper.EncoderWrapper;
@@ -15,7 +13,6 @@ import edu.wpi.first.math.controller.ArmFeedforward;
 import edu.wpi.first.math.controller.ProfiledPIDController;
 import edu.wpi.first.math.trajectory.TrapezoidProfile;
 import edu.wpi.first.util.sendable.Sendable;
-import edu.wpi.first.wpilibj.DriverStation;
 import edu.wpi.first.wpilibj.RobotBase;
 import edu.wpi.first.wpilibj2.command.Command;
 
@@ -111,6 +108,9 @@ public class Pivot extends AbsoluteSubsystem {
             return this;
         }
 
+        /**
+         * Limts in degrees
+         */
         public Config limits(double minDeg, double maxDeg) {
             minAngleDeg = minDeg;
             maxAngleDeg = maxDeg;
@@ -127,6 +127,7 @@ public class Pivot extends AbsoluteSubsystem {
             return this;
         }
 
+    
         public Config withSimulation(PivotSimulation.Config simCfg) {
             this.simulationConfig = simCfg;
             return this;
@@ -137,6 +138,10 @@ public class Pivot extends AbsoluteSubsystem {
             return this;
         }
 
+        /**
+         * Enable or disable the use of Smart Motion control mode.
+         * Smart motion is Magic Motion Or Max Motion.
+         */
         public Config useSmartMotion(boolean enable) {
             this.useSmartMotion = enable;
             return this;
@@ -152,7 +157,6 @@ public class Pivot extends AbsoluteSubsystem {
     private final Config cfg;
 
     private double targetAngleRad = 0.0;
-    private boolean enabled = false;
     private boolean manualMode = false;
     private double manualVoltage = 0.0;
 
@@ -217,6 +221,9 @@ public class Pivot extends AbsoluteSubsystem {
         // Makes the pivot motors brake
         setBrakeMode(true);
 
+        // Hold current position on startup
+        targetAngleRad = getAngleRad();
+
         if (RobotBase.isSimulation() && cfg.enableSimulation && cfg.simulationConfig != null) {
             simulation = new PivotSimulation("Pivot", cfg.simulationConfig, this);
             simulation.initialize();
@@ -228,7 +235,7 @@ public class Pivot extends AbsoluteSubsystem {
         onPrePeriodic();
         onPeriodic();
 
-        if (simulation != null) {
+        if (simulation != null && RobotBase.isSimulation() && cfg.enableSimulation) {
             simulation.setVoltage(lastAppliedVoltage);
             simulation.periodic();
         }
@@ -239,11 +246,12 @@ public class Pivot extends AbsoluteSubsystem {
     protected void onPrePeriodic() {
     }
 
-
     /**
-     *  Sets the targetAngle In rads to the given angle in degrees untill it reaches its goal
-     *  @param angleDeg The target angle in degrees
-     *  @return A command that will run until the pivot reaches the target angle
+     * Sets the targetAngle In rads to the given angle in degrees untill it
+     * reaches its goal
+     *
+     * @param angleDeg The target angle in degrees
+     * @return A command that will run until the pivot reaches the target angle
      */
     public Command setPosition(double angleDeg) {
         return run(() -> targetAngleRad = Math.toRadians(DoubleUtils.clamp(angleDeg, cfg.minAngleDeg, cfg.maxAngleDeg))).until(() -> atTarget());
@@ -253,7 +261,8 @@ public class Pivot extends AbsoluteSubsystem {
         double currentRad = getAngleRad();
         if (manualMode) {
             applyVoltage(manualVoltage);
-        } else if (enabled) {
+        } else {
+            // Position control mode - always active
             if (cfg.useSmartMotion) {
                 // Gravity feedforward: kG * cos(theta)
                 double gravityFF = cfg.kG * Math.cos(currentRad);
@@ -281,18 +290,18 @@ public class Pivot extends AbsoluteSubsystem {
             }
         }
         // Logging
-        recordOutput("Simulation Enabled", cfg.enableSimulation);
+        recordOutput("simulationEnabled", cfg.enableSimulation);
         recordOutput("angleDeg", getAngleDeg());
-        recordOutput("target Deg", Math.toDegrees(targetAngleRad));
-        recordOutput("at Target", atTarget());
-        recordOutput("Is EncoderAbsolute", encoderIsAbsolute);
-        recordOutput("Enabled", enabled);
-        recordOutput("Last Applied Voltage", lastAppliedVoltage);
+        recordOutput("targetDeg", Math.toDegrees(targetAngleRad));
+        recordOutput("atTarget", atTarget());
+        recordOutput("encoderAbsolute", encoderIsAbsolute);
+        recordOutput("manualMode", manualMode);
+        recordOutput("appliedVoltage", lastAppliedVoltage);
 
     }
 
     protected void onPostPeriodic() {
-        // Unused hook
+        // Unused hook perhaps add limits and safety checks later
     }
 
     @Override
@@ -301,9 +310,9 @@ public class Pivot extends AbsoluteSubsystem {
     }
 
     protected void onStop() {
-        enabled = false;
         manualMode = false;
-        applyVoltage(0.0);
+        // Hold current position when stopped
+        targetAngleRad = getAngleRad();
     }
 
     public double getAngleRad() {
@@ -334,17 +343,13 @@ public class Pivot extends AbsoluteSubsystem {
     }
 
     public void setTargetAngleDeg(double deg) {
-        enabled = true;
         manualMode = false;
         targetAngleRad = Math.toRadians(deg);
-        setPosition(deg);
     }
 
     public void setTargetAngleRad(double rad) {
         targetAngleRad = rad;
-        enabled = true;
         manualMode = false;
-        setPosition(Math.toDegrees(rad));
     }
 
     public boolean atTarget() {
@@ -360,15 +365,16 @@ public class Pivot extends AbsoluteSubsystem {
         return Math.toDegrees(targetAngleRad);
     }
 
-    public void disable() {
-        enabled = false;
+    /**
+     * Stops movement and holds current position.
+     */
+    public void holdPosition() {
         manualMode = false;
-        applyVoltage(0.0);
+        targetAngleRad = getAngleRad();
     }
 
     public void setManualVoltage(double volts) {
         manualMode = true;
-        enabled = false;
         manualVoltage = volts;
     }
 
@@ -417,5 +423,9 @@ public class Pivot extends AbsoluteSubsystem {
      */
     public EncoderWrapper getEncoder() {
         return cfg.encoder;
+    }
+
+    public Config getConfig() {
+        return cfg;
     }
 }
