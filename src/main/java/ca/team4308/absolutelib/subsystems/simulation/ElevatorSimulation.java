@@ -9,7 +9,7 @@ import edu.wpi.first.wpilibj.smartdashboard.MechanismRoot2d;
 public class ElevatorSimulation extends SimulationBase {
 
     public static class ElevatorSimulationConfig {
-
+        
         public DCMotor leader;
         public double gearing;
         public double carriageMassKg;
@@ -19,6 +19,7 @@ public class ElevatorSimulation extends SimulationBase {
         public boolean simulateGravity = true;
         public double startHeightMeters = 0.0;
         public double dampingNmPerRadPerSec = 0.0;
+
     }
 
     private final ElevatorSim elevatorSim;

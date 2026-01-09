@@ -4,6 +4,7 @@ AbsoluteLib is an FRC utility library for Team 4308. It provides reusable subsys
 
 - Vendor install: `https://team4308.github.io/absolutelib/lib/absolutelib.json`
 - Docs site: `https://team4308.github.io/absolutelib/`
+- JavaDoc site: `https://team4308.github.io/absolutelib/docs/javadoc`
 
 ---
 
