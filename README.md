@@ -289,17 +289,11 @@ public class LedLogic {
 
 ---
 
-## Notes / gotchas (based on current code)
+## Notes 
 
 - `Pivot.setTargetAngleDeg()` calls `setPosition(deg)` but does not schedule the returned command. That’s fine if you also drive `targetAngleRad` directly (you do), but don’t expect the Command to run unless you schedule it.
 - “Smart Motion”:
   - TalonFX (Phoenix6) supports Motion Magic.
   - TalonSRX/VictorSPX (Phoenix5) can do Motion Magic, but your code/comments may conflict. Document + test per controller.
-- Simulation voltage source:
-  - Pivot sim uses computed voltage (good).
-  - Elevator sim currently reads motor applied voltage; consider mirroring Pivot.
+  - Victor SPXS have not been tested on this libary nor have anythig Talon SRX related (CIMS, 775)
 
----
-
-## License
-MIT (see `LICENSE`).

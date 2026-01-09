@@ -10,7 +10,7 @@ set /p NEW_VERSION="Enter new version (e.g. 1.0.7): "
 :: UPDATE VENDOR JSON
 :: ========================================================
 echo Updating absolutelib.json to version %NEW_VERSION% ...
-set JSON_FILE=absolutelib.json
+set JSON_FILE=../absolutelib.json
 set SITE_JSON=site\lib\absolutelib.json
 
 REM Use PowerShell to update the version, javaDependencies, mavenUrls, and jsonUrl in the JSON file
