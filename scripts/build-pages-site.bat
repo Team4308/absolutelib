@@ -107,26 +107,23 @@ copy /Y "absolutelib.json" "%OUT_DIR%\lib\absolutelib.json" >nul
 echo.
 echo Staged site contents into: %OUT_DIR%
 
-REM Make sure repo is clean enough to run subtree (subtree uses git history)
-REM (We won't hard-fail, just warn.)
-git diff --quiet
-if errorlevel 1 echo WARN: You have uncommitted changes. Will commit them before pushing.
-
+REM Push only the build/pages-site folder to gh-pages branch
 echo.
-echo Adding all changes...
+echo Deploying %OUT_DIR% to %TARGET_BRANCH% branch...
+
+REM Initialize a temp git repo in the output folder and push it
+pushd "%OUT_DIR%"
+git init
 git add -A
-
-echo.
-echo Committing changes...
 for /f "tokens=*" %%D in ('date /t') do set "BUILD_DATE=%%D"
-git commit -m "Build site - %BUILD_DATE% - v%CURRENT_VERSION%" --allow-empty
-
-echo.
-echo Pushing to %TARGET_BRANCH% branch at %REMOTE_URL%...
-git push "%REMOTE_URL%" HEAD:%TARGET_BRANCH%
+git commit -m "Deploy site - %BUILD_DATE% - v%CURRENT_VERSION%"
+git branch -M %TARGET_BRANCH%
+git push "%REMOTE_URL%" %TARGET_BRANCH% --force
 if errorlevel 1 goto push_failed
+popd
 goto push_success
 :push_failed
+popd
 echo ERROR: Failed to push to %TARGET_BRANCH%.
 echo        Make sure you have permission and the remote URL is correct.
 exit /b 1
