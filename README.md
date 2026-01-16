@@ -1,5 +1,7 @@
 # AbsoluteLib
 
+Current version 1.2.3. Vedorops all updated to 2026 betas 
+
 AbsoluteLib is an FRC utility library for Team 4308. It provides reusable subsystems + wrappers with a focus on “same code in real + sim”.
 
 - Vendor install: `https://team4308.github.io/absolutelib/lib/absolutelib.json`
