@@ -47,7 +47,7 @@ public abstract class AbsoluteSubsystem extends SubsystemBase {
             try {
                 Logger.recordOutput("/Test/Post", true);
                 NetworkTableInstance defaultInst = NetworkTableInstance.getDefault();
-                if (true) {
+                if (true) { // Need to fix this ltr using network tables? so deadcode
                     loggerAvailable = true;
                 } else {
                     loggerAvailable = false;

@@ -2,7 +2,7 @@
     "fileName":  "absolutelib.json",
     "name":  "absolutelib",
     "version":  "1.2.1",
-    "frcYear":  "2025",
+    "frcYear":  "2026",
     "uuid":  "a604c6de-3573-4ba6-ae4f-32778238b9de",
     "mavenUrls":  [
                       "https://team4308.github.io/absolutelib/lib",
@@ -26,19 +26,16 @@
                      {
                          "uuid":  "151ecca8-670b-4026-8160-cdd2679ef2bd",
                          "errorMessage":  "ReduxLib is required!",
-                         "offlineFileName":  "ReduxLib-2025.0.0.json",
                          "onlineUrl":  "https://frcsdk.reduxrobotics.com/ReduxLib_2025.json"
                      },
                      {
                          "uuid":  "e995de00-2c64-4df5-8831-c1441420ff19",
                          "errorMessage":  "Phoenix6 is required!",
-                         "offlineFileName":  "Phoenix6-25.1.0.json",
                          "onlineUrl":  "https://maven.ctr-electronics.com/release/com/ctre/phoenix6/latest/Phoenix6-frc2025-latest.json"
                      },
                      {
                          "uuid":  "ab676553-b602-441f-a38d-f1296eff6537",
                          "errorMessage":  "Phoenix5 is required!",
-                         "offlineFileName":  "Phoenix5-5.35.0.json",
                          "onlineUrl":  "https://maven.ctr-electronics.com/release/com/ctre/phoenix/Phoenix5-frc2025-latest.json"
                      },
                      {

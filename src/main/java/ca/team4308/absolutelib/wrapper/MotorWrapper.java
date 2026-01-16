@@ -23,9 +23,11 @@ import edu.wpi.first.wpilibj.RobotBase;
 import com.ctre.phoenix6.configs.MotorOutputConfigs;
 import com.ctre.phoenix6.configs.MotionMagicConfigs;
 import com.ctre.phoenix6.configs.Slot0Configs;
+import com.ctre.phoenix6.signals.MotorAlignmentValue;
 import com.ctre.phoenix6.signals.NeutralModeValue;
 import com.ctre.phoenix.motorcontrol.NeutralMode;
 
+import java.sql.Driver;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -192,9 +194,12 @@ public class MotorWrapper {
     }
 
     public boolean getInverted() {
+        if (type == MotorType.TALONFX) {
+            DriverStation.reportError("Cannnot use GetInverted on TalonFX Motors", true);
+        }
         return switch (type) {
-            case TALONFX ->
-                talonFX.getInverted();
+            case TALONFX -> false;
+
             case TALONSRX ->
                 talonSRX.getInverted();
             case VICTORSPX ->
@@ -207,6 +212,42 @@ public class MotorWrapper {
     /**
      * Make this motor follow a leader. Follows within the same vendor family.
      * Cross-vendor follow is not supported.
+     * @param MotorAligment Only works on TalonFX
+     * @param leader - Leader motor 
+     */
+
+    public void follow(MotorWrapper leader, MotorAlignmentValue MotorAligment) {
+        if (leader == null) {
+            throw new IllegalArgumentException("Leader cannot be null");
+        }
+
+        // Same-type follow
+        if (this.type == MotorType.TALONFX && leader.type == MotorType.TALONFX) {
+            talonFX.setControl(new Follower(leader.talonFX.getDeviceID(), MotorAligment));
+            return;
+        }
+        if ((this.type == MotorType.TALONSRX || this.type == MotorType.VICTORSPX)
+                && (leader.type == MotorType.TALONSRX || leader.type == MotorType.VICTORSPX)) {
+            BaseMotorController leaderBase = (BaseMotorController) leader.getRawController();
+            if (this.type == MotorType.TALONSRX) {
+                talonSRX.follow(leaderBase);
+            } else {
+                victorSPX.follow(leaderBase);
+            }
+            return;
+        }
+        if (this.type == MotorType.SPARKMAX && leader.type == MotorType.SPARKMAX) {
+            SparkMaxConfig cf = new SparkMaxConfig();
+            cf.follow(leader.sparkMax.getDeviceId());
+            sparkMax.configure(cf, ResetMode.kResetSafeParameters, PersistMode.kPersistParameters);
+            return;
+        }
+
+        throw new IllegalStateException("Cross-vendor follow not supported: " + this.type + " -> " + leader.type);
+    }
+ /**
+     * Make this motor follow a leader. Follows within the same vendor family.
+     * Cross-vendor follow is not supported.
      */
     public void follow(MotorWrapper leader) {
         if (leader == null) {
@@ -215,7 +256,7 @@ public class MotorWrapper {
 
         // Same-type follow
         if (this.type == MotorType.TALONFX && leader.type == MotorType.TALONFX) {
-            talonFX.setControl(new Follower(leader.talonFX.getDeviceID(), false));
+            talonFX.setControl(new Follower(leader.talonFX.getDeviceID(), null));
             return;
         }
         if ((this.type == MotorType.TALONSRX || this.type == MotorType.VICTORSPX)
@@ -250,7 +291,6 @@ public class MotorWrapper {
         return victorSPX;
     }
 
-    // Rename-friendly access for REV SparkMax
     public SparkMax asSparkMax() {
         return sparkMax;
     }

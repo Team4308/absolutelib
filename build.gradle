@@ -8,7 +8,7 @@ plugins {
 }
 
 // WPILib version
-ext.wpilibVersion = "2025.1.1"
+ext.wpilibVersion = "2026.1.1"
 
 // Repositories
 repositories {
@@ -21,7 +21,7 @@ repositories {
   maven { url "https://frcmaven.wpi.edu/artifactory/littletonrobotics-mvn-release/" } // AdvantageKit
   maven {url "https://maven.photonvision.org/repository/internal"} // Photon Vision
   maven {url "https://maven.photonvision.org/repository/snapshots"}
-  maven {url "https://broncbotz3481.github.io/YAGSL-Lib/yagsl/repos"} // YAGSL
+  maven {url "https://yet-another-software-suite.github.io/YAGSL/releases/"} // YAGSL
 
 }
 
@@ -56,13 +56,14 @@ dependencies {
     implementation "edu.wpi.first.wpiunits:wpiunits-java:$wpilibVersion"
     implementation "edu.wpi.first.apriltag:apriltag-java:$wpilibVersion"
 
-    // CTRE Phoenix
-    implementation "com.ctre.phoenix:api-java:5.33.1"
-    implementation "com.ctre.phoenix:wpiapi-java:5.33.1"
-    implementation "com.ctre.phoenix6:wpiapi-java:25.4.0"
+    // Phoenix 5
+    implementation "com.ctre.phoenix:api-java:5.36.0"
+    implementation "com.ctre.phoenix:wpiapi-java:5.36.0"
 
+    // Phoenix 6
+    implementation "com.ctre.phoenix6:wpiapi-java:26.1.0"
     // REV
-    implementation "com.revrobotics.frc:REVLib-java:2025.0.0"
+    implementation "com.revrobotics.frc:REVLib-java:2026.0.1"
 
     // JSON
     implementation "com.fasterxml.jackson.core:jackson-annotations:2.17.2"
@@ -75,20 +76,20 @@ dependencies {
     implementation "org.slf4j:slf4j-simple:2.0.9"
 
     // AdvantageKit Logger
-    implementation "org.littletonrobotics.akit:akit-java:4.1.2"
+    implementation "org.littletonrobotics.akit:akit-java:26.0.0"
 
     // QuickBuf
     implementation 'us.hebi.quickbuf:quickbuf-runtime:1.3.3'
 
     // PathPlanner 
-    implementation "com.pathplanner.lib:PathplannerLib-java:2025.2.7"
+    implementation "com.pathplanner.lib:PathplannerLib-java:2026.1.2"
 
     // PhotonVision
-    implementation "org.photonvision:photonlib-java:v2025.3.1-rc3"
-    implementation "org.photonvision:photontargeting-java:v2025.3.1-rc3"
+    implementation "org.photonvision:photonlib-java:v2026.1.1-rc-3"
+    implementation "org.photonvision:photontargeting-java:v2026.1.1-rc-3"
 
     // Swerve 
-    implementation "swervelib:YAGSL-java:2025.8.0"
+    implementation "swervelib:YAGSL-java:2026.1.14"
 
     //  Testing
     testImplementation 'org.junit.jupiter:junit-jupiter:5.10.1'
