@@ -192,7 +192,7 @@ public class ShotCandidate implements Comparable<ShotCandidate> {
     }
     
     /**
-     * Checks if this is a low arc shot (pitch < 30 degrees).
+     * Checks if this is a low arc shot (pitch &lt; 30 degrees).
      */
     public boolean isLowArc() {
         return arcType == ArcType.LOW_ARC || getPitchAngleDegrees() < 30;
