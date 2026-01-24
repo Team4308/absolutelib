@@ -102,7 +102,7 @@ copy /Y "site\javadoc-theme.css" "%OUT_DIR%\docs\javadoc\stylesheet.css" >nul
 
 REM 5) Copy vendordep JSON into lib
 mkdir "%OUT_DIR%\lib" 2>nul
-copy /Y "absolutelib.json" "%OUT_DIR%\lib\absolutelib.json" >nul
+copy /Y "./absolutelib.json" "%OUT_DIR%\lib\absolutelib.json" >nul
 
 echo.
 echo Staged site contents into: %OUT_DIR%

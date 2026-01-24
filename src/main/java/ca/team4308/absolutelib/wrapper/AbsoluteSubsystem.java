@@ -41,6 +41,7 @@ public abstract class AbsoluteSubsystem extends SubsystemBase {
     private static boolean loggerAvailable = false;
     private static boolean loggerChecked = false;
 
+    @SuppressWarnings("unused")
     private static boolean isLoggerAvailable() {
         if (!loggerChecked) {
             loggerChecked = true;

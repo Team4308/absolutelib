@@ -38,6 +38,13 @@ AbsoluteLib is an FRC utility library for Team 4308. It provides reusable subsys
 - `Vision`: PhotonVision wrapper + multi-camera support for pose estimation
 - `leds/*`: Addressable LED patterns and simulation helpers
 
+### Trajectory System (NEW for 2026)
+- `TrajectorySolver`: Complete trajectory solving for turret shooters
+- `FlywheelGenerator`: Automated flywheel configuration generation and optimization
+- `FlywheelSimulator`: Physics-based flywheel and ball exit velocity simulation
+- `ProjectileMotion`: Projectile physics with air resistance and spin
+- `GamePieces`: Predefined game pieces including 2026 REBUILT ball
+
 ### Example Code
   - Under the folder ./example/example-2026 you can find full robot code for all subsystems + simulation.
 
@@ -286,6 +293,179 @@ public class LedLogic {
 ```
 
 (Your `Leds` class should call `pattern.applyTo(view)` and push the buffer each loop.)
+
+---
+
+# Trajectory System (2026 REBUILT)
+
+## Quick Start
+
+### Basic Shot Calculation
+```java
+import ca.team4308.absolutelib.math.trajectories.*;
+
+// Create solver for 2026 game
+TrajectorySolver solver = TrajectorySolver.forGame2026();
+
+// Define shot parameters
+ShotInput input = ShotInput.builder()
+    .shooterPositionMeters(1.0, 2.0, 0.5)  // x, y, z
+    .targetPositionMeters(5.0, 5.0, 2.5)   // Target location
+    .shotPreference(ShotInput.ShotPreference.FASTEST)
+    .build();
+
+// Get best shot angle
+double pitchDegrees = solver.solveBestPitchDegrees(input);
+System.out.println("Shoot at: " + pitchDegrees + "°");
+```
+
+### Multi-Candidate Shot Selection
+```java
+// Find all possible shots sorted by confidence
+ShotCandidateList candidates = solver.findAllCandidates(input);
+
+// Get the fastest shot
+Optional<ShotCandidate> fastest = candidates.getFastest();
+if (fastest.isPresent()) {
+    ShotCandidate shot = fastest.get();
+    System.out.println("Pitch: " + shot.getPitchAngleDegrees() + "°");
+    System.out.println("Velocity: " + shot.getRequiredVelocityMps() + " m/s");
+    System.out.println("Time of Flight: " + shot.getTimeOfFlightSeconds() + "s");
+}
+
+// Or get shots by preference
+candidates.getMostAccurate();    // Most accurate shot
+candidates.getMostStable();      // Most stable angle
+candidates.getMaxClearance();    // Highest arc for obstacles
+candidates.getBestHighArc();     // Best high-arc shot
+candidates.getBestLowArc();      // Best low-arc shot
+```
+
+### Legacy API (Full Trajectory Result)
+```java
+TrajectoryResult result = solver.solve(input);
+
+if (result.isSuccess()) {
+    System.out.println("Pitch: " + result.getPitchAngleDegrees() + "°");
+    System.out.println("RPM: " + result.getRecommendedRpm());
+    System.out.println("Flywheel: " + result.getFlywheelConfig().getName());
+    System.out.println("Confidence: " + result.getConfidence() + "%");
+}
+```
+
+## Flywheel Configuration
+
+### Generate Optimal Flywheel
+```java
+import ca.team4308.absolutelib.math.trajectories.flywheel.*;
+import ca.team4308.absolutelib.math.trajectories.gamepiece.*;
+
+GamePiece ball = GamePieces.REBUILT_2026_BALL;
+FlywheelGenerator generator = new FlywheelGenerator(ball);
+
+// Generate and evaluate configurations for target velocity
+double targetVelocity = 15.0; // m/s
+FlywheelGenerator.GenerationResult result = 
+    generator.generateAndEvaluate(targetVelocity);
+
+// Get best configuration
+FlywheelConfig best = result.bestConfig.config;
+System.out.println("Best: " + best.toString());
+System.out.println("Score: " + result.bestConfig.score);
+```
+
+### Custom Flywheel Configuration
+```java
+FlywheelConfig custom = FlywheelConfig.builder()
+    .name("Custom Shooter")
+    .arrangement(FlywheelConfig.WheelArrangement.DUAL_OVER_UNDER)
+    .wheelDiameterInches(4.0)
+    .wheelWidthInches(2.0)
+    .material(WheelMaterial.GREEN_COMPLIANT)
+    .compressionRatio(0.12)
+    .wheelCount(2)
+    .motor(FRCMotors.KRAKEN_X60)
+    .motorsPerWheel(1)
+    .gearRatio(1.0)
+    .build();
+
+// Simulate at specific RPM
+FlywheelSimulator simulator = new FlywheelSimulator(custom, ball);
+FlywheelSimulator.SimulationResult sim = simulator.simulateAtRpm(5000);
+
+System.out.println("Exit Velocity: " + sim.exitVelocityMps + " m/s");
+System.out.println("Ball Spin: " + sim.ballSpinRpm + " RPM");
+System.out.println("Achievable: " + sim.isAchievable);
+```
+
+### Preset Configurations
+```java
+// Use proven preset configurations
+List<FlywheelConfig> presets = generator.generatePresets();
+FlywheelGenerator.GenerationResult presetResults = 
+    generator.evaluatePresets(targetVelocity);
+
+// Presets include:
+// - Classic Dual 4-inch
+// - High-Speed Single
+// - Compact NEO Dual
+// - High-Grip Dual
+// - Differential Spin
+// - Triple Stack
+```
+
+## Game Piece Specifications
+
+### 2026 REBUILT Ball
+```java
+GamePiece ball = GamePieces.REBUILT_2026_BALL;
+// Diameter: 5.91 inches
+// Mass: 0.448-0.5 lbs (avg 0.474 lbs)
+// Material: High-density foam
+// Shape: Sphere
+```
+
+### Other Supported Game Pieces
+```java
+GamePieces.CRESCENDO_2024_NOTE;           // 2024 Note (Ring)
+GamePieces.RAPID_REACT_2022_CARGO;        // 2022 Cargo
+GamePieces.INFINITE_RECHARGE_POWER_CELL;  // 2020 Power Cell
+GamePieces.DEEP_SPACE_2019_CARGO;         // 2019 Cargo
+// ... and more
+
+// Get by year
+GamePiece piece = GamePieces.getByYear(2022);
+```
+
+## Advanced Configuration
+
+### Custom Solver Settings
+```java
+TrajectorySolver.SolverConfig config = TrajectorySolver.SolverConfig.builder()
+    .minPitchDegrees(10)
+    .maxPitchDegrees(70)
+    .angleTolerance(0.5)
+    .rpmTolerance(50)
+    .build();
+
+TrajectorySolver solver = TrajectorySolver.builder()
+    .gamePiece(GamePieces.REBUILT_2026_BALL)
+    .config(config)
+    .build();
+```
+
+### Shot Preferences
+```java
+ShotInput input = ShotInput.builder()
+    .shooterPositionMeters(x, y, z)
+    .targetPositionMeters(tx, ty, tz)
+    .shotPreference(ShotInput.ShotPreference.FASTEST)      // Minimize time of flight
+    // .shotPreference(ShotInput.ShotPreference.MOST_ACCURATE)  // Best accuracy
+    // .shotPreference(ShotInput.ShotPreference.MOST_STABLE)    // Most stable angle
+    // .shotPreference(ShotInput.ShotPreference.HIGH_CLEARANCE) // Avoid obstacles
+    // .shotPreference(ShotInput.ShotPreference.MIN_VELOCITY)   // Minimum velocity
+    .build();
+```
 
 ---
 

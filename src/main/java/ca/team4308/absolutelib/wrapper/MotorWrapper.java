@@ -354,14 +354,14 @@ public class MotorWrapper {
     public void setOpenLoopRamp(double seconds) {
         switch (type) {
             case TALONFX -> {
-
+                DriverStation.reportError("MotorWrapper: TALONFX doesnt support Open-Loop-Ramp", true);
             }
             case TALONSRX ->
                 talonSRX.configOpenloopRamp(seconds);
             case VICTORSPX ->
                 victorSPX.configOpenloopRamp(seconds);
             case SPARKMAX ->
-                DriverStation.reportError("MotorWrapper: SparkMax doesnt support Open-Loop-Ramp", false);
+                DriverStation.reportError("MotorWrapper: SparkMax doesnt support Open-Loop-Ramp", true);
         }
     }
 

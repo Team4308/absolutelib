@@ -1,5 +1,17 @@
 # Changelog for AbsoluteLib V2
 
+
+## 1.2.4
+
+- SysID For all (mech) Subsystems
+-  2026 Ports
+- New math helpers 
+- full trajectorie calc
+
+## 1.2.3 
+
+- Moved to 2026
+
 ## 1.2.2
 
 - Simulation works on Pivot!

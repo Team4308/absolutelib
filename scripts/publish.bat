@@ -4,7 +4,11 @@ setlocal enabledelayedexpansion
 :: ========================================================
 :: PROMPT FOR NEW VERSION
 :: ========================================================
-set /p NEW_VERSION="Enter new version (e.g. 1.0.7): "
+echo Please make sure to update the Gradle.properties file first before running this script.
+color 2
+pause
+color 1
+set /p NEW_VERSION="Enter new version (In this format x.x.x): "
 
 :: ========================================================
 :: UPDATE VENDOR JSON
@@ -87,5 +91,12 @@ del "%TEMP_TREE%"* >nul 2>&1
 echo ------------------------------------
 echo Deployment complete!
 echo Local backup stored at: %CACHE_PATH%
+echo ------------------------------------
+
+
+
+echo ------------------------------------
+echo Calling site deployment script...
+call scripts\deploy_site.bat
 echo ------------------------------------
 pause
