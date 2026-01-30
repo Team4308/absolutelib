@@ -17,6 +17,18 @@ AbsoluteLib is an FRC utility library for Team 4308. It provides reusable subsys
    ```text
    https://team4308.github.io/absolutelib/lib/absolutelib.json
    ```
+ Before Building please install all required libarys
+ - Rev Hardware Client
+ - AdvantageKit
+ - PathPlannerLib
+ - Phoenix6-Replay (6 And 5)
+ - PhotonLib
+ - REVLib
+ - Studica
+ - ThriftyLzib
+ - YAGSL
+
+Your Build WILL Fail if you dont add these venderops.
 
 ---
 
