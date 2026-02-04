@@ -13,22 +13,22 @@ import edu.wpi.first.wpilibj2.command.SubsystemBase;
 public class ExampleArm extends AbsoluteSubsystem {
 
     private final Arm arm;
-    
+
     private final Arm.Joint shoulder;
     private final Arm.Joint elbow;
 
     public ExampleArm() {
         super();
         this.arm = new Arm();
-        MotorWrapper shoulderMotor = new MotorWrapper(MotorType.SPARKMAX, 30);
+        MotorWrapper shoulderMotor = new MotorWrapper(MotorType.TALONFX, 30);
         // Use drumDiameter = 1/PI so getPositionMeters() returns rotations
         EncoderWrapper shoulderEncoder = EncoderWrapper.ofMechanismRotations(
                 shoulderMotor::getPosition,
                 (val) -> {
-                    if (shoulderMotor.isSparkMax()) {
-                        shoulderMotor.asSparkMax().getEncoder().setPosition(val);
-                
-                    }},
+                    if (shoulderMotor.isTalonFX()) {
+                        shoulderMotor.asTalonFX().setPosition(val);
+                    }
+                },
                 1.0 / Math.PI
         );
 
@@ -38,23 +38,23 @@ public class ExampleArm extends AbsoluteSubsystem {
                 .metersToRadians(2 * Math.PI) // Rotations -> Radians
                 .linkLengthMeters(1.0)
                 .build();
-        
-        
+
         this.shoulder = arm.addJoint(shoulderMotor, null, shoulderEncoder, shoulderConfig);
-        
+
         // PID And FF Tuning
         this.shoulder.setPositionPID(32, 0, 0);
         this.shoulder.setHoldPID(32, 0, 0);
         this.shoulder.setFeedforwardGains(0.1, 0.1, 0.1, 0.1);
 
-        MotorWrapper elbowMotor = new MotorWrapper(MotorType.SPARKMAX, 32);
+        MotorWrapper elbowMotor = new MotorWrapper(MotorType.TALONFX, 32);
         EncoderWrapper elbowEncoder = EncoderWrapper.ofMechanismRotations(
                 elbowMotor::getPosition,
                 (val) -> {
-                    if (elbowMotor.isSparkMax()) {
-                        elbowMotor.asSparkMax().getEncoder().setPosition(val);
-                
-                    }},
+                    if (elbowMotor.isTalonFX()) {
+                        elbowMotor.asTalonFX().setPosition(val);
+
+                    }
+                },
                 1.0 / Math.PI
         );
 
@@ -64,7 +64,6 @@ public class ExampleArm extends AbsoluteSubsystem {
                 .metersToRadians(2 * Math.PI)
                 .linkLengthMeters(0.8)
                 .build();
-                
 
         this.elbow = arm.addJoint(elbowMotor, null, elbowEncoder, elbowConfig);
 
@@ -74,7 +73,6 @@ public class ExampleArm extends AbsoluteSubsystem {
         this.elbow.setFeedforwardGains(0.1, 0.1, 0.1, 0.1);
 
         arm.enableSimulation(true);
-        
 
         arm.initialize();
     }
@@ -100,7 +98,14 @@ public class ExampleArm extends AbsoluteSubsystem {
 
     @Override
     public Sendable log() {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'log'");
+        return builder -> {
+            builder.setSmartDashboardType("ExampleArm");
+            builder.addDoubleProperty("ShoulderAngleDeg",
+                    () -> Math.toDegrees(shoulder.getAngleRadians()), null);
+            builder.addDoubleProperty("ElbowAngleDeg",
+                    () -> Math.toDegrees(elbow.getAngleRadians()), null);
+            builder.addBooleanProperty("ShoulderAtTarget", shoulder::atTarget, null);
+            builder.addBooleanProperty("ElbowAtTarget", elbow::atTarget, null);
+        };
     }
 }

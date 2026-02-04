@@ -1,6 +1,6 @@
 # AbsoluteLib
 
-AbsoluteLib is an FRC utility library for Team 4308. It provides reusable subsystems + wrappers with a focus on “same code in real + sim”.
+AbsoluteLib is an FRC utility library for Team 4308. It provides reusable subsystems + wrappers with a focus on "same code in real + sim".
 
 - Vendor install: `https://team4308.github.io/absolutelib/lib/absolutelib.json`
 - Docs site: `https://team4308.github.io/absolutelib/`
@@ -17,40 +17,45 @@ AbsoluteLib is an FRC utility library for Team 4308. It provides reusable subsys
    ```text
    https://team4308.github.io/absolutelib/lib/absolutelib.json
    ```
- Before Building please install all required libarys
- - Rev Hardware Client
- - AdvantageKit
- - PathPlannerLib
- - Phoenix6-Replay (6 And 5)
- - PhotonLib
- - REVLib
- - Studica
- - ThriftyLzib
- - YAGSL
 
-Your Build WILL Fail if you dont add these venderops.
+### Required Vendor Dependencies
+Before building, install all required libraries:
+- Rev Hardware Client
+- AdvantageKit
+- PathPlannerLib
+- Phoenix6-Replay (6 and 5)
+- PhotonLib
+- REVLib
+- Studica
+- ThriftyLib
+- YAGSL
+
+> **Note:** Your build WILL fail if you don't add these vendordeps.
 
 ---
 
-## What you get
+## What You Get
 
 ### Wrappers
-- `MotorWrapper`: TalonFX (Phoenix6), TalonSRX/VictorSPX (Phoenix5), SparkMax (REV) unified API.
-- `EncoderWrapper`: unified encoder access (ex: CANCoder, etc).
+- `MotorWrapper`: TalonFX (Phoenix6), TalonSRX/VictorSPX (Phoenix5), SparkMax (REV) unified API
+- `EncoderWrapper`: Unified encoder access (CANCoder, SparkMax encoder, etc.)
 
 ### Subsystems
-- `Pivot`: arm/wrist joint (PID + FF, optional “Smart Motion” path)
-- `Elevator`: linear elevator control (PID + FF, optional “Smart Motion” path)
+- `Arm`: Multi-joint arm with IK support (2+ DOF arms with inverse kinematics)
+- `Pivot`: Single-joint rotational control (PID + FF, optional Smart Motion)
+- `Elevator`: Linear elevator control (PID + FF, optional Smart Motion)
+- `EndEffector`: Base class for intakes, claws, and manipulators
 
 ### Simulation
-- `PivotSimulation`: physics sim via `SingleJointedArmSim`
-- `ElevatorSimulation`: physics sim via `ElevatorSim`
+- `ArmSimulation`: Physics sim for multi-DOF arms
+- `PivotSimulation`: Physics sim via `SingleJointedArmSim`
+- `ElevatorSimulation`: Physics sim via `ElevatorSim`
 
 ### Vision / LEDs
 - `Vision`: PhotonVision wrapper + multi-camera support for pose estimation
 - `leds/*`: Addressable LED patterns and simulation helpers
 
-### Trajectory System (NEW for 2026)
+### Trajectory System (2026 REBUILT)
 - `TrajectorySolver`: Complete trajectory solving for turret shooters
 - `FlywheelGenerator`: Automated flywheel configuration generation and optimization
 - `FlywheelSimulator`: Physics-based flywheel and ball exit velocity simulation
@@ -58,198 +63,245 @@ Your Build WILL Fail if you dont add these venderops.
 - `GamePieces`: Predefined game pieces including 2026 REBUILT ball
 
 ### Example Code
-  - Under the folder ./example/example-2026 you can find full robot code for all subsystems + simulation.
-
+Under `./example/example-2026-Imported` you can find full robot code for all subsystems + simulation.
 
 ---
 
-# Full Simulation: How it works
+## Full Simulation: How It Works
 
-AbsoluteLib simulations are designed around this pattern:
+AbsoluteLib simulations follow this pattern:
 
-1. **Subsystem computes output** (PID + FF) → produces a voltage or percent output.
-2. Subsystem **applies output to motor** (real hardware OR sim state).
-3. In SIM: subsystem also passes the *same computed voltage* into the simulation object.
+1. **Subsystem computes output** (PID + FF) → produces a voltage or percent output
+2. Subsystem **applies output to motor** (real hardware OR sim state)
+3. In SIM: subsystem passes the *same computed voltage* into the simulation object
 4. Simulation updates position/velocity and writes them back into:
-   - encoder sim position
-   - motor controller sim state (when supported)
+   - Encoder sim position
+   - Motor controller sim state (when supported)
 
-That is why in SIM you typically call:
+In simulation, you typically call:
 - `simulation.setVoltage(lastAppliedVoltage)` (or equivalent)
 - `simulation.periodic()` (or `simUpdate(dt)` depending on implementation)
 
 ---
 
-# Example Robot Setup (Structure)
+## Subsystem Examples
 
-Typical places to update simulation:
-- `Subsystem.periodic()` (already done in Pivot)
-- or `Robot.simulationPeriodic()` if you want centralized sim ticking
-
-**If you centralize**: call `subsystem.periodic()` like normal AND call simulation tick methods there.
-
----
-
-# MotorWrapper (standalone)
+### MotorWrapper (Standalone)
 
 ```java
 import ca.team4308.absolutelib.wrapper.MotorWrapper;
 import com.revrobotics.spark.SparkMax;
 
 public class ShooterIO {
-  private final MotorWrapper leader = new MotorWrapper(MotorWrapper.MotorType.TALONFX, 10);
-  private final MotorWrapper feeder = MotorWrapper.sparkMax(11, SparkMax.MotorType.kBrushless);
+    private final MotorWrapper leader = new MotorWrapper(MotorWrapper.MotorType.TALONFX, 10);
+    private final MotorWrapper feeder = MotorWrapper.sparkMax(11, SparkMax.MotorType.kBrushless);
 
-  public void runVolts(double volts) {
-    leader.setVoltage(volts);
-  }
+    public void runVolts(double volts) {
+        leader.setVoltage(volts);
+    }
 
-  public void stop() {
-    leader.stop();
-    feeder.stop();
-  }
+    public void stop() {
+        leader.stop();
+        feeder.stop();
+    }
 }
 ```
 
 ---
 
+### Pivot Subsystem
 
+Single-joint rotational subsystem with PID control and simulation.
 
-
-# Pivot Subsystem Example Code
-
-## Pivot config + subsystem
 ```java
 import ca.team4308.absolutelib.subsystems.Pivot;
+import ca.team4308.absolutelib.subsystems.simulation.PivotSimulation;
 import ca.team4308.absolutelib.wrapper.MotorWrapper;
 import ca.team4308.absolutelib.wrapper.EncoderWrapper;
-import ca.team4308.absolutelib.subsystems.simulation.PivotSimulation;
 import edu.wpi.first.math.system.plant.DCMotor;
 
 public class Wrist extends Pivot {
-  public Wrist() {
-    super(new Pivot.Config()
-      .withLeader(new MotorWrapper(MotorWrapper.MotorType.TALONFX, 15))
-      .withEncoder(EncoderWrapper.canCoder(20, 0.0)) // CAN id + offset (your wrapper API)
+    public Wrist() {
+        super(new Pivot.Config()
+            .withLeader(new MotorWrapper(MotorWrapper.MotorType.TALONFX, 15))
+            .withEncoder(EncoderWrapper.canCoder(20, 1.0))
+            .gear(50.0)
+            .limits(-90, 90)
+            .tolerance(1.0)
+            .pid(0.02, 0.0, 0.0)
+            .ff(0.0, 0.15, 0.0, 0.0)
+            .enableSimulation(true)
+            .withSimulation(new PivotSimulation.Config()
+                .gearbox(DCMotor.getFalcon500(1), 1)
+                .gearRatio(50.0)
+                .armLength(0.30)
+                .armMass(2.0)
+                .limits(Math.toRadians(-90), Math.toRadians(90))
+                .startAngle(0.0)
+                .gravity(true)
+            )
+        );
+    }
 
-      .gear(50.0)
-      .limits(-90, 90)
-      .tolerance(1.0)
-
-      // PID + FF
-      .pid(0.02, 0.0, 0.0)
-      .ff(0.0, 0.15, 0.0, 0.0)
-
-      // Simulation
-      .enableSimulation(true)
-      .withSimulation(new PivotSimulation.Config()
-        .gearbox(DCMotor.getFalcon500(1), 1)
-        .gearRatio(50.0)
-        .armLength(0.30)
-        .armMass(2.0)
-        .limits(Math.toRadians(-90), Math.toRadians(90))
-        .startAngle(0.0)
-        .gravity(true)
-      )
-    );
-  }
-
-  public void goToStow() { setTargetAngleDeg(0.0); }
-  public void goToScore() { setTargetAngleDeg(45.0); }
+    public void goToStow() { setTargetAngleDeg(0.0); }
+    public void goToScore() { setTargetAngleDeg(45.0); }
 }
 ```
 
-## What makes it “full sim”
-- In `Pivot.periodic()` AbsoluteLib already does:
-  - compute PID+FF voltage
-  - `leader.setVoltage(volts)`
-  - in SIM: `simulation.setVoltage(lastAppliedVoltage)` then `simulation.periodic()`
-- `PivotSimulation` writes the arm position back into encoder sim and motor sim state.
+In `Pivot.periodic()`, AbsoluteLib:
+- Computes PID+FF voltage
+- Calls `leader.setVoltage(volts)`
+- In SIM: `simulation.setVoltage(lastAppliedVoltage)` then `simulation.periodic()`
 
 ---
 
-# Elevator Subsystem (FULL working example + SIM)
+### Elevator Subsystem
 
-## Elevator config + subsystem
-This example assumes you create in your robot project a minimal `ElevatorSubsystem` wrapper that owns both the `Elevator` and the `ElevatorSimulation`.
+Linear elevator with profiled PID control.
 
 ```java
 import ca.team4308.absolutelib.subsystems.Elevator;
+import ca.team4308.absolutelib.subsystems.simulation.ElevatorSimulation;
 import ca.team4308.absolutelib.wrapper.MotorWrapper;
 import ca.team4308.absolutelib.wrapper.EncoderWrapper;
-import ca.team4308.absolutelib.subsystems.simulation.ElevatorSimulation;
 import edu.wpi.first.math.system.plant.DCMotor;
-import edu.wpi.first.wpilibj.RobotBase;
 
 public class ElevatorSubsystem {
-  private final MotorWrapper leader = new MotorWrapper(MotorWrapper.MotorType.TALONFX, 31);
+    private final Elevator elevator;
 
-  private final EncoderWrapper encoder =
-      EncoderWrapper.canCoder(32, /*gearRatio*/ 10.0, /*cpr*/ Elevator.DEFAULT_CANCODER_CPR, /*drumDiameter*/ 0.04);
+    public ElevatorSubsystem() {
+        MotorWrapper leader = new MotorWrapper(MotorWrapper.MotorType.SPARKMAX, 10);
+        EncoderWrapper encoder = EncoderWrapper.ofMechanismRotations(
+            leader::getPosition,
+            (val) -> leader.asSparkMax().getEncoder().setPosition(val),
+            0.05 // drum diameter meters
+        );
 
-  private final Elevator elevator;
+        Elevator.Config config = new Elevator.Config()
+            .withLeader(leader)
+            .withEncoder(encoder)
+            .gear(10.0)
+            .drumRadius(0.02)
+            .limits(0.0, 1.2)
+            .tolerance(0.02)
+            .pid(5.0, 0.0, 0.1)
+            .ff(0.0, 0.5, 0.0, 0.0)
+            .motion(1.0, 2.0);
 
-  private final ElevatorSimulation sim; // created only if sim enabled
+        // Simulation config
+        ElevatorSimulation.ElevatorSimulationConfig simConfig = 
+            new ElevatorSimulation.ElevatorSimulationConfig();
+        simConfig.leader = DCMotor.getNEO(2);
+        simConfig.gearing = 10.0;
+        simConfig.carriageMassKg = 5.0;
+        simConfig.drumRadiusMeters = 0.02;
+        simConfig.minHeightMeters = 0.0;
+        simConfig.maxHeightMeters = 1.2;
+        simConfig.simulateGravity = true;
 
-  public ElevatorSubsystem() {
-    var cfg = Elevator.ElevatorConfig.builder()
-        .minHeightMeters(0.0)
-        .maxHeightMeters(1.2)
-        .gearRatio(10.0)
-        .drumDiameterMeters(0.04)
-        .maxVelocityMetersPerSec(1.0)
-        .maxAccelerationMetersPerSecSq(2.0)
-        .toleranceMeters(0.02)
-        .enableSimulation(true)
-        .build();
-
-    elevator = new Elevator(leader, null, encoder, cfg);
-
-    if (RobotBase.isSimulation() && cfg.enableSimulation) {
-      ElevatorSimulation.ElevatorSimulationConfig simCfg = new ElevatorSimulation.ElevatorSimulationConfig();
-      simCfg.leader = DCMotor.getFalcon500(1);
-      simCfg.gearing = cfg.gearRatio;
-      simCfg.carriageMassKg = 8.0;
-      simCfg.minHeightMeters = cfg.minHeightMeters;
-      simCfg.maxHeightMeters = cfg.maxHeightMeters;
-      simCfg.drumRadiusMeters = cfg.drumDiameterMeters / 2.0;
-      simCfg.simulateGravity = true;
-      simCfg.startHeightMeters = 0.0;
-
-      sim = new ElevatorSimulation("Elevator", simCfg, elevator);
-      sim.initialize();
-    } else {
-      sim = null;
+        config.withSimulation(simConfig);
+        
+        elevator = new Elevator(config);
+        elevator.initialize();
     }
-  }
 
-  public void setHeight(double meters) {
-    elevator.setPosition(meters);
-  }
-
-  public void periodic() {
-    elevator.computeOutputPercent(); // main control loop
-
-    // Simulation tick: IMPORTANT
-    if (sim != null) {
-      // If you change ElevatorSimulation later to use subsystem-computed volts,
-      // mirror Pivot’s pattern: sim.setInputVoltage(calculatedVolts).
-      sim.simUpdate(0.02);
+    public Command moveToHeight(double meters) {
+        return elevator.setPosition(meters);
     }
-  }
 }
 ```
 
-### Note about Elevator sim voltage source
-Right now your `ElevatorSimulation` reads:
+---
+
+### Arm Subsystem (Multi-Joint with IK)
+
+Multi-DOF arm with inverse kinematics for end-effector positioning.
+
 ```java
-appliedVoltage = realElevator.getLeaderMotor().getAppliedVoltage();
+import ca.team4308.absolutelib.subsystems.Arm;
+import ca.team4308.absolutelib.wrapper.MotorWrapper;
+import ca.team4308.absolutelib.wrapper.EncoderWrapper;
+
+public class ExampleArm {
+    private final Arm arm;
+    private final Arm.Joint shoulder;
+    private final Arm.Joint elbow;
+
+    public ExampleArm() {
+        arm = new Arm();
+
+        // Configure shoulder joint
+        MotorWrapper shoulderMotor = new MotorWrapper(MotorWrapper.MotorType.SPARKMAX, 30);
+        EncoderWrapper shoulderEncoder = EncoderWrapper.ofMechanismRotations(
+            shoulderMotor::getPosition, 
+            (val) -> shoulderMotor.asSparkMax().getEncoder().setPosition(val),
+            1.0 / Math.PI
+        );
+
+        Arm.JointConfig shoulderConfig = Arm.JointConfig.builder()
+            .minAngleRad(-Math.PI / 2)
+            .maxAngleRad(Math.PI / 2)
+            .metersToRadians(2 * Math.PI)
+            .linkLengthMeters(1.0)
+            .build();
+
+        shoulder = arm.addJoint(shoulderMotor, null, shoulderEncoder, shoulderConfig);
+        shoulder.setPositionPID(32, 0, 0);
+        shoulder.setFeedforwardGains(0.1, 0.1, 0.1, 0.1);
+
+        // Configure elbow joint (similar pattern)
+        // ...
+
+        arm.enableSimulation(true);
+        arm.initialize();
+    }
+
+    // Move to XY position using Inverse Kinematics
+    public Command moveToPoint(double x, double y) {
+        return Commands.runOnce(() -> arm.setGoalPose(x, y));
+    }
+
+    // Move joints to specific angles
+    public Command moveToAngles(double shoulderDeg, double elbowDeg) {
+        return Commands.runOnce(() -> 
+            arm.setTargetAngles(Math.toRadians(shoulderDeg), Math.toRadians(elbowDeg)));
+    }
+}
 ```
-If you want the same behavior as Pivot (use “PID+FF total voltage”), you should adapt Elevator to track and expose the computed voltage and feed that into sim (same flow Pivot uses).
 
 ---
 
-# Vision (PhotonVision + pose update)
+### EndEffector Subsystem
+
+Base class for intakes, claws, and manipulators.
+
+```java
+import ca.team4308.absolutelib.subsystems.EndEffector;
+import ca.team4308.absolutelib.wrapper.MotorWrapper;
+
+public class Intake {
+    private final EndEffector endEffector;
+
+    public Intake() {
+        MotorWrapper motor = new MotorWrapper(MotorWrapper.MotorType.SPARKMAX, 50);
+        
+        EndEffector.Config config = new EndEffector.Config()
+            .withLeader(motor)
+            .inverted(false);
+
+        endEffector = new EndEffector(config);
+        endEffector.initialize();
+    }
+
+    public void intake() { endEffector.start(0.8); }
+    public void outtake() { endEffector.start(-0.6); }
+    public void stop() { endEffector.stop(); }
+}
+```
+
+---
+
+### Vision (PhotonVision + Pose Update)
 
 ```java
 import ca.team4308.absolutelib.vision.Vision;
@@ -260,33 +312,33 @@ import edu.wpi.first.math.geometry.Rotation3d;
 import edu.wpi.first.math.geometry.Translation3d;
 
 public class VisionSubsystem {
-  private final Vision vision;
+    private final Vision vision;
 
-  public VisionSubsystem(SwerveDrive drive) {
-    AprilTagFieldLayout layout = AprilTagFieldLayout.loadField(AprilTagFields.k2025Reefscape);
+    public VisionSubsystem(SwerveDrive drive) {
+        AprilTagFieldLayout layout = AprilTagFieldLayout.loadField(AprilTagFields.k2025Reefscape);
 
-    var frontCam = new Vision.VisionCamera(
-      "FrontCam",
-      layout,
-      new Rotation3d(0, 0, 0),
-      new Translation3d(0.30, 0.0, 0.20),
-      VecBuilder.fill(0.8, 0.8, 2.0),
-      VecBuilder.fill(0.3, 0.3, 1.0)
-    );
+        var frontCam = new Vision.VisionCamera(
+            "FrontCam",
+            layout,
+            new Rotation3d(0, 0, 0),
+            new Translation3d(0.30, 0.0, 0.20),
+            VecBuilder.fill(0.8, 0.8, 2.0),
+            VecBuilder.fill(0.3, 0.3, 1.0)
+        );
 
-    vision = new Vision(drive::getPose, drive.field, layout, frontCam);
-  }
+        vision = new Vision(drive::getPose, drive.field, layout, frontCam);
+    }
 
-  public void periodic(SwerveDrive drive) {
-    vision.updatePoseEstimation(drive);
-    vision.updateVisionField();
-  }
+    public void periodic(SwerveDrive drive) {
+        vision.updatePoseEstimation(drive);
+        vision.updateVisionField();
+    }
 }
 ```
 
 ---
 
-# LEDs (patterns)
+### LEDs (Patterns)
 
 ```java
 import ca.team4308.absolutelib.leds.Patterns;
@@ -294,25 +346,26 @@ import ca.team4308.absolutelib.leds.LEDPattern;
 import edu.wpi.first.wpilibj.util.Color;
 
 public class LedLogic {
-  private LEDPattern pattern = Patterns.idle();
+    private LEDPattern pattern = Patterns.idle();
 
-  public void setError() { pattern = Patterns.error(); }
-  public void setFire() { pattern = Patterns.fire(0.3, 0.05); }
-  public void setScanner() { pattern = Patterns.larsonScanner(Color.kRed, 1.3, 6); }
+    public void setError() { pattern = Patterns.error(); }
+    public void setSuccess() { pattern = Patterns.success(); }
+    public void setRainbow() { pattern = Patterns.rainbowChase(); }
+    public void setAlliance() { pattern = Patterns.getAlliancePattern(); }
+    public void setProgress(double progress) { 
+        pattern = Patterns.createProgressPattern(Color.kGreen, progress); 
+    }
 
-  public LEDPattern getPattern() { return pattern; }
+    public LEDPattern getPattern() { return pattern; }
 }
 ```
 
-(Your `Leds` class should call `pattern.applyTo(view)` and push the buffer each loop.)
-
 ---
 
-# Trajectory System (2026 REBUILT)
+## Trajectory System (2026 REBUILT)
 
-## Quick Start
+### Quick Start
 
-### Basic Shot Calculation
 ```java
 import ca.team4308.absolutelib.math.trajectories.*;
 
@@ -321,17 +374,17 @@ TrajectorySolver solver = TrajectorySolver.forGame2026();
 
 // Define shot parameters
 ShotInput input = ShotInput.builder()
-    .shooterPositionMeters(1.0, 2.0, 0.5)  // x, y, z
-    .targetPositionMeters(5.0, 5.0, 2.5)   // Target location
+    .shooterPositionMeters(1.0, 2.0, 0.5)
+    .targetPositionMeters(5.0, 5.0, 2.5)
     .shotPreference(ShotInput.ShotPreference.FASTEST)
     .build();
 
 // Get best shot angle
 double pitchDegrees = solver.solveBestPitchDegrees(input);
-System.out.println("Shoot at: " + pitchDegrees + "°");
 ```
 
 ### Multi-Candidate Shot Selection
+
 ```java
 // Find all possible shots sorted by confidence
 ShotCandidateList candidates = solver.findAllCandidates(input);
@@ -353,7 +406,8 @@ candidates.getBestHighArc();     // Best high-arc shot
 candidates.getBestLowArc();      // Best low-arc shot
 ```
 
-### Legacy API (Full Trajectory Result)
+### Legacy API
+
 ```java
 TrajectoryResult result = solver.solve(input);
 
@@ -365,9 +419,8 @@ if (result.isSuccess()) {
 }
 ```
 
-## Flywheel Configuration
+### Flywheel Configuration
 
-### Generate Optimal Flywheel
 ```java
 import ca.team4308.absolutelib.math.trajectories.flywheel.*;
 import ca.team4308.absolutelib.math.trajectories.gamepiece.*;
@@ -376,17 +429,15 @@ GamePiece ball = GamePieces.REBUILT_2026_BALL;
 FlywheelGenerator generator = new FlywheelGenerator(ball);
 
 // Generate and evaluate configurations for target velocity
-double targetVelocity = 15.0; // m/s
-FlywheelGenerator.GenerationResult result = 
-    generator.generateAndEvaluate(targetVelocity);
+FlywheelGenerator.GenerationResult result = generator.generateAndEvaluate(15.0);
 
 // Get best configuration
 FlywheelConfig best = result.bestConfig.config;
 System.out.println("Best: " + best.toString());
-System.out.println("Score: " + result.bestConfig.score);
 ```
 
 ### Custom Flywheel Configuration
+
 ```java
 FlywheelConfig custom = FlywheelConfig.builder()
     .name("Custom Shooter")
@@ -407,66 +458,30 @@ FlywheelSimulator.SimulationResult sim = simulator.simulateAtRpm(5000);
 
 System.out.println("Exit Velocity: " + sim.exitVelocityMps + " m/s");
 System.out.println("Ball Spin: " + sim.ballSpinRpm + " RPM");
-System.out.println("Achievable: " + sim.isAchievable);
 ```
 
-### Preset Configurations
+### Game Piece Specifications
+
 ```java
-// Use proven preset configurations
-List<FlywheelConfig> presets = generator.generatePresets();
-FlywheelGenerator.GenerationResult presetResults = 
-    generator.evaluatePresets(targetVelocity);
-
-// Presets include:
-// - Classic Dual 4-inch
-// - High-Speed Single
-// - Compact NEO Dual
-// - High-Grip Dual
-// - Differential Spin
-// - Triple Stack
-```
-
-## Game Piece Specifications
-
-### 2026 REBUILT Ball
-```java
+// 2026 REBUILT Ball
 GamePiece ball = GamePieces.REBUILT_2026_BALL;
 // Diameter: 5.91 inches
 // Mass: 0.448-0.5 lbs (avg 0.474 lbs)
 // Material: High-density foam
 // Shape: Sphere
-```
 
-### Other Supported Game Pieces
-```java
+// Other supported game pieces
 GamePieces.CRESCENDO_2024_NOTE;           // 2024 Note (Ring)
 GamePieces.RAPID_REACT_2022_CARGO;        // 2022 Cargo
 GamePieces.INFINITE_RECHARGE_POWER_CELL;  // 2020 Power Cell
 GamePieces.DEEP_SPACE_2019_CARGO;         // 2019 Cargo
-// ... and more
 
 // Get by year
 GamePiece piece = GamePieces.getByYear(2022);
 ```
 
-## Advanced Configuration
-
-### Custom Solver Settings
-```java
-TrajectorySolver.SolverConfig config = TrajectorySolver.SolverConfig.builder()
-    .minPitchDegrees(10)
-    .maxPitchDegrees(70)
-    .angleTolerance(0.5)
-    .rpmTolerance(50)
-    .build();
-
-TrajectorySolver solver = TrajectorySolver.builder()
-    .gamePiece(GamePieces.REBUILT_2026_BALL)
-    .config(config)
-    .build();
-```
-
 ### Shot Preferences
+
 ```java
 ShotInput input = ShotInput.builder()
     .shooterPositionMeters(x, y, z)
@@ -481,11 +496,10 @@ ShotInput input = ShotInput.builder()
 
 ---
 
-## Notes 
+## Notes
 
-- `Pivot.setTargetAngleDeg()` calls `setPosition(deg)` but does not schedule the returned command. That’s fine if you also drive `targetAngleRad` directly (you do), but don’t expect the Command to run unless you schedule it.
-- “Smart Motion”:
-  - TalonFX (Phoenix6) supports Motion Magic.
-  - TalonSRX/VictorSPX (Phoenix5) can do Motion Magic, but your code/comments may conflict. Document + test per controller.
-  - Victor SPXS have not been tested on this libary nor have anythig Talon SRX related (CIMS, 775)
-
+- `Pivot.setTargetAngleDeg()` updates the target angle but does not schedule the returned command automatically.
+- **Smart Motion**:
+  - TalonFX (Phoenix6) supports Motion Magic
+  - TalonSRX/VictorSPX (Phoenix5) can use Motion Magic with configuration
+  - Victor SPX and TalonSRX-based motors (CIMs, 775) have not been tested

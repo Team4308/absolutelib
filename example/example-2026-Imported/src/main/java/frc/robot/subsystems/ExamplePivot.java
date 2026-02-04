@@ -18,7 +18,7 @@ public class ExamplePivot extends AbsoluteSubsystem {
 
     public ExamplePivot() {
         super();
-        MotorWrapper leader = new MotorWrapper(MotorType.SPARKMAX, 20);
+        MotorWrapper leader = new MotorWrapper(MotorType.TALONFX, 20);
         Pivot.Config pivotConfig = new Pivot.Config()
                 .withLeader(leader)
                 .withEncoder(EncoderWrapper.canCoder(21, 1.0)) // CANCoder ID 21
@@ -53,7 +53,11 @@ public class ExamplePivot extends AbsoluteSubsystem {
 
     @Override
     public Sendable log() {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'log'");
+        return builder -> {
+            builder.setSmartDashboardType("ExamplePivot");
+            builder.addDoubleProperty("AngleDegrees", pivot::getAngleDeg, null);
+            builder.addDoubleProperty("TargetAngleDegrees", pivot::getAngleDeg, null);
+            builder.addBooleanProperty("AtTarget", pivot::atTarget, null);
+        };
     }
 }

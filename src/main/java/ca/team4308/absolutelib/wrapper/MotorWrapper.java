@@ -175,26 +175,33 @@ public class MotorWrapper {
     }
 
     /**
-     * READ BEFORE USING Only SRX and Victor support .setInverted TalonFX and
-     * SparkMAX require inversion via configuration
+     * Set inversion. of the motor
+     * With TalonFX and SparkMaxs it acesses the Configurator
      */
-    public void setInverted(boolean inverted) {
-        switch (type) {
-            case TALONFX -> {
-                DriverStation.reportWarning("TALON FX Doesnt Support .setInverted, please update the config as of 2026", false);
-            }
-            case TALONSRX ->
-                talonSRX.setInverted(inverted);
-            case VICTORSPX ->
-                victorSPX.setInverted(inverted);
-            case SPARKMAX -> {
-                DriverStation.reportWarning("SparkMAX Doesnt Support .setInverted, please update the config as of 2026", false);
+
+        public void setInverted(boolean inverted) {
+            switch (type) {
+                case TALONFX -> {
+                    MotorOutputConfigs cfg = new MotorOutputConfigs();
+                    talonFX.getConfigurator().refresh(cfg);
+                    cfg.Inverted = inverted ? com.ctre.phoenix6.signals.InvertedValue.Clockwise_Positive : com.ctre.phoenix6.signals.InvertedValue.CounterClockwise_Positive;
+                    talonFX.getConfigurator().apply(cfg);
+                }
+                case TALONSRX ->
+                    talonSRX.setInverted(inverted);
+                case VICTORSPX ->
+                    victorSPX.setInverted(inverted);
+                case SPARKMAX -> {
+                    SparkMaxConfig cfg = new SparkMaxConfig();
+                    cfg.inverted(inverted);
+                    sparkMax.configure(cfg, ResetMode.kNoResetSafeParameters, PersistMode.kPersistParameters);
+                }
             }
         }
-    }
 
     public boolean getInverted() {
         if (type == MotorType.TALONFX) {
+
             DriverStation.reportError("Cannnot use GetInverted on TalonFX Motors", true);
         }
         return switch (type) {
@@ -474,7 +481,13 @@ public class MotorWrapper {
 
         @Override
         public void apply(MotorWrapper w) {
+
+            if (w.getType() != MotorType.SPARKMAX || w.getType() != MotorType.TALONSRX) {
             w.setInverted(inverted);
+            } else {
+                
+            }
+
             if (brakeMode != null) {
                 w.setBrakeMode(brakeMode);
             }

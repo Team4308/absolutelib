@@ -16,15 +16,13 @@ public class ExampleElevator extends AbsoluteSubsystem {
     private final Elevator elevator;
 
     public ExampleElevator() {
-        MotorWrapper leader = new MotorWrapper(MotorType.SPARKMAX, 10);
-        MotorWrapper follower = new MotorWrapper(MotorType.SPARKMAX, 11);
-        leader.addFollower(follower);
+        MotorWrapper leader = new MotorWrapper(MotorType.TALONFX, 10);
 
         EncoderWrapper encoder = EncoderWrapper.ofMechanismRotations(
                 leader::getPosition,
                 (val) -> {
-                    if (leader.isSparkMax()) {
-                        leader.asSparkMax().getEncoder().setPosition(val);
+                    if (leader.isTalonFX()) {
+                        leader.asTalonFX().setPosition(val);
 
                     }
                 },
@@ -38,10 +36,6 @@ public class ExampleElevator extends AbsoluteSubsystem {
                 .drumRadius(0.05)
                 .limits(0.0, 2.0)
                 .motion(0.1, 2.0);
-                
-                
-            
-            
 
         // Simulation Config
         ElevatorSimulation.ElevatorSimulationConfig simConfig = new ElevatorSimulation.ElevatorSimulationConfig();
@@ -74,7 +68,11 @@ public class ExampleElevator extends AbsoluteSubsystem {
 
     @Override
     public Sendable log() {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'log'");
+        return builder -> {
+            builder.setSmartDashboardType("ExampleElevator");
+            builder.addDoubleProperty("HeightMeters", elevator::getHeightMeters, null);
+            builder.addDoubleProperty("TargetHeightMeters", elevator::getTargetHeightMeters, null);
+            builder.addBooleanProperty("AtTarget", elevator::atTarget, null);
+        };
     }
 }

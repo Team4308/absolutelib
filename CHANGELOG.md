@@ -1,6 +1,13 @@
 # Changelog for AbsoluteLib V2
 
 
+## 1.2.5 
+
+- Rework of the /Examples for the REBUILT
+- Added Demo of LED Code
+- Cleaned up minor bugs and fixed spelling mistakes
+- Tweaked Trajectories 
+
 ## 1.2.4
 
 - SysID For all (mech) Subsystems
