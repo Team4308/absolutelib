@@ -30,7 +30,7 @@ public class ExamplePivot extends AbsoluteSubsystem {
                 .enableSimulation(true)
                 .withSimulation(
                         new PivotSimulation.Config()
-                                .gearbox(DCMotor.getNEO(1), 1)
+                                .gearbox(DCMotor.getKrakenX60(1), 1)
                                 .gearRatio(50.0)
                                 .armLength(0.5)
                                 .armMass(3.0)

@@ -9,6 +9,8 @@ import java.util.Set;
 
 import org.littletonrobotics.junction.Logger;
 
+import edu.wpi.first.math.geometry.Pose2d;
+import edu.wpi.first.math.geometry.Pose3d;
 import edu.wpi.first.networktables.NetworkTableInstance;
 import edu.wpi.first.util.sendable.Sendable;
 import edu.wpi.first.wpilibj.DriverStation;
@@ -95,6 +97,14 @@ public abstract class AbsoluteSubsystem extends SubsystemBase {
                 SmartDashboard.putData(key, (Sendable) value);
             } else if (value instanceof double[]) {
                 Logger.recordOutput(key, (double[]) value);
+            } else if (value instanceof Pose3d[]) {
+                Logger.recordOutput(key, (Pose3d[]) value);
+            } else if (value instanceof Pose2d[]) {
+                Logger.recordOutput(key, (Pose2d[]) value);
+            } else if (value instanceof Pose3d) {
+                Logger.recordOutput(key, (Pose3d) value);
+            } else if (value instanceof Pose2d) {
+                Logger.recordOutput(key, (Pose2d) value);
             } else if (value != null) {
                 Logger.recordOutput(key, value.toString());
             }

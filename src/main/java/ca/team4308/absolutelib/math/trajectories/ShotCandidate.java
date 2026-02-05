@@ -78,7 +78,7 @@ public class ShotCandidate implements Comparable<ShotCandidate> {
         private double maxHeightMeters;
         private double closestApproachMeters;
         private boolean hitsTarget;
-        private ArcType arcType = ArcType.INTERMEDIATE;
+        private ArcType arcType = ArcType.HIGH_ARC;
         private double accuracyScore = 50;
         private double stabilityScore = 50;
         private double speedScore = 50;

@@ -1,5 +1,10 @@
 # Changelog for AbsoluteLib V2
 
+## 1.2.6 
+
+- Tweaked trajectories to be better fit for rebuilt, Also fixxed some bad formuals 
+- Fully working 2026 Example 
+
 
 ## 1.2.5 
 

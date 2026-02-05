@@ -19,6 +19,7 @@ public class TrajectoryResult {
     /**
      * Returns a list of Pose3d objects representing the flight path for
      * visualization. This uses the simulated trajectory from the solver.
+     * The trajectory naturally terminates when the ball lands at the target (on descent).
      * Returns an empty list if no valid solution exists.
      */
     public List<Pose3d> getFlightPath() {
@@ -41,8 +42,11 @@ public class TrajectoryResult {
                     input.getTargetX(), input.getTargetY(), input.getTargetZ(),
                     input.getTargetRadius()
             );
+            
+            // Build path from the full simulation - it now terminates at the target naturally
             List<Pose3d> path = new ArrayList<>();
-            for (ca.team4308.absolutelib.math.trajectories.physics.ProjectileMotion.TrajectoryState state : simResult.trajectory) {
+            for (int i = 0; i < simResult.trajectory.length; i++) {
+                ca.team4308.absolutelib.math.trajectories.physics.ProjectileMotion.TrajectoryState state = simResult.trajectory[i];
                 if (state == null) {
                     continue;
                 }
@@ -55,6 +59,7 @@ public class TrajectoryResult {
                 );
                 path.add(new Pose3d(translation, rotation));
             }
+            
             return path;
         } catch (Exception e) {
             return List.of();

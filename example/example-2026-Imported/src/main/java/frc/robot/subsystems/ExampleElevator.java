@@ -39,7 +39,7 @@ public class ExampleElevator extends AbsoluteSubsystem {
 
         // Simulation Config
         ElevatorSimulation.ElevatorSimulationConfig simConfig = new ElevatorSimulation.ElevatorSimulationConfig();
-        simConfig.leader = DCMotor.getNEO(2); // 2 NEOs
+        simConfig.leader = DCMotor.getKrakenX60(2); 
         simConfig.gearing = 1.0;
         simConfig.carriageMassKg = 5.0;
         simConfig.drumRadiusMeters = 0.05;

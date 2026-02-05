@@ -137,6 +137,8 @@ public class ProjectileMotion {
         double maxHeight = z0;
         double closestApproach = Double.MAX_VALUE;
         boolean hitTarget = false;
+        boolean pastApex = false;  // Track if ball is descending
+        double prevZ = z0;
         
         while (state.time < PhysicsConstants.MAX_FLIGHT_TIME && state.z >= 0) {
             if (stepCount % sampleInterval == 0 && pointCount < maxPoints) {
@@ -146,10 +148,17 @@ public class ProjectileMotion {
                 maxHeight = state.z;
             }
             
+            // Detect when ball starts descending (past apex)
+            if (state.z < prevZ && !pastApex) {
+                pastApex = true;
+            }
+            prevZ = state.z;
+            
             double dx = state.x - targetX;
             double dy = state.y - targetY;
             double dz = state.z - targetZ;
             double distToTarget = Math.sqrt(dx * dx + dy * dy + dz * dz);
+            double horizontalDistToTarget = Math.sqrt(dx * dx + dy * dy);
             
             if (distToTarget < closestApproach) {
                 closestApproach = distToTarget;
@@ -157,6 +166,23 @@ public class ProjectileMotion {
             
             if (distToTarget <= targetRadius) {
                 hitTarget = true;
+            }
+            
+            // For basket-style goals: Stop simulation when ball LANDS at target
+            // This occurs when: ball is descending AND at/below target height AND horizontally close
+            if (pastApex && state.z <= targetZ && horizontalDistToTarget < targetRadius * 5) {
+                // Ball has landed in the goal - record final position and stop
+                if (pointCount < maxPoints) {
+                    // Interpolate to exact target position for clean ending
+                    trajectory[pointCount++] = new TrajectoryState(
+                        targetX, targetY, targetZ, 
+                        state.vx, state.vy, state.vz, 
+                        state.time
+                    );
+                }
+                hitTarget = true;
+                closestApproach = 0;
+                break;
             }
             
             state = integrateRK4(gamePiece, state, timeStep, spinRpm, spinAxisX, spinAxisY, spinAxisZ);
@@ -530,6 +556,7 @@ public class ProjectileMotion {
         double tanTheta = sinTheta / cosTheta;
         
         // From projectile equations:
+        
         // heightDiff = distance * tan(theta) - g * distance^2 / (2 * v^2 * cos^2(theta))
         // Solving for v:
         // v^2 = g * distance^2 / (2 * cos^2(theta) * (distance * tan(theta) - heightDiff))
@@ -591,10 +618,9 @@ public class ProjectileMotion {
                 continue; // Skip invalid angles
             }
             
-            // If air resistance is enabled, we need to adjust velocity upward
             double velocity = idealVelocity;
             if (airResistance.isEnabled()) {
-                // Add ~10-20% to compensate for drag (rough estimate)
+                // Change !?
                 velocity = idealVelocity * 1.15;
                 if (velocity > maxVelocity) {
                     velocity = maxVelocity;
@@ -609,7 +635,6 @@ public class ProjectileMotion {
             tempResults[validCount++] = new AngleEvaluation(angleRad, velocity, trajResult);
         }
         
-        // Return only valid results
         AngleEvaluation[] results = new AngleEvaluation[validCount];
         System.arraycopy(tempResults, 0, results, 0, validCount);
         return results;

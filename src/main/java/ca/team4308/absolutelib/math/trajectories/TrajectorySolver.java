@@ -265,15 +265,15 @@ public class TrajectorySolver {
             );
         }
         
-        // Initial target variables (may be adjusted for robot motion)
+        // Initial target variables 
         double effectiveTargetX = input.getTargetX();
         double effectiveTargetY = input.getTargetY();
         double distance = input.getHorizontalDistanceMeters();
         
-        // Iterative compensation for robot velocity
+        // compensation for robot velocity
         boolean moving = Math.abs(input.getRobotVx()) > 0.01 || Math.abs(input.getRobotVy()) > 0.01;
         int iterations = moving ? 3 : 1;
-        double estimatedTof = distance / 15.0; 
+        double estimatedTof = distance / 15.0; // 15 m/s initial estimate
         
         for (int i = 0; i < iterations; i++) {
             if (moving) {
@@ -297,7 +297,7 @@ public class TrajectorySolver {
         
         double minVelocity = projectileMotion.calculateMinimumVelocity(distance, heightDiff);
         
-        double targetVelocity = minVelocity * 1.3;
+        double targetVelocity = minVelocity * 1.3; // 30% buffer
         
         FlywheelGenerator.GenerationResult genResult;
         if (cachedFlywheel != null) {

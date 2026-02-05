@@ -36,6 +36,8 @@ public final class PhysicsConstants {
     public static final double ANGLE_RESOLUTION = 0.1; // degrees
     public static final double RPM_RESOLUTION = 10.0;  // RPM 
     
+
+
     /**
      * Convert RPM to radians per second.
      */
