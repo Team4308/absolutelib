@@ -9,9 +9,11 @@ import org.littletonrobotics.junction.LoggedRobot;
 import org.littletonrobotics.junction.Logger;
 import org.littletonrobotics.junction.networktables.NT4Publisher;
 
+import edu.wpi.first.math.geometry.Pose3d;
 import edu.wpi.first.wpilibj.TimedRobot;
 import edu.wpi.first.wpilibj2.command.Command;
 import edu.wpi.first.wpilibj2.command.CommandScheduler;
+import swervelib.simulation.ironmaple.simulation.SimulatedArena;
 
 /**
  * The methods in this class are called automatically corresponding to each mode, as described in
@@ -50,6 +52,11 @@ public class Robot extends LoggedRobot {
     // commands, running already-scheduled commands, removing finished or interrupted commands,
     // and running subsystem periodic() methods.  This must be called from the robot's periodic
     // block in order for anything in the Command-based framework to work.
+          // Get the positions of the fuel (both on the field and in the air)
+      Pose3d[] fuelPoses = SimulatedArena.getInstance()
+            .getGamePiecesArrayByType("Fuel");
+      // Publish to telemetry using AdvantageKit
+      Logger.recordOutput("FieldSimulation/FuelPositions", fuelPoses);
     CommandScheduler.getInstance().run();
   }
 
@@ -105,5 +112,7 @@ public class Robot extends LoggedRobot {
 
   /** This function is called periodically whilst in simulation. */
   @Override
-  public void simulationPeriodic() {}
+  public void simulationPeriodic() {
+        SimulatedArena.getInstance().simulationPeriodic();
+  }
 }

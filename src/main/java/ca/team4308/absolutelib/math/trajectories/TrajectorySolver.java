@@ -386,12 +386,39 @@ public class TrajectorySolver {
             );
         }
         
+        // Use pitch limits from ShotInput if provided, otherwise fall back to config
+        double effectiveMinPitch = input.getMinPitchDegrees();
+        double effectiveMaxPitch = input.getMaxPitchDegrees();
+        
         double pitchDegrees = Math.toDegrees(pitchAngle);
-        if (pitchDegrees < config.getMinPitchDegrees() || pitchDegrees > config.getMaxPitchDegrees()) {
+        if (pitchDegrees < effectiveMinPitch || pitchDegrees > effectiveMaxPitch) {
             return TrajectoryResult.failure(
                 TrajectoryResult.Status.ANGLE_EXCEEDED,
                 String.format("Required pitch %.1f° outside limits [%.1f°, %.1f°]",
-                    pitchDegrees, config.getMinPitchDegrees(), config.getMaxPitchDegrees()),
+                    pitchDegrees, effectiveMinPitch, effectiveMaxPitch),
+                input
+            );
+        }
+        
+        // Validate minimum arc height if specified
+        double minArcHeight = input.getMinArcHeightMeters();
+        if (minArcHeight > 0 && trajSim != null) {
+            double requiredApexHeight = input.getTargetZ() + minArcHeight;
+            if (trajSim.maxHeight < requiredApexHeight) {
+                return TrajectoryResult.failure(
+                    TrajectoryResult.Status.OUT_OF_RANGE,
+                    String.format("Trajectory apex %.2fm is below required height %.2fm (target + %.2fm)",
+                        trajSim.maxHeight, requiredApexHeight, minArcHeight),
+                    input
+                );
+            }
+        }
+        
+        // Validate that trajectory actually reaches the target
+        if (trajSim != null && !trajSim.hitTarget && trajSim.closestApproach > input.getTargetRadius() * 3) {
+            return TrajectoryResult.failure(
+                TrajectoryResult.Status.OUT_OF_RANGE,
+                String.format("Trajectory misses target by %.2fm (closest approach)", trajSim.closestApproach),
                 input
             );
         }

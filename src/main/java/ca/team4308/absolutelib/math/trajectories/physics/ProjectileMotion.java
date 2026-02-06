@@ -139,6 +139,7 @@ public class ProjectileMotion {
         boolean hitTarget = false;
         boolean pastApex = false;  // Track if ball is descending
         double prevZ = z0;
+        TrajectoryState closestState = null;
         
         while (state.time < PhysicsConstants.MAX_FLIGHT_TIME && state.z >= 0) {
             if (stepCount % sampleInterval == 0 && pointCount < maxPoints) {
@@ -162,26 +163,18 @@ public class ProjectileMotion {
             
             if (distToTarget < closestApproach) {
                 closestApproach = distToTarget;
+                closestState = state.copy();
             }
             
             if (distToTarget <= targetRadius) {
                 hitTarget = true;
             }
             
-            // For basket-style goals: Stop simulation when ball LANDS at target
-            // This occurs when: ball is descending AND at/below target height AND horizontally close
+            // For basket-style goals: Stop simulation when ball descends to/below target height
+            // while being horizontally close to the target
             if (pastApex && state.z <= targetZ && horizontalDistToTarget < targetRadius * 5) {
-                // Ball has landed in the goal - record final position and stop
-                if (pointCount < maxPoints) {
-                    // Interpolate to exact target position for clean ending
-                    trajectory[pointCount++] = new TrajectoryState(
-                        targetX, targetY, targetZ, 
-                        state.vx, state.vy, state.vz, 
-                        state.time
-                    );
-                }
+                // Ball has descended into the goal zone - this is a valid landing
                 hitTarget = true;
-                closestApproach = 0;
                 break;
             }
             
@@ -191,6 +184,12 @@ public class ProjectileMotion {
         
         TrajectoryState[] trimmedTrajectory = new TrajectoryState[pointCount];
         System.arraycopy(trajectory, 0, trimmedTrajectory, 0, pointCount);
+        
+        // Final validation: check if the trajectory actually reached close to the target
+        // The closest approach must be within a reasonable distance for a valid hit
+        if (!hitTarget && closestApproach <= targetRadius * 3) {
+            hitTarget = true; // Close enough counts as a hit
+        }
         
         return new TrajectoryResult(trimmedTrajectory, hitTarget, closestApproach, 
             state, maxHeight, state.time);

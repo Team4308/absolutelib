@@ -8,6 +8,7 @@ import frc.robot.Util.FuelSim;
 import frc.robot.subsystems.*;
 import frc.robot.subsystems.swerve.SwerveSubsystem;
 import swervelib.SwerveInputStream;
+import swervelib.simulation.ironmaple.simulation.SimulatedArena;
 
 import java.io.File;
 
@@ -73,14 +74,15 @@ public class RobotContainer {
     public RobotContainer() {
         // Set up shooter with pose supplier for continuous trajectory tracking
         m_shooter.setPoseSupplier(drivebase::getPose);
+        m_shooter.setChassisSpeedsSupplier(drivebase::getFieldVelocity); // For FuelSim shooting
         m_shooter.setShooterHeight(0.6); // Shooter height in meters
         m_shooter.setPitchLimits(0.0, 50.0); // Hood limits: 0-50 degrees
         m_shooter.setTrackingEnabled(true); // Enable continuous tracking
-        
+
         // Set target based on alliance (2026 REBUILT goals)
         // Blue alliance goal: (4, 4, 2.1) - Red alliance goal: (12, 4, 2.1)
         updateTargetForAlliance();
-        
+
         configureBindings();
         configureNamedCommands();
         initFuelSim();
@@ -91,7 +93,7 @@ public class RobotContainer {
         m_leds.setIdle();
 
     }
-    
+
     /**
      * Updates the shooter target based on current alliance.
      * Call this periodically or when alliance changes.
@@ -116,11 +118,10 @@ public class RobotContainer {
         Command driveRobotOrientedAngularVelocity = drivebase.driveFieldOriented(driveRobotOriented);
         Command driveFieldOrientedAnglularVelocityKeyboard = drivebase.driveFieldOriented(driveAngularVelocityKeyboard);
 
-
         // ==================== Shooter Control (Bumpers/Triggers) ====================
         // Trajectory is calculated continuously when tracking is enabled
         // The shooter always knows the shot solution based on current robot position
-        
+
         // Right Bumper: Aim pivot to calculated angle (tracking already running)
         driver.rightBumper().whileTrue(
                 Commands.run(() -> {
@@ -156,7 +157,7 @@ public class RobotContainer {
                 m_leds.setIdle();
             }
         }));
- 
+
         driver.start().onTrue(
                 m_shooter.spinUp().withTimeout(3.0)
                         .andThen(Commands.runOnce(() -> m_leds.setSuccess())));
@@ -165,12 +166,14 @@ public class RobotContainer {
                 m_shooter.stopCommand()
                         .andThen(Commands.runOnce(() -> m_leds.setError())));
 
-        driver.povUp().onTrue(Commands.runOnce(() -> m_leds.setRainbow()));
+        driver.povUp().onTrue(m_shooter.shootBallSimCommand()); // Shoot ball in simulation
         driver.povDown().onTrue(Commands.runOnce(() -> m_leds.setAlliance()));
-        driver.povLeft().onTrue(Commands.runOnce(() -> m_leds.setIdle()));
+        driver.povLeft().onTrue(Commands.runOnce(() -> m_leds.setRainbow()));
         driver.povRight().onTrue(Commands.runOnce(() -> {
-            if (m_shooter.hasValidShot()) m_leds.setSuccess();
-            else m_leds.setError();
+            if (m_shooter.hasValidShot())
+                m_leds.setSuccess();
+            else
+                m_leds.setError();
         }));
 
         if (RobotBase.isSimulation()) {
@@ -182,6 +185,8 @@ public class RobotContainer {
 
     public void configureNamedCommands() {
     }
+
+    
 
     /**
      * Returns the autonomous command to run.
@@ -220,9 +225,13 @@ public class RobotContainer {
     /**
      * Update LED patterns based on robot state. Call this in robotPeriodic.
      */
+
     public void updateLEDs() {
         if (m_shooter.hasValidShot()) {
             m_leds.setProgress(m_shooter.getTargetRpm() / 6000.0, Color.kGreen);
         }
     }
+
+ 
+
 }

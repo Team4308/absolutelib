@@ -1,86 +1,109 @@
 # Changelog for AbsoluteLib V2
 
-## 1.2.6 
+## 1.2.7
 
-- Tweaked trajectories to be better fit for rebuilt, Also fixxed some bad formuals 
-- Fully working 2026 Example 
+- Added `minArcHeightMeters` to ShotInput for controlling trajectory apex height.
+- Fixed trajectory validation to ensure paths reach the target.
+- Removed forced interpolation in ProjectileMotion for smoother trajectory endings.
+- Enforced pitch limits from ShotInput in TrajectorySolver.
+- Updated ExampleShooter to support `minArcHeightMeters` configuration.
+- Made the Changelog more detailed now.
 
+## 1.2.6
 
-## 1.2.5 
+- Improved trajectory calculations for 2026 REBUILT compatibility.
+- Corrected mathematical formulas for better accuracy.
+- Fully functional 2026 example project.
 
-- Rework of the /Examples for the REBUILT
-- Added Demo of LED Code
-- Cleaned up minor bugs and fixed spelling mistakes
-- Tweaked Trajectories 
+## 1.2.5
+
+- Revamped examples for 2026 REBUILT game.
+- Added LED code demonstration.
+- Fixed minor bugs and addressed spelling errors.
+- Enhanced trajectory calculations for smoother paths.
 
 ## 1.2.4
 
-- SysID For all (mech) Subsystems
--  2026 Ports
-- New math helpers 
-- full trajectorie calc
+- (WIP) Added SysID support for all mechanical subsystems.
+- Updated ports for 2026 game compatibility.
+- Introduced new math helper utilities.
+- Implemented full trajectory calculation support.
 
-## 1.2.3 
+## 1.2.3
 
-- Moved to 2026
+- Transitioned library to 2026 game framework.
 
 ## 1.2.2
 
-- Simulation works on Pivot!
-- Added better /Example
+- Enabled pivot simulation functionality.
+- Enhanced example project for better usability.
 
 ## 1.2.1
-- Minor Bugs fixes on subsystems.
-- New Docs!
-- More up to date readme
-- added requirements in the vendorop json
+
+- Fixed minor subsystem bugs.
+- Updated documentation for clarity.
+- Improved README with up-to-date information.
+- Added vendor dependency requirements in JSON.
 
 ## 1.1.8-1.2.0
-- Rework of the simulation and subsystems 
-- Mech3D
-- Motion Magic and Max Motion Intagration 
-- Photon Vision Added (No Simulation Currently)
+
+- Overhauled simulation and subsystem architecture.
+- Integrated Mech3D for advanced visualization.
+- Added Motion Magic and Max Motion integration.
+- Introduced Photon Vision (simulation not yet supported).
 
 ## 1.1.7
-Rework of Encoder Wrapper, to support further simulation
+
+- Rework of Encoder Wrapper, to support further simulation
 
 # 1.1.6
-Simulation works!?
+
+- Simulation works!?
 
 # 1.1.5
-Simulation Rework
-Finally Fixed EncoderWrapper 
-Fix alled subsystem simulation
-Fixxed All Subsystems
+
+- Simulation Rework
+- Finally Fixed EncoderWrapper 
+- Fix alled subsystem simulation
+- Fixxed All Subsystems
 
 # 1.1.4 
+
 - Simulation update / patch
 - added mech 3d
 # 1.1.3
+
 - Minor bug fixes 
 - Added javadocs
 - Fixxed github-pages site
 
 ## 1.1.2
+
 - Fix every gradle error 
 - Re-Sync Gh-Pages with Master 
 
 ## 1.1.1 
+
 - Fix Github pages not depolying
 
 ## 1.1.0
+
 - Added Simulatoin intergratoin to all subsystems 
 - Fixxed Subsystem bugs 
 - Updated motor Wrapper and encoder wrapper to work with spark maxes 
 
 ## 1.0.4 - 1.0.9
+
 - Major Bug fixes and added Simulatoin for Arm and Elevator 
 
 ## 1.0.3
+
 - Java doc comments fix and minor bug fixes
 
 ## 1.0.1
+
 - Added musicPlayer class
 
 ## 1.0.0
-- Added Everything 
+
+- Added Everything

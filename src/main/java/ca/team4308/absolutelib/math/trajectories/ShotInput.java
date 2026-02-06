@@ -64,6 +64,7 @@ public class ShotInput {
     private final double minVelocityMps;
     private final double maxVelocityMps;
     private final double angleStepDegrees;
+    private final double minArcHeightMeters; // Minimum apex height above target
     
     /**
      * Creates a shot input with all parameters (legacy constructor).
@@ -80,7 +81,7 @@ public class ShotInput {
              targetX, targetY, targetZ, targetRadius,
              robotVx, robotVy, preferHighArc, includeAirResistance,
              preferHighArc ? ShotPreference.PREFER_HIGH_ARC : ShotPreference.PREFER_LOW_ARC,
-             50, 0, 90, 5, 50, 1.0);
+             50, 0, 90, 5, 50, 1.0, 0.0);
     }
     
     /**
@@ -95,7 +96,7 @@ public class ShotInput {
                       ShotPreference shotPreference, int maxCandidates,
                       double minPitchDegrees, double maxPitchDegrees,
                       double minVelocityMps, double maxVelocityMps,
-                      double angleStepDegrees) {
+                      double angleStepDegrees, double minArcHeightMeters) {
         this.shooterX = shooterX;
         this.shooterY = shooterY;
         this.shooterZ = shooterZ;
@@ -115,6 +116,7 @@ public class ShotInput {
         this.minVelocityMps = minVelocityMps;
         this.maxVelocityMps = maxVelocityMps;
         this.angleStepDegrees = angleStepDegrees;
+        this.minArcHeightMeters = minArcHeightMeters;
     }
     
     /**
@@ -142,6 +144,7 @@ public class ShotInput {
         private double minVelocityMps = 5;
         private double maxVelocityMps = 50;
         private double angleStepDegrees = 1.0;  // 1 degree steps = O(80) iterations max
+        private double minArcHeightMeters = 0.0; // 0 = no minimum arc height requirement
         
         /**
          * Sets shooter position in meters.
@@ -316,6 +319,27 @@ public class ShotInput {
         }
         
         /**
+         * Sets the minimum arc height above the target.
+         * This ensures the ball reaches a certain apex height before descending.
+         * Higher values create more pronounced arcs that drop into the target.
+         * Default: 0.0 (no minimum)
+         * @param meters Minimum height above target that the trajectory apex must reach
+         */
+        public Builder minArcHeightMeters(double meters) {
+            this.minArcHeightMeters = Math.max(0.0, meters);
+            return this;
+        }
+        
+        /**
+         * Sets the minimum arc height above the target in feet.
+         * @param feet Minimum height above target in feet
+         */
+        public Builder minArcHeightFeet(double feet) {
+            this.minArcHeightMeters = Math.max(0.0, Units.feetToMeters(feet));
+            return this;
+        }
+        
+        /**
          * Configures for fast solving with fewer candidates.
          */
         public Builder fastMode() {
@@ -344,7 +368,7 @@ public class ShotInput {
                 shotPreference, maxCandidates,
                 minPitchDegrees, maxPitchDegrees,
                 minVelocityMps, maxVelocityMps,
-                angleStepDegrees
+                angleStepDegrees, minArcHeightMeters
             );
         }
     }
@@ -426,6 +450,7 @@ public class ShotInput {
     public double getMinVelocityMps() { return minVelocityMps; }
     public double getMaxVelocityMps() { return maxVelocityMps; }
     public double getAngleStepDegrees() { return angleStepDegrees; }
+    public double getMinArcHeightMeters() { return minArcHeightMeters; }
     
     @Override
     public String toString() {

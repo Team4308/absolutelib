@@ -6,12 +6,16 @@ import ca.team4308.absolutelib.math.trajectories.gamepiece.*;
 import ca.team4308.absolutelib.wrapper.AbsoluteSubsystem;
 import ca.team4308.absolutelib.wrapper.MotorWrapper;
 import ca.team4308.absolutelib.wrapper.MotorWrapper.MotorType;
+import frc.robot.Util.FuelSim;
 import org.littletonrobotics.junction.Logger;
 
 import edu.wpi.first.math.geometry.Pose2d;
 import edu.wpi.first.math.geometry.Pose3d;
+import edu.wpi.first.math.geometry.Rotation2d;
 import edu.wpi.first.math.geometry.Rotation3d;
+import edu.wpi.first.math.geometry.Translation2d;
 import edu.wpi.first.math.geometry.Translation3d;
+import edu.wpi.first.math.kinematics.ChassisSpeeds;
 import edu.wpi.first.util.sendable.Sendable;
 import edu.wpi.first.util.sendable.SendableBuilder;
 import edu.wpi.first.wpilibj2.command.Command;
@@ -44,20 +48,21 @@ public class ExampleShooter extends AbsoluteSubsystem {
     private TrajectoryResult lastTrajectoryResult = null;
     private Pose3d[] lastFlightPath = new Pose3d[0];
     
-    // Pose supplier for continuous tracking
     private Supplier<Pose2d> poseSupplier = null;
     
-    // Shooter mounting parameters
+    private Supplier<ChassisSpeeds> chassisSpeedsSupplier = null;
+    
     private double shooterHeightMeters = 0.6; // Height of shooter on robot
     
-    // Hood/pivot angle limits (degrees)
-    private double minPitchDegrees = 0.0;
+    private Translation2d shooterOffset = new Translation2d(0.2, 0); // 20cm forward from center
+    private double minPitchDegrees = 5.0;
     private double maxPitchDegrees = 50.0;
+    private double minArcHeightMeters = 0.5; // Minimum height above target for arc apex
     
-    private Translation3d targetPosition = new Translation3d(5.0, 4.0, 2.1); // Default to blue alliance goal
+    private Translation3d targetPosition = new Translation3d(6.0, 6.0, 5.1); // Default to blue alliance goal
     
     // Enable/disable continuous tracking
-    private boolean trackingEnabled = false;
+    private boolean trackingEnabled = true;
     
     // Debug: store distance for logging
     private double lastDistanceToTarget = 0.0;
@@ -80,7 +85,7 @@ public class ExampleShooter extends AbsoluteSubsystem {
         } else {
             // Fallback to a preset configuration
             flywheelConfig = FlywheelConfig.builder()
-                    .name("Default Shooter")
+                    .name("2026 Shooter")
                     .arrangement(FlywheelConfig.WheelArrangement.DUAL_OVER_UNDER)
                     .wheelDiameterInches(4.0)
                     .wheelWidthInches(2.0)
@@ -103,6 +108,25 @@ public class ExampleShooter extends AbsoluteSubsystem {
      */
     public void setPoseSupplier(Supplier<Pose2d> supplier) {
         this.poseSupplier = supplier;
+    }
+    
+    /**
+     * Set the chassis speeds supplier for FuelSim shooting.
+     * This allows the shooter to account for robot velocity when launching.
+     * 
+     * @param supplier A supplier that returns field-relative ChassisSpeeds
+     */
+    public void setChassisSpeedsSupplier(Supplier<ChassisSpeeds> supplier) {
+        this.chassisSpeedsSupplier = supplier;
+    }
+    
+    /**
+     * Set the shooter offset from robot center (in robot frame).
+     * 
+     * @param offset Translation2d representing shooter position relative to robot center
+     */
+    public void setShooterOffset(Translation2d offset) {
+        this.shooterOffset = offset;
     }
     
     /**
@@ -134,6 +158,17 @@ public class ExampleShooter extends AbsoluteSubsystem {
     public void setPitchLimits(double minDegrees, double maxDegrees) {
         this.minPitchDegrees = minDegrees;
         this.maxPitchDegrees = maxDegrees;
+    }
+    
+    /**
+     * Set the minimum arc height above the target.
+     * This ensures the ball reaches a certain height before descending into the goal.
+     * Higher values create more pronounced arcs that drop into the target.
+     * 
+     * @param heightMeters Minimum height above target that the trajectory apex must reach (0 = no minimum)
+     */
+    public void setMinArcHeight(double heightMeters) {
+        this.minArcHeightMeters = Math.max(0.0, heightMeters);
     }
     
     /**
@@ -242,10 +277,11 @@ public class ExampleShooter extends AbsoluteSubsystem {
         lastDistanceToTarget = Math.sqrt(dx * dx + dy * dy);
         ShotInput input = ShotInput.builder()
                 .shooterPositionMeters(shooterX, shooterY, shooterZ)
-                .shooterYawRadians(yawToTargetRadians) // Set yaw to point at target
+                .shooterYawRadians(yawToTargetRadians) // Set yaw to point at target (This shouldnt be used in real life as it doesnt account for the turret limits)
                 .targetPositionMeters(targetX, targetY, targetZ)
                 .pitchRangeDegrees(minPitchDegrees, maxPitchDegrees) // Hood limits
-                .shotPreference(ShotInput.ShotPreference.MOST_ACCURATE)
+                .minArcHeightMeters(minArcHeightMeters) // Ensure ball arcs high enough to drop into goal
+                .shotPreference(ShotInput.ShotPreference.HIGH_CLEARANCE)
                 .build();
 
         lastTrajectoryResult = solver.solve(input);
@@ -324,6 +360,73 @@ public class ExampleShooter extends AbsoluteSubsystem {
      */
     public Command stopCommand() {
         return runOnce(this::stop);
+    }
+    
+    /**
+     * Shoots a ball in simulation using FuelSim.
+     * Uses the current robot pose, chassis speeds, and calculated trajectory parameters.
+     * The ball is spawned with velocity based on the target RPM and pitch angle.
+     */
+    public void shootBallSim() {
+        if (poseSupplier == null) {
+            System.out.println("Cannot shoot: pose supplier not set");
+            return;
+        }
+        
+        Pose2d robotPose = poseSupplier.get();
+        ChassisSpeeds chassisSpeeds = chassisSpeedsSupplier != null ? 
+                chassisSpeedsSupplier.get() : new ChassisSpeeds();
+        
+        // Get shooter rotation (robot rotation + any turret offset)
+        Rotation2d shooterRotation = robotPose.getRotation();
+        
+        // Calculate launch velocity based on RPM (assume 20 m/s at 6000 RPM)
+        double launchSpeed = (targetRpm / 6000.0) * 20.0;
+        if (launchSpeed < 1.0) {
+            launchSpeed = 15.0; // Default launch speed if no RPM calculated
+        }
+        
+        // Use the calculated pitch angle, or default to 55 degrees
+        double launchAngleRad = hasValidShot ? 
+                Math.toRadians(targetPitchDegrees) : Math.toRadians(55);
+        
+        // Calculate the shooter's world position
+        // Transform shooter offset from robot frame to world frame
+        double cosTheta = shooterRotation.getCos();
+        double sinTheta = shooterRotation.getSin();
+        double worldOffsetX = shooterOffset.getX() * cosTheta - shooterOffset.getY() * sinTheta;
+        double worldOffsetY = shooterOffset.getX() * sinTheta + shooterOffset.getY() * cosTheta;
+        
+        Translation3d shooterPos = new Translation3d(
+                robotPose.getX() + worldOffsetX,
+                robotPose.getY() + worldOffsetY,
+                shooterHeightMeters
+        );
+        
+        // Calculate velocity components
+        double horizontalSpeed = launchSpeed * Math.cos(launchAngleRad);
+        double verticalSpeed = launchSpeed * Math.sin(launchAngleRad);
+        
+        // Add chassis velocity (field-relative) to the ball's initial velocity
+        Translation3d launchVel = new Translation3d(
+                horizontalSpeed * cosTheta + chassisSpeeds.vxMetersPerSecond,
+                horizontalSpeed * sinTheta + chassisSpeeds.vyMetersPerSecond,
+                verticalSpeed
+        );
+        
+        // Spawn the fuel in simulation
+        FuelSim.getInstance().spawnFuel(shooterPos, launchVel);
+        
+        System.out.println("Shot ball! Pos: " + shooterPos + " Vel: " + launchVel + 
+                " Speed: " + launchSpeed + " m/s, Angle: " + Math.toDegrees(launchAngleRad) + " deg");
+    }
+    
+    /**
+     * Command to shoot a ball in simulation.
+     * @return Command that shoots a single ball
+     */
+    public Command shootBallSimCommand() {
+        return runOnce(this::shootBallSim);
     }
 
     // Getters for state
