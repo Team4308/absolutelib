@@ -74,6 +74,13 @@ public class TrajectorySolver {
         private final int crtControlLoopMs;
         private final int crtEncoderTicks;
         
+        /**
+         * Multiplier for target radius when checking if trajectory "hits" the target.
+         * Default is 5.0 to account for large hoops/baskets - the ball just needs to
+         * pass through, not hit a precise point.
+         */
+        private final double hoopToleranceMultiplier;
+        
         private SolverConfig(Builder builder) {
             this.minPitchDegrees = builder.minPitchDegrees;
             this.maxPitchDegrees = builder.maxPitchDegrees;
@@ -86,6 +93,7 @@ public class TrajectorySolver {
             this.crtAngleResolution = builder.crtAngleResolution;
             this.crtControlLoopMs = builder.crtControlLoopMs;
             this.crtEncoderTicks = builder.crtEncoderTicks;
+            this.hoopToleranceMultiplier = builder.hoopToleranceMultiplier;
         }
 
         public double getMinPitchDegrees() { return minPitchDegrees; }
@@ -99,6 +107,7 @@ public class TrajectorySolver {
         public double getCrtAngleResolution() { return crtAngleResolution; }
         public int getCrtControlLoopMs() { return crtControlLoopMs; }
         public int getCrtEncoderTicks() { return crtEncoderTicks; }
+        public double getHoopToleranceMultiplier() { return hoopToleranceMultiplier; }
 
         public static Builder builder() {
             return new Builder();
@@ -116,7 +125,8 @@ public class TrajectorySolver {
                 .crtRpmResolution(crtRpmResolution)
                 .crtAngleResolution(crtAngleResolution)
                 .crtControlLoopMs(crtControlLoopMs)
-                .crtEncoderTicks(crtEncoderTicks);
+                .crtEncoderTicks(crtEncoderTicks)
+                .hoopToleranceMultiplier(hoopToleranceMultiplier);
         }
 
         public static class Builder {
@@ -135,6 +145,7 @@ public class TrajectorySolver {
             private double crtAngleResolution = 0.1;
             private int crtControlLoopMs = 20;
             private int crtEncoderTicks = 4096;
+            private double hoopToleranceMultiplier = 5.0; // Default: generous tolerance for hoops
             
             public Builder minPitchDegrees(double val) { this.minPitchDegrees = val; return this; }
             public Builder maxPitchDegrees(double val) { this.maxPitchDegrees = val; return this; }
@@ -147,6 +158,7 @@ public class TrajectorySolver {
             public Builder crtAngleResolution(double val) { this.crtAngleResolution = val; return this; }
             public Builder crtControlLoopMs(int val) { this.crtControlLoopMs = val; return this; }
             public Builder crtEncoderTicks(int val) { this.crtEncoderTicks = val; return this; }
+            public Builder hoopToleranceMultiplier(double val) { this.hoopToleranceMultiplier = val; return this; }
             
             public SolverConfig build() {
                 return new SolverConfig(this);
@@ -271,9 +283,10 @@ public class TrajectorySolver {
         double distance = input.getHorizontalDistanceMeters();
         
         // compensation for robot velocity
-        boolean moving = Math.abs(input.getRobotVx()) > 0.01 || Math.abs(input.getRobotVy()) > 0.01;
-        int iterations = moving ? 3 : 1;
-        double estimatedTof = distance / 15.0; // 15 m/s initial estimate
+        boolean moving = Math.abs(input.getRobotVx()) > SolverConstants.getMovementThresholdMps() 
+                      || Math.abs(input.getRobotVy()) > SolverConstants.getMovementThresholdMps();
+        int iterations = moving ? SolverConstants.getMovingIterations() : SolverConstants.getStationaryIterations();
+        double estimatedTof = distance / SolverConstants.getInitialVelocityEstimateMps();
         
         for (int i = 0; i < iterations; i++) {
             if (moving) {
@@ -287,17 +300,17 @@ public class TrajectorySolver {
 
         double heightDiff = input.getHeightDifferenceMeters();
         
-        if (distance < 0.1) {
+        if (distance < SolverConstants.getMinTargetDistanceMeters()) {
             return TrajectoryResult.failure(
                 TrajectoryResult.Status.INVALID_INPUT,
-                "Target too close (< 0.1m)",
+                String.format("Target too close (< %.2fm)", SolverConstants.getMinTargetDistanceMeters()),
                 input
             );
         }
         
         double minVelocity = projectileMotion.calculateMinimumVelocity(distance, heightDiff);
         
-        double targetVelocity = minVelocity * 1.3; // 30% buffer
+        double targetVelocity = minVelocity * SolverConstants.getVelocityBufferMultiplier();
         
         FlywheelGenerator.GenerationResult genResult;
         if (cachedFlywheel != null) {
@@ -415,10 +428,14 @@ public class TrajectorySolver {
         }
         
         // Validate that trajectory actually reaches the target
-        if (trajSim != null && !trajSim.hitTarget && trajSim.closestApproach > input.getTargetRadius() * 3) {
+        // Use configurable hoop tolerance - the ball doesn't need to hit a precise point,
+        // it just needs to pass through a hoop/basket opening
+        double hoopTolerance = input.getTargetRadius() * config.getHoopToleranceMultiplier();
+        if (trajSim != null && !trajSim.hitTarget && trajSim.closestApproach > hoopTolerance) {
             return TrajectoryResult.failure(
                 TrajectoryResult.Status.OUT_OF_RANGE,
-                String.format("Trajectory misses target by %.2fm (closest approach)", trajSim.closestApproach),
+                String.format("Trajectory misses target by %.2fm (closest approach), tolerance is %.2fm", 
+                    trajSim.closestApproach, hoopTolerance),
                 input
             );
         }
@@ -475,12 +492,14 @@ public class TrajectorySolver {
         double heightDiff = input.getHeightDifferenceMeters();
         
         double minVelocity = projectileMotion.calculateMinimumVelocity(distance, heightDiff);
-        double maxVelocity = minVelocity * 2.0;
+        double maxVelocity = minVelocity * SolverConstants.getMaxVelocityRangeMultiplier();
         
         TrajectoryResult[] results = new TrajectoryResult[velocitySteps];
         
         FlywheelGenerator.GenerationResult genResult = 
-            flywheelGenerator.generateForVelocityRange(minVelocity * 1.1, maxVelocity * 0.9);
+            flywheelGenerator.generateForVelocityRange(
+                minVelocity * (1.0 / SolverConstants.getMinVelocityRangeMultiplier()), 
+                maxVelocity * SolverConstants.getMinVelocityRangeMultiplier());
         
         for (int i = 0; i < velocitySteps; i++) {
             double targetVelocity = minVelocity + (maxVelocity - minVelocity) * i / (velocitySteps - 1);
@@ -548,8 +567,8 @@ public class TrajectorySolver {
             input.getTargetRadius()
         );
         
-        double confidence = trajSim.hitTarget ? 90.0 : 
-            Math.max(0, 70 - trajSim.closestApproach * 100);
+        double confidence = trajSim.hitTarget ? SolverConstants.getConfidenceHitScore() : 
+            Math.max(0, SolverConstants.getConfidenceMissBase() - trajSim.closestApproach * SolverConstants.getConfidenceMissMultiplier());
         
         TrajectoryResult.DiscreteShot discreteSolution = 
             new TrajectoryResult.DiscreteShot(
@@ -585,8 +604,9 @@ public class TrajectorySolver {
         }
         
         double distance = input.getHorizontalDistanceMeters();
-        if (distance < 0.1) {
-            return ShotCandidateList.empty(input, "Target too close (< 0.1m)");
+        if (distance < SolverConstants.getMinTargetDistanceMeters()) {
+            return ShotCandidateList.empty(input, 
+                String.format("Target too close (< %.2fm)", SolverConstants.getMinTargetDistanceMeters()));
         }
         
         double heightDiff = input.getHeightDifferenceMeters();
@@ -594,7 +614,8 @@ public class TrajectorySolver {
         
         // Calculate minimum velocity needed
         double minRequiredVelocity = projectileMotion.calculateMinimumVelocity(distance, heightDiff);
-        double effectiveMinVelocity = Math.max(input.getMinVelocityMps(), minRequiredVelocity * 0.9);
+        double effectiveMinVelocity = Math.max(input.getMinVelocityMps(), 
+            minRequiredVelocity * SolverConstants.getMinVelocityRangeMultiplier());
         double effectiveMaxVelocity = input.getMaxVelocityMps();
         
         if (effectiveMinVelocity > effectiveMaxVelocity) {
@@ -631,7 +652,7 @@ public class TrajectorySolver {
         }
         
         double tofRange = maxTof - minTof;
-        if (tofRange < 0.001) tofRange = 1; // Prevent division by zero
+        if (tofRange < SolverConstants.getMinTofRangeSeconds()) tofRange = 1; // Prevent division by zero
         
         for (ProjectileMotion.AngleEvaluation eval : evaluations) {
             ShotCandidate candidate = buildCandidate(eval, input, yawAngle, minTof, tofRange, maxHeight);
@@ -685,11 +706,13 @@ public class TrajectorySolver {
         if (eval.hitsTarget) {
             // Score based on how centered the hit is
             double relativeApproach = eval.closestApproach / targetRadius;
-            return Math.max(50, 100 - relativeApproach * 50);
+            return Math.max(SolverConstants.getAccuracyScoreHitMin(), 
+                SolverConstants.getAccuracyScoreMax() - relativeApproach * SolverConstants.getAccuracyScoreHitMultiplier());
         } else {
             // Partial score for near misses
             double relativeError = eval.closestApproach / targetRadius;
-            return Math.max(0, 50 - (relativeError - 1) * 25);
+            return Math.max(0, SolverConstants.getAccuracyScoreMissBase() 
+                - (relativeError - 1) * SolverConstants.getAccuracyScoreMissMultiplier());
         }
     }
     
@@ -700,16 +723,19 @@ public class TrajectorySolver {
     private double calculateStabilityScore(ProjectileMotion.AngleEvaluation eval) {
         double angleDeg = eval.getPitchDegrees();
         
-        // Peak stability around 40 degrees
-        double optimalAngle = 40;
+        // Peak stability around optimal angle
+        double optimalAngle = SolverConstants.getStabilityOptimalAngleDegrees();
         double deviation = Math.abs(angleDeg - optimalAngle);
         
-        // Steep angles (>70°) and very flat angles (<15°) are less stable
-        if (angleDeg > 75 || angleDeg < 10) {
-            return Math.max(20, 60 - deviation);
+        // Steep angles and very flat angles are less stable
+        if (angleDeg > SolverConstants.getStabilityMaxAngleDegrees() 
+                || angleDeg < SolverConstants.getStabilityMinAngleDegrees()) {
+            return Math.max(SolverConstants.getStabilityUnstableMin(), 
+                SolverConstants.getStabilityUnstableBase() - deviation);
         }
         
-        return Math.max(30, 90 - deviation);
+        return Math.max(SolverConstants.getStabilityStableMin(), 
+            SolverConstants.getStabilityStableBase() - deviation);
     }
     
     /**
@@ -717,11 +743,13 @@ public class TrajectorySolver {
      * Faster (lower TOF) = higher score.
      */
     private double calculateSpeedScore(ProjectileMotion.AngleEvaluation eval, double minTof, double tofRange) {
-        if (tofRange < 0.001) return 70; // Default if all TOFs are similar
+        if (tofRange < SolverConstants.getMinTofRangeSeconds()) {
+            return SolverConstants.getSpeedScoreDefault(); // Default if all TOFs are similar
+        }
         
         double normalizedTof = (eval.timeOfFlight - minTof) / tofRange;
         // Invert: lower TOF = higher score
-        return 95 - (normalizedTof * 60);
+        return SolverConstants.getSpeedScoreMax() - (normalizedTof * SolverConstants.getSpeedScoreRange());
     }
     
     /**
@@ -729,22 +757,25 @@ public class TrajectorySolver {
      * Higher trajectories get better clearance scores for obstacle avoidance.
      */
     private double calculateClearanceScore(ProjectileMotion.AngleEvaluation eval, double maxHeight) {
-        if (maxHeight < 0.1) return 50; // Default
+        if (maxHeight < SolverConstants.getClearanceMinHeightMeters()) {
+            return SolverConstants.getClearanceScoreDefault(); // Default
+        }
         
         double relativeHeight = eval.maxHeight / maxHeight;
         // Higher = better clearance
-        return 40 + (relativeHeight * 55);
+        return SolverConstants.getClearanceScoreBase() + (relativeHeight * SolverConstants.getClearanceScoreRange());
     }
     
     /**
      * Determines arc type based on pitch angle.
      */
     private ShotCandidate.ArcType determineArcType(double pitchDegrees) {
-        if (pitchDegrees < 25) {
+        if (pitchDegrees < SolverConstants.getArcTypeLowMaxDegrees()) {
             return ShotCandidate.ArcType.LOW_ARC;
-        } else if (pitchDegrees > 55) {
+        } else if (pitchDegrees > SolverConstants.getArcTypeHighMinDegrees()) {
             return ShotCandidate.ArcType.HIGH_ARC;
-        } else if (pitchDegrees >= 40 && pitchDegrees <= 50) {
+        } else if (pitchDegrees >= SolverConstants.getArcTypeOptimalMinDegrees() 
+                && pitchDegrees <= SolverConstants.getArcTypeOptimalMaxDegrees()) {
             return ShotCandidate.ArcType.OPTIMAL_RANGE;
         } else {
             return ShotCandidate.ArcType.INTERMEDIATE;

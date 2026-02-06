@@ -230,7 +230,7 @@ public class ShotCandidate implements Comparable<ShotCandidate> {
     
     @Override
     public String toString() {
-        return String.format("ShotCandidate[%.1f° %s, %.1fm/s, TOF=%.2fs, conf=%.0f%% (%s)]",
+        return String.format("ShotCandidate[%.1f deg %s, %.1fm/s, TOF=%.2fs, conf=%.0f%% (%s)]",
             getPitchAngleDegrees(), arcType, requiredVelocityMps, 
             timeOfFlightSeconds, overallConfidence, hitsTarget ? "HIT" : "MISS");
     }
@@ -241,8 +241,8 @@ public class ShotCandidate implements Comparable<ShotCandidate> {
     public String toDetailedString() {
         StringBuilder sb = new StringBuilder();
         sb.append(String.format("=== Shot Candidate (%s) ===%n", arcType));
-        sb.append(String.format("  Pitch: %.2f° (%.4f rad)%n", getPitchAngleDegrees(), pitchAngleRadians));
-        sb.append(String.format("  Yaw: %.2f°%n", getYawAngleDegrees()));
+        sb.append(String.format("  Pitch: %.2f deg (%.4f rad)%n", getPitchAngleDegrees(), pitchAngleRadians));
+        sb.append(String.format("  Yaw: %.2f deg%n", getYawAngleDegrees()));
         sb.append(String.format("  Velocity: %.2f m/s (%.1f fps)%n", requiredVelocityMps, getRequiredVelocityFps()));
         sb.append(String.format("  Time of Flight: %.3f s%n", timeOfFlightSeconds));
         sb.append(String.format("  Max Height: %.2f m (%.1f ft)%n", maxHeightMeters, getMaxHeightFeet()));

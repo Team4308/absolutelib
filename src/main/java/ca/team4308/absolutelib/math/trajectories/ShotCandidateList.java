@@ -326,7 +326,7 @@ public class ShotCandidateList {
         
         return String.format(
             "Candidates: %d (%d hits, %d misses)%n" +
-            "Pitch range: %.1f° - %.1f°%n" +
+            "Pitch range: %.1f deg - %.1f deg%n" +
             "Velocity range: %.1f - %.1f m/s%n" +
             "Average confidence: %.1f%%%n" +
             "Best confidence: %.1f%%",

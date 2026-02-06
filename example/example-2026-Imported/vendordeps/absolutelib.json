@@ -1,7 +1,7 @@
 {
     "fileName": "absolutelib.json",
     "name": "absolutelib",
-    "version": "1.2.6",
+    "version": "1.2.7",
     "frcYear": "2026",
     "uuid": "a604c6de-3573-4ba6-ae4f-32778238b9de",
     "mavenUrls": [
@@ -13,7 +13,7 @@
         {
             "groupId": "ca.team4308",
             "artifactId": "absolutelib-java",
-            "version": "1.2.6"
+            "version": "1.2.7"
         }
     ],
     "requires": [],

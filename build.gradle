@@ -119,6 +119,16 @@ test {
     // Run tests even if some fail, but record failures
     ignoreFailures = false
     
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}
+
+tasks.withType(Javadoc).configureEach {
+    options.encoding = 'UTF-8'
+    options.charSet = 'UTF-8'
+    options.docEncoding = 'UTF-8'
+}
     // Increase test timeout
     maxHeapSize = '1G'
     

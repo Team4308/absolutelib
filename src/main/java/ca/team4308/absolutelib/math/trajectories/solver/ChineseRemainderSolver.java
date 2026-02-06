@@ -11,7 +11,7 @@ import java.util.List;
 public class ChineseRemainderSolver {
     
     /**
-     * A modular constraint of the form: x ≡ remainder (mod modulus)
+        * A modular constraint of the form: x congruent to remainder (mod modulus)
      */
     public static class ModularConstraint {
         public final String name;
@@ -30,7 +30,7 @@ public class ChineseRemainderSolver {
         
         @Override
         public String toString() {
-            return String.format("%s: x ≡ %d (mod %d)", name, remainder, modulus);
+            return String.format("%s: x == %d (mod %d)", name, remainder, modulus);
         }
     }
     
@@ -77,7 +77,7 @@ public class ChineseRemainderSolver {
     
     /**
      * Solves the classical CRT for two congruences.
-     * Finds x such that: x ≡ a1 (mod m1) and x ≡ a2 (mod m2)
+        * Finds x such that: x == a1 (mod m1) and x == a2 (mod m2)
      * 
      * @param a1 First remainder
      * @param m1 First modulus
@@ -100,7 +100,7 @@ public class ChineseRemainderSolver {
         // LCM of moduli
         long lcm = m1 / gcd * m2;
         
-        // Solution: x ≡ a1 + m1 * x * ((a2 - a1) / gcd) (mod lcm)
+        // Solution: x == a1 + m1 * x * ((a2 - a1) / gcd) (mod lcm)
         long solution = a1 + m1 * x * ((a2 - a1) / gcd);
         
         // Normalize to positive

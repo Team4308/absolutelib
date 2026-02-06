@@ -454,7 +454,7 @@ public class ShotInput {
     
     @Override
     public String toString() {
-        return String.format("Shot from (%.2f, %.2f, %.2f)m yaw=%.1f° to (%.2f, %.2f, %.2f)m (%.2fm dist, %.2fm high) Robot V=(%.1f, %.1f)",
+        return String.format("Shot from (%.2f, %.2f, %.2f)m yaw=%.1f deg to (%.2f, %.2f, %.2f)m (%.2fm dist, %.2fm high) Robot V=(%.1f, %.1f)",
             shooterX, shooterY, shooterZ, Math.toDegrees(shooterYaw),
             targetX, targetY, targetZ,
             getHorizontalDistanceMeters(), getHeightDifferenceMeters(),

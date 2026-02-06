@@ -1,5 +1,6 @@
 package ca.team4308.absolutelib.math.trajectories.physics;
 
+import ca.team4308.absolutelib.math.trajectories.SolverConstants;
 import ca.team4308.absolutelib.math.trajectories.gamepiece.GamePiece;
 
 /**
@@ -128,10 +129,10 @@ public class ProjectileMotion {
         double spinAxisY = Math.cos(yawAngle);
         double spinAxisZ = 0;
         
-        int maxPoints = (int)(PhysicsConstants.MAX_FLIGHT_TIME / 0.01) + 1;
+        int maxPoints = (int)(PhysicsConstants.MAX_FLIGHT_TIME / SolverConstants.getTrajectorySampleIntervalSeconds()) + 1;
         TrajectoryState[] trajectory = new TrajectoryState[maxPoints];
         int pointCount = 0;
-        int sampleInterval = (int)(0.01 / timeStep);
+        int sampleInterval = (int)(SolverConstants.getTrajectorySampleIntervalSeconds() / timeStep);
         int stepCount = 0;
         
         double maxHeight = z0;
@@ -172,7 +173,8 @@ public class ProjectileMotion {
             
             // For basket-style goals: Stop simulation when ball descends to/below target height
             // while being horizontally close to the target
-            if (pastApex && state.z <= targetZ && horizontalDistToTarget < targetRadius * 5) {
+            if (pastApex && state.z <= targetZ 
+                    && horizontalDistToTarget < targetRadius * SolverConstants.getBasketDescentToleranceMultiplier()) {
                 // Ball has descended into the goal zone - this is a valid landing
                 hitTarget = true;
                 break;
@@ -186,9 +188,10 @@ public class ProjectileMotion {
         System.arraycopy(trajectory, 0, trimmedTrajectory, 0, pointCount);
         
         // Final validation: check if the trajectory actually reached close to the target
-        // The closest approach must be within a reasonable distance for a valid hit
-        if (!hitTarget && closestApproach <= targetRadius * 3) {
-            hitTarget = true; // Close enough counts as a hit
+        // Use generous tolerance for hoop/basket-style targets - the ball
+        // doesn't need to hit a precise point, it just needs to pass through the opening
+        if (!hitTarget && closestApproach <= targetRadius * SolverConstants.getHoopToleranceMultiplier()) {
+            hitTarget = true; // Close enough counts as a hit for a hoop
         }
         
         return new TrajectoryResult(trimmedTrajectory, hitTarget, closestApproach, 
@@ -276,7 +279,7 @@ public class ProjectileMotion {
      */
     public double calculateTimeOfFlight(double distance, double launchAngle, double velocity) {
         double horizontalVelocity = velocity * Math.cos(launchAngle);
-        if (Math.abs(horizontalVelocity) < 1e-6) {
+        if (Math.abs(horizontalVelocity) < SolverConstants.getVelocityZeroThreshold()) {
             return Double.POSITIVE_INFINITY;
         }
         return distance / horizontalVelocity;
@@ -394,23 +397,53 @@ public class ProjectileMotion {
             calculateHighArcAngle(horizontalDistance, heightDiff, velocity) :
             calculateLowArcAngle(horizontalDistance, heightDiff, velocity);
         
+        // If analytical solution fails, try a broader search
+        // The analytical solution doesn't account for air resistance and spin
+        // which can allow shots that seem impossible in vacuum physics
         if (Double.isNaN(angle)) {
-            return Double.NaN;
+            // Try a sweep to find any viable angle
+            double bestAngle = Double.NaN;
+            double bestApproach = Double.MAX_VALUE;
+            
+            double sweepMin = SolverConstants.getMinAngleBoundRadians();
+            double sweepMax = Math.PI / 2 - SolverConstants.getHighArcMaxOffsetRadians();
+            double sweepStep = SolverConstants.getAngleSweepStepRadians();
+            
+            for (double testAngle = sweepMin; testAngle < sweepMax; testAngle += sweepStep) {
+                TrajectoryResult result = simulate(gamePiece, x0, y0, z0, 
+                    velocity, testAngle, yawAngle, spinRpm, targetX, targetY, targetZ, targetRadius);
+                
+                if (result.hitTarget) {
+                    return testAngle;
+                }
+                
+                if (result.closestApproach < bestApproach) {
+                    bestApproach = result.closestApproach;
+                    bestAngle = testAngle;
+                }
+            }
+            
+            // If we found something reasonably close, use it
+            if (bestApproach <= targetRadius * SolverConstants.getHoopToleranceMultiplier()) {
+                angle = bestAngle;
+            } else {
+                return Double.NaN;
+            }
         }
         
         if (!airResistance.isEnabled()) {
             return angle;
         }
         
-        double angleLow = 0.1;
-        double angleHigh = Math.PI / 2 - 0.1;
+        double angleLow = SolverConstants.getMinAngleBoundRadians();
+        double angleHigh = Math.PI / 2 - SolverConstants.getMaxAngleOffsetRadians();
         
         if (preferHighArc) {
-            angleLow = angle * 0.8;
-            angleHigh = Math.PI / 2 - 0.05;
+            angleLow = angle * SolverConstants.getHighArcLowBoundMultiplier();
+            angleHigh = Math.PI / 2 - SolverConstants.getHighArcMaxOffsetRadians();
         } else {
-            angleLow = 0.05;
-            angleHigh = angle * 1.2;
+            angleLow = SolverConstants.getLowArcMinBoundRadians();
+            angleHigh = angle * SolverConstants.getLowArcHighBoundMultiplier();
         }
         
         for (int i = 0; i < PhysicsConstants.MAX_ITERATIONS * 2; i++) {
@@ -446,7 +479,7 @@ public class ProjectileMotion {
                 angleLow = angle;
             }
             
-            if (angleHigh - angleLow < 0.00001) {
+            if (angleHigh - angleLow < SolverConstants.getAngleConvergenceThreshold()) {
                 break; 
             }
         }

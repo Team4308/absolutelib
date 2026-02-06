@@ -56,10 +56,10 @@ public class ExampleShooter extends AbsoluteSubsystem {
     
     private Translation2d shooterOffset = new Translation2d(0.2, 0); // 20cm forward from center
     private double minPitchDegrees = 5.0;
-    private double maxPitchDegrees = 50.0;
-    private double minArcHeightMeters = 0.5; // Minimum height above target for arc apex
+    private double maxPitchDegrees = 45.0;
+    private double minArcHeightMeters = 0.0; // Minimum height above target for arc apex
     
-    private Translation3d targetPosition = new Translation3d(6.0, 6.0, 5.1); // Default to blue alliance goal
+    private Translation3d targetPosition = new Translation3d(6.0, 4.0, 5.1); // Default to blue alliance goal
     
     // Enable/disable continuous tracking
     private boolean trackingEnabled = true;
@@ -281,7 +281,7 @@ public class ExampleShooter extends AbsoluteSubsystem {
                 .targetPositionMeters(targetX, targetY, targetZ)
                 .pitchRangeDegrees(minPitchDegrees, maxPitchDegrees) // Hood limits
                 .minArcHeightMeters(minArcHeightMeters) // Ensure ball arcs high enough to drop into goal
-                .shotPreference(ShotInput.ShotPreference.HIGH_CLEARANCE)
+                .shotPreference(ShotInput.ShotPreference.AUTO)
                 .build();
 
         lastTrajectoryResult = solver.solve(input);
@@ -308,7 +308,7 @@ public class ExampleShooter extends AbsoluteSubsystem {
                     .build();
         } else {
             ShotCandidateList candidates = solver.findAllCandidates(input);
-            Optional<ShotCandidate> fastest = candidates.getMostAccurate();
+            Optional<ShotCandidate> fastest = candidates.getBest();
             
             if (fastest.isPresent()) {
                 lastShot = fastest.get();

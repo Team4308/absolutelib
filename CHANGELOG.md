@@ -1,5 +1,17 @@
 # Changelog for AbsoluteLib V2
 
+## 1.2.8
+
+- Added `SolverConstants` class with 45 parameters for the trajectory system. These numbers more then likely are fine as they are, but incase a change needs to be made its there
+- Removed almost al magic numbers found in the trajectories slover.
+- Added `resetToDefaults()` to restore default values.
+- Increased default hoop tolerance multiplier (3x → 5x target radius) for more realistic hit detection.
+- Added `hoopToleranceMultiplier` to `SolverConfig` for per-solver customization.
+- Added fallback angle sweep when analytical vacuum physics solution fails.
+- Air resistance and spin effects can now be enabled
+- Better convergence for edge-case trajectories near physical limits.
+- Also added changelog into the site
+
 ## 1.2.7
 
 - Added `minArcHeightMeters` to ShotInput for controlling trajectory apex height.
