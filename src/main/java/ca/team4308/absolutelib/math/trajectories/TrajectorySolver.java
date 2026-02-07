@@ -230,6 +230,37 @@ public class TrajectorySolver {
     private static final double MIN_TOF_RANGE = 0.001;
 
     /**
+     * Long-range distance at which full drag compensation is applied (meters).
+     * Below this, drag compensation is linearly interpolated from 1.0 (no comp)
+     * at the close-range threshold to full at this distance.
+     */
+    private static final double DRAG_COMP_FULL_RANGE_METERS = 8.0;
+
+    /**
+     * Calculates distance-scaled drag compensation.
+     * At the close-range threshold, drag compensation is 1.0 (none).
+     * It linearly ramps up to the full dragCompensationMultiplier at DRAG_COMP_FULL_RANGE_METERS.
+     * Beyond that distance, the full multiplier is used.
+     * 
+     * @param distance Horizontal distance to target in meters
+     * @return Effective drag compensation multiplier (>= 1.0)
+     */
+    static double calculateDragCompensation(double distance) {
+        double closeRange = SolverConstants.getCloseRangeThresholdMeters();
+        double fullDragComp = SolverConstants.getDragCompensationMultiplier();
+        
+        if (distance <= closeRange) {
+            return 1.0; // No drag comp at close range
+        }
+        if (distance >= DRAG_COMP_FULL_RANGE_METERS) {
+            return fullDragComp; // Full drag comp at long range
+        }
+        // Linear interpolation between close-range (1.0) and full-range (fullDragComp)
+        double t = (distance - closeRange) / (DRAG_COMP_FULL_RANGE_METERS - closeRange);
+        return 1.0 + t * (fullDragComp - 1.0);
+    }
+
+    /**
      * Checks if a trajectory collides with any obstacle, respecting grace distance
      * and the opening exemption for descending balls.
      */
@@ -421,7 +452,7 @@ public class TrajectorySolver {
             velocityBuffer = SolverConstants.getCloseRangeVelocityMultiplier();
         } else {
             velocityBuffer = SolverConstants.getVelocityBufferMultiplier()
-                * SolverConstants.getDragCompensationMultiplier();
+                * calculateDragCompensation(distance);
         }
         double targetVelocity = minVelocity * velocityBuffer;
         
@@ -635,7 +666,7 @@ public class TrajectorySolver {
         double heightDiff = input.getHeightDifferenceMeters();
         
         double minVelocity = projectileMotion.calculateMinimumVelocity(distance, heightDiff)
-            * SolverConstants.getDragCompensationMultiplier();
+            * calculateDragCompensation(distance);
         double maxVelocity = minVelocity * SolverConstants.getMaxVelocityRangeMultiplier();
         
         TrajectoryResult[] results = new TrajectoryResult[velocitySteps];
@@ -989,7 +1020,7 @@ public class TrajectorySolver {
         }
 
         double minRequiredVelocity = projectileMotion.calculateMinimumVelocity(distance, heightDiff);
-        double dragComp = SolverConstants.getDragCompensationMultiplier();
+        double dragComp = calculateDragCompensation(distance);
         double effectiveMinVelocity = Math.max(input.getMinVelocityMps(),
             minRequiredVelocity * SolverConstants.getMinVelocityRangeMultiplier() * dragComp);
         double effectiveMaxVelocity = input.getMaxVelocityMps();

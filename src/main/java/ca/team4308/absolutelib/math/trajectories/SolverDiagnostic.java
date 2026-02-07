@@ -39,10 +39,12 @@ public class SolverDiagnostic {
         SolverConstants.setMinTargetDistanceMeters(0.05);
         SolverConstants.setVelocityBufferMultiplier(1.2);
 
-        System.out.printf("  velocityBuffer=%.2f, dragComp=%.2f, effective=%.2fx%n",
+        System.out.printf("  velocityBuffer=%.2f, maxDragComp=%.2f%n",
             SolverConstants.getVelocityBufferMultiplier(),
-            SolverConstants.getDragCompensationMultiplier(),
-            SolverConstants.getVelocityBufferMultiplier() * SolverConstants.getDragCompensationMultiplier());
+            SolverConstants.getDragCompensationMultiplier());
+        System.out.printf("  dragComp is distance-scaled: 1.0 at <=%.1fm, %.2f at >=8m%n",
+            SolverConstants.getCloseRangeThresholdMeters(),
+            SolverConstants.getDragCompensationMultiplier());
         System.out.printf("  closeRangeBuffer=%.2f, closeRangeThreshold=%.1fm%n",
             SolverConstants.getCloseRangeVelocityMultiplier(),
             SolverConstants.getCloseRangeThresholdMeters());
@@ -141,7 +143,7 @@ public class SolverDiagnostic {
         
         ProjectileMotion pm = new ProjectileMotion();
         double minVelocity = pm.calculateMinimumVelocity(distance, heightDiff);
-        double dragComp = SolverConstants.getDragCompensationMultiplier();
+        double dragComp = TrajectorySolver.calculateDragCompensation(distance);
         double bufferVelocity = minVelocity * SolverConstants.getVelocityBufferMultiplier() * dragComp;
         
         System.out.printf("  Distance: %.2fm, HeightDiff: %.2fm%n", distance, heightDiff);
@@ -238,7 +240,7 @@ public class SolverDiagnostic {
                 drag = 1.0;
             } else {
                 buffer = SolverConstants.getVelocityBufferMultiplier();
-                drag = SolverConstants.getDragCompensationMultiplier();
+                drag = TrajectorySolver.calculateDragCompensation(d);
             }
             double buffered = minV * buffer * drag;
             
