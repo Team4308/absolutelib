@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AbsoluteLib Changelog</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script>hljs.highlightAll();</script>
+</head>
+
+<body>
+    <button class="sidebar-toggle" onclick="toggleSidebar()" aria-label="Toggle menu">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="3" y1="6" x2="21" y2="6"></line>
+            <line x1="3" y1="12" x2="21" y2="12"></line>
+            <line x1="3" y1="18" x2="21" y2="18"></line>
+        </svg>
+    </button>
+
+    <div class="container">
+        <nav class="sidebar" id="sidebar">
+            <div class="brand">
+                <h1>AbsoluteLib</h1>
+                <span class="version">v1.2.7</span>
+            </div>
+            <ul>
+                <li><a href="index.html">Documentation Home</a></li>
+                <li><a href="docs/index.html">API Javadoc</a></li>
+            </ul>
+        </nav>
+        <main class="content">
+            <section id="changelog">
+                <h1>Changelog</h1>
+                <p>Track the latest updates and changes to AbsoluteLib.</p>
+                <hr style="border: 0; border-top: 1px solid var(--border); margin: 20px 0;">
+                <div id="changelog-content">
+                    <p>Loading changelog...</p>
+                </div>
+            </section>
+        </main>
+        <div class="sidebar-overlay" id="overlay" onclick="closeSidebar()"></div>
+    </div>
+
+    <script>
+        function toggleSidebar() {
+            document.getElementById('sidebar').classList.toggle('open');
+        }
+        function closeSidebar() {
+            document.getElementById('sidebar').classList.remove('open');
+        }
+
+        const CHANGELOG_URL = 'https://raw.githubusercontent.com/Team4308/absolutelib/refs/heads/master/CHANGELOG.md';
+
+        (async () => {
+            try {
+                const res = await fetch(CHANGELOG_URL, { cache: 'no-store' });
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const markdownRaw = await res.text();
+                // The page already has its own H1; strip the changelog's leading title if present.
+                const markdown = markdownRaw.replace(/^#\s+.*\r?\n\r?\n/, '');
+
+                marked.setOptions({
+                    gfm: true,
+                    breaks: false,
+                    headerIds: true,
+                    mangle: false
+                });
+
+                document.getElementById('changelog-content').innerHTML = marked.parse(markdown);
+                hljs.highlightAll();
+            } catch (error) {
+                document.getElementById('changelog-content').innerHTML = `<p>Error: ${error.message}</p>`;
+            }
+        })();
+    </script>
+</body>
+
+</html>

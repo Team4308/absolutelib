@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AbsoluteLib Documentation</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script>hljs.highlightAll();</script>
+</head>
+
+<body>
+    <button class="sidebar-toggle" onclick="toggleSidebar()" aria-label="Toggle menu">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="3" y1="6" x2="21" y2="6"></line>
+            <line x1="3" y1="12" x2="21" y2="12"></line>
+            <line x1="3" y1="18" x2="21" y2="18"></line>
+        </svg>
+    </button>
+
+    <div class="container">
+        <nav class="sidebar" id="sidebar">
+            <div class="brand">
+                <h1>AbsoluteLib</h1>
+                <span class="version">v1.2.8</span>
+            </div>
+            <ul>
+                <li><a href="#introduction" onclick="closeSidebar()">Introduction</a></li>
+                <li><a href="#installation" onclick="closeSidebar()">Installation</a></li>
+                <li><a href="#motor-wrapper" onclick="closeSidebar()">Motor Wrapper</a></li>
+                <li><a href="#pivot-subsystem" onclick="closeSidebar()">Pivot Subsystem</a></li>
+                <li><a href="#vision" onclick="closeSidebar()">Vision System</a></li>
+                <li><a href="#leds" onclick="closeSidebar()">LED Patterns</a></li>
+                <li><a href="#trajectory-system" onclick="closeSidebar()">Trajectory System</a></li>
+                <li><a href="#obstacle-solving" onclick="closeSidebar()" style="padding-left: 24px; font-size: 0.85rem;">↳ Obstacle Avoidance</a></li>
+                <li><a href="#rpm-feedback" onclick="closeSidebar()" style="padding-left: 24px; font-size: 0.85rem;">↳ RPM Feedback</a></li>
+                <li><a href="#solver-tuning" onclick="closeSidebar()" style="padding-left: 24px; font-size: 0.85rem;">↳ Tuning Constants</a></li>
+                <li><a href="#maintenance" onclick="closeSidebar()">Maintenance</a></li>
+                <li><a href="changelog-viewer.html" onclick="closeSidebar()">Changelog</a></li>
+            </ul>
+            <div style="margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border);">
+                <a href="docs/index.html"
+                    style="display: flex; align-items: center; gap: 8px; padding: 10px 12px; background: rgba(88,166,255,0.1); border-radius: var(--radius-sm); color: var(--accent); font-size: 0.9rem;">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                        <polyline points="14 2 14 8 20 8"></polyline>
+                    </svg>
+                    API Javadoc
+                    <polyline points="10 9 9 9 8 9"></polyline>
+                    </svg>
+                </a>
+            </div>
+        </nav>
+        <main class="content">
+            <section id="introduction">
+                <h1>Introduction</h1>
+                <p>AbsoluteLib is a comprehensive FRC utility library developed by Team 4308. It unifies hardware
+                    interaction, simplifies simulation, and provides robust subsystems for common robot mechanisms.</p>
+                <div class="badges">
+                    <img src="https://jitpack.io/v/team4308/absolutelib.svg" alt="JitPack">
+                    <img src="https://img.shields.io/github/license/team4308/absolutelib" alt="License">
+                </div>
+            </section>
+
+            <section id="installation">
+                <h1>Installation</h1>
+                <p>To install AbsoluteLib in your WPILib project:</p>
+                <ol>
+                    <li>Open your project in VS Code.</li>
+                    <li>Press <code>Ctrl+Shift+P</code> and select <strong>WPILib: Manage Vendor Libraries</strong>.
+                    </li>
+                    <li>Select <strong>Install new library (online)</strong>.</li>
+                    <li>Enter the following URL:</li>
+                </ol>
+                <pre><code class="language-text">https://team4308.github.io/absolutelib/lib/absolutelib.json</code></pre>
+            </section>
+
+            <section id="motor-wrapper">
+                <h1>Unified Motor Wrapper</h1>
+                <p>Control TalonFX, TalonSRX, VictorSPX, and SparkMax motors with a single, unified API. No more
+                    vendor-specific boilerplate.</p>
+
+                <h3>Basic Usage</h3>
+                <pre><code class="language-java">MotorWrapper shooter = new MotorWrapper(MotorWrapper.MotorType.TALONFX, 10);
+shooter.setVoltage(12.0);</code></pre>
+
+                <h3>Smart Motion Configuration</h3>
+                <h5>Only works with Sparkmaxs and TalonSX, TalonSRX'S Dont support Motion Magic.</h5>
+                <pre><code class="language-java">shooter.applyMotorConfig(MotorWrapper.UnifiedMotorConfig.builder()
+    .kP(0.1)
+    .kF(0.05)
+    .motionCruiseVelocity(6000)
+    .motionAcceleration(12000)
+    .build());
+
+shooter.setSmartPosition(10.0); // Moves 10 rotations</code></pre>
+            </section>
+
+            <section id="pivot-subsystem">
+                <h1>Pivot Subsystem</h1>
+                <p>The Pivot class provides a robust base for Arms, Wrists, and Elevators with built-in physics
+                    simulation.</p>
+                <pre><code class="language-java">public class Wrist extends Pivot {
+    public Wrist() {
+        super(new Config()
+            .withLeader(new MotorWrapper(MotorWrapper.MotorType.TALONFX, 15))
+            .withEncoder(EncoderWrapper.canCoder(20, 0.0))
+            .pid(0.02, 0.0, 0.0)
+            .enableSimulation(true)
+            .withSimulation(new PivotSimulation.Config()
+                .armLength(0.3)
+                .armMass(2.0)
+            )
+        );
+    }
+}</code></pre>
+            </section>
+
+            <section id="vision">
+                <h1>Vision System</h1>
+                <p>Integrate PhotonVision with multi-camera pose estimation easily.</p>
+                <pre><code class="language-java">Vision vision = new Vision(
+    drive::getPose, 
+    drive.field, 
+    layout, 
+    new Vision.VisionCamera("FrontCam", layout, ...)
+);
+
+vision.updatePoseEstimation(drive);</code></pre>
+            </section>
+
+            <section id="leds">
+                <h1>LED Patterns</h1>
+                <p>Apply complex patterns like Larson Scanners, Fire, and Rainbows.</p>
+                <pre><code class="language-java">Leds leds = new Leds(9, 60);
+leds.setPattern(Patterns.fire(0.3, 0.05));</code></pre>
+            </section>
+
+            <section id="trajectory-system">
+                <h1>Trajectory System (2026 REBUILT)</h1>
+                <p>Complete trajectory solving system for turret shooters with flywheel simulation, projectile physics,
+                    obstacle-aware collision avoidance, and shot optimization.</p>
+
+                <h3>Quick Start</h3>
+                <pre><code class="language-java">// Create solver for 2026 game
+TrajectorySolver solver = TrajectorySolver.forGame2026();
+
+// Define shot
+ShotInput input = ShotInput.builder()
+    .shooterPositionMeters(1.0, 2.0, 0.5)
+    .targetPositionMeters(5.0, 5.0, 2.5)
+    .shotPreference(ShotInput.ShotPreference.FASTEST)
+    .build();
+
+// Get best pitch angle
+double pitch = solver.solveBestPitchDegrees(input);
+System.out.println("Shoot at: " + pitch + "°");</code></pre>
+
+                <h3>Multi-Candidate Selection</h3>
+                <pre><code class="language-java">// Find all possible shots
+ShotCandidateList candidates = solver.findAllCandidates(input);
+
+// Get shots by preference
+candidates.getFastest();        // Fastest shot
+candidates.getMostAccurate();   // Most accurate
+candidates.getMostStable();     // Most stable angle
+candidates.getMaxClearance();   // Highest arc</code></pre>
+
+                <h3 id="obstacle-solving">Obstacle-Aware Solving</h3>
+                <p>The solver detects and avoids field obstacles like the 2026 hub. Trajectories that collide with
+                    obstacles are automatically rejected, and the solver biases toward higher arcs when the shot path
+                    crosses an obstacle.</p>
+                <pre><code class="language-java">// Define the 2026 hub as an obstacle
+ObstacleConfig hub = ObstacleConfig.builder()
+    .position(4.03, 4.0)           // Center of hub on field
+    .baseSize(1.19)                // 1.19m x 1.19m footprint
+    .wallHeight(1.83)              // Solid wall height
+    .upperStructureHeight(0.41)    // Polycarbonate above wall
+    .openingDiameter(1.06)         // Basket opening
+    .collisionMargin(0.05)         // Safety margin
+    .build();
+
+// Add obstacle to shot input
+ShotInput input = ShotInput.builder()
+    .shooterPositionMeters(1.0, 2.0, 0.5)
+    .targetPositionMeters(4.03, 4.0, 2.1)
+    .addObstacle(hub)
+    .collisionCheckEnabled(true)
+    .build();
+
+// Solver automatically avoids hub collisions
+TrajectoryResult result = solver.solve(input);</code></pre>
+                <p>The collision system includes:</p>
+                <ul>
+                    <li><strong>Grace Distance:</strong> Balls near the launch point skip collision checks — you can
+                        shoot from close to or inside an obstacle's footprint</li>
+                    <li><strong>Opening Exemption:</strong> Balls descending into the basket opening aren't blocked by
+                        the obstacle</li>
+                    <li><strong>Auto Arc Bias:</strong> When the shot path crosses an obstacle, the solver biases toward
+                        higher arcs to clear it</li>
+                </ul>
+
+                <h3 id="rpm-feedback">RPM Feedback Loop</h3>
+                <p>For rapid-fire scenarios where the flywheel hasn't fully spun up between shots,
+                    <code>solveAtCurrentRpm</code> adjusts the pitch angle to compensate for lower-than-ideal
+                    velocity:</p>
+                <pre><code class="language-java">// Solve at the flywheel's current measured RPM
+double currentRpm = flywheelEncoder.getVelocity();
+TrajectoryResult adjusted = solver.solveAtCurrentRpm(
+    input, flywheelConfig, currentRpm
+);
+
+if (adjusted.isSuccess()) {
+    // Steeper angle compensates for lower velocity
+    double adjustedPitch = adjusted.getPitchAngleDegrees();
+}</code></pre>
+
+                <h3>Flywheel Configuration</h3>
+                <pre><code class="language-java">// Generate optimal flywheel
+FlywheelGenerator generator = new FlywheelGenerator(
+    GamePieces.REBUILT_2026_BALL
+);
+
+FlywheelGenerator.GenerationResult result = 
+    generator.generateAndEvaluate(15.0); // 15 m/s target
+
+FlywheelConfig best = result.bestConfig.config;
+System.out.println("Best: " + best.toString());</code></pre>
+
+                <h3>Custom Flywheel</h3>
+                <pre><code class="language-java">FlywheelConfig custom = FlywheelConfig.builder()
+    .name("Custom Shooter")
+    .arrangement(WheelArrangement.DUAL_OVER_UNDER)
+    .wheelDiameterInches(4.0)
+    .material(WheelMaterial.GREEN_COMPLIANT)
+    .compressionRatio(0.12)
+    .motor(FRCMotors.KRAKEN_X60)
+    .build();</code></pre>
+
+                <h3 id="solver-tuning">Tuning Constants</h3>
+                <p>All solver parameters are configurable at runtime via <code>SolverConstants</code>:</p>
+                <pre><code class="language-java">// Target detection
+SolverConstants.setHoopToleranceMultiplier(8.0);
+SolverConstants.setMinTargetDistanceMeters(0.05);
+
+// Velocity tuning
+SolverConstants.setVelocityBufferMultiplier(1.2);
+SolverConstants.setDragCompensationMultiplier(1.8);
+SolverConstants.setCloseRangeVelocityMultiplier(1.3);
+
+// Collision
+SolverConstants.setCollisionGraceDistanceMeters(0.5);
+SolverConstants.setObstacleClearanceMarginMeters(0.15);
+
+// Arc behavior
+SolverConstants.setForceHighArcMinPitchDegrees(35.0);
+SolverConstants.setDefaultArcBiasStrength(0.6);
+
+// Create solver with modified constants
+TrajectorySolver solver = TrajectorySolver.forGame2026();
+
+// Reset when done
+SolverConstants.resetToDefaults();</code></pre>
+
+                <h3>Key Features</h3>
+                <ul>
+                    <li><strong>Physics-Based:</strong> Accurate projectile motion with air resistance and Magnus effect
+                    </li>
+                    <li><strong>Obstacle Avoidance:</strong> Collision-aware solving with grace distance and opening
+                        exemption</li>
+                    <li><strong>RPM Feedback:</strong> Adjust pitch on-the-fly based on measured flywheel speed</li>
+                    <li><strong>Flywheel Simulation:</strong> Realistic wheel-ball interaction modeling</li>
+                    <li><strong>Auto-Optimization:</strong> Generates and scores hundreds of configurations</li>
+                    <li><strong>Multi-Candidate:</strong> Returns all valid shots sorted by preference</li>
+                    <li><strong>Runtime Tuning:</strong> All constants adjustable via <code>SolverConstants</code>
+                        without recompiling</li>
+                    <li><strong>2026 REBUILT:</strong> Optimized for 5.91" high-density foam ball</li>
+                </ul>
+
+                <h3>Game Pieces</h3>
+                <p>Predefined specifications for multiple FRC games:</p>
+                <ul>
+                    <li>2026 REBUILT Ball (5.91", 0.474 lbs)</li>
+                    <li>2024 CRESCENDO Note</li>
+                    <li>2022 RAPID REACT Cargo</li>
+                    <li>2020 INFINITE RECHARGE Power Cell</li>
+                    <li>And more...</li>
+                </ul>
+            </section>
+
+            <section id="maintenance">
+                <h1>Maintenance & Releases</h1>
+                <p>Guide for maintainers on how to update and release new versions of AbsoluteLib.</p>
+
+                <h3>Version Bump Workflow</h3>
+                <ol>
+                    <li>
+                        <strong>Update Gradle Properties:</strong>
+                        <p>Open <code>gradle.properties</code> and increment the version number.</p>
+                    </li>
+                    <li>
+                        <strong>Update Vendor JSON:</strong>
+                        <p>Open <code>absolutelib.json</code> and ensure the <code>"version"</code> field matches the
+                            new version in <code>gradle.properties</code>.</p>
+                    </li>
+                    <li>
+                        <strong>Update Documentation:</strong>
+                        <p>If APIs have changed, update the <code>README.md</code> examples and this documentation site.
+                        </p>
+                    </li>
+                </ol>
+
+                <h3>Publishing a Release</h3>
+                <p>We use an automated script to handle tagging, building, and publishing.</p>
+                <pre><code class="language-bash"># Run the release script from the project root
+./scripts/publish.bat</code></pre>
+                <p>This script will:</p>
+                <ul>
+                    <li>Build the library.</li>
+                    <li>Commit changes with the new version number.</li>
+                    <li>Push changes to GitHub</li>
+                </ul>
+                <pre><code class="language-bash"># Run the site script from the project root
+                    ./scripts/build-pages-site.bat</code></pre>
+
+
+                <p>This script will:</p>
+                <ul>
+                    <li>Build the website.</li>
+                    <li>Commit changes with the new version number. to /gh-pages</li>
+
+                </ul>
+            </section>
+
+        </main>
+        <div class="sidebar-overlay" id="overlay" onclick="closeSidebar()"></div>
+    </div>
+
+    <script>
+        function toggleSidebar() {
+            document.getElementById('sidebar').classList.toggle('open');
+        }
+        function closeSidebar() {
+            document.getElementById('sidebar').classList.remove('open');
+        }
+    </script>
+</body>
+
+</html>
