@@ -145,7 +145,7 @@ public class TrajectorySolver {
             private double crtAngleResolution = 0.1;
             private int crtControlLoopMs = 20;
             private int crtEncoderTicks = 4096;
-            private double hoopToleranceMultiplier = 5.0; // Default: generous tolerance for hoops
+            private double hoopToleranceMultiplier = 5.0; 
             
             public Builder minPitchDegrees(double val) { this.minPitchDegrees = val; return this; }
             public Builder maxPitchDegrees(double val) { this.maxPitchDegrees = val; return this; }
@@ -193,6 +193,94 @@ public class TrajectorySolver {
     private final FlywheelGenerator flywheelGenerator;
     
     private FlywheelConfig cachedFlywheel;
+
+    // ===== Internal scoring constants (not user-tunable) =====
+    private static final double ACCURACY_SCORE_MAX = 100.0;
+    private static final double ACCURACY_SCORE_HIT_MIN = 50.0;
+    private static final double ACCURACY_HIT_MULTIPLIER = 50.0;
+    private static final double ACCURACY_MISS_BASE = 50.0;
+    private static final double ACCURACY_MISS_MULTIPLIER = 25.0;
+
+    private static final double STABILITY_OPTIMAL_ANGLE_DEG = 40.0;
+    private static final double STABILITY_MAX_ANGLE_DEG = 75.0;
+    private static final double STABILITY_MIN_ANGLE_DEG = 10.0;
+    private static final double STABILITY_UNSTABLE_BASE = 60.0;
+    private static final double STABILITY_UNSTABLE_MIN = 20.0;
+    private static final double STABILITY_STABLE_BASE = 90.0;
+    private static final double STABILITY_STABLE_MIN = 30.0;
+
+    private static final double SPEED_SCORE_MAX = 95.0;
+    private static final double SPEED_SCORE_RANGE = 60.0;
+    private static final double SPEED_SCORE_DEFAULT = 70.0;
+
+    private static final double CLEARANCE_SCORE_BASE = 40.0;
+    private static final double CLEARANCE_SCORE_RANGE = 55.0;
+    private static final double CLEARANCE_SCORE_DEFAULT = 50.0;
+    private static final double CLEARANCE_MIN_HEIGHT = 0.1;
+
+    private static final double CONFIDENCE_HIT_SCORE = 90.0;
+    private static final double CONFIDENCE_MISS_BASE = 70.0;
+    private static final double CONFIDENCE_MISS_MULTIPLIER = 100.0;
+
+    private static final double ARC_LOW_MAX_DEG = 25.0;
+    private static final double ARC_HIGH_MIN_DEG = 55.0;
+    private static final double ARC_OPTIMAL_MIN_DEG = 40.0;
+    private static final double ARC_OPTIMAL_MAX_DEG = 50.0;
+
+    private static final double MIN_TOF_RANGE = 0.001;
+
+    /**
+     * Checks if a trajectory collides with any obstacle, respecting grace distance
+     * and the opening exemption for descending balls.
+     */
+    private static boolean trajectoryCollides(ProjectileMotion.TrajectoryResult trajSim,
+            ShotInput input, double shooterX, double shooterY) {
+        if (!input.isCollisionCheckEnabled() || trajSim.trajectory.length == 0) return false;
+        
+        double graceDistance = SolverConstants.getCollisionGraceDistanceMeters();
+        double graceDist2 = graceDistance * graceDistance;
+        
+        for (ObstacleConfig obstacle : input.getObstacles()) {
+            for (ProjectileMotion.TrajectoryState state : trajSim.trajectory) {
+                double sdx = state.x - shooterX;
+                double sdy = state.y - shooterY;
+                if (sdx * sdx + sdy * sdy < graceDist2) continue;
+                
+                if (state.vz < 0 && obstacle.isWithinOpening(state.x, state.y)) continue;
+                
+                if (obstacle.checkCollision(state.x, state.y, state.z)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+    
+    /**
+     * Overload for findAllCandidates which uses AngleEvaluation trajectory data.
+     */
+    private static boolean evaluationCollides(ProjectileMotion.AngleEvaluation eval,
+            ShotInput input, double shooterX, double shooterY) {
+        if (!input.isCollisionCheckEnabled() || eval.trajectory == null) return false;
+        
+        double graceDistance = SolverConstants.getCollisionGraceDistanceMeters();
+        double graceDist2 = graceDistance * graceDistance;
+        
+        for (ObstacleConfig obstacle : input.getObstacles()) {
+            for (ProjectileMotion.TrajectoryState state : eval.trajectory.trajectory) {
+                double sdx = state.x - shooterX;
+                double sdy = state.y - shooterY;
+                if (sdx * sdx + sdy * sdy < graceDist2) continue;
+                
+                if (state.vz < 0 && obstacle.isWithinOpening(state.x, state.y)) continue;
+                
+                if (obstacle.checkCollision(state.x, state.y, state.z)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
     
     public static Builder builder() {
         return new Builder();
@@ -264,6 +352,8 @@ public class TrajectorySolver {
      * Solves for the optimal trajectory given shot input.
      * 
      * This is the main entry point for the API.
+     * Supports collision-aware solving, arc bias, full pitch range search,
+     * and robust motion compensation.
      * 
      * @param input Shot input parameters
      * @return Trajectory result with recommended settings
@@ -277,26 +367,29 @@ public class TrajectorySolver {
             );
         }
         
-        // Initial target variables 
-        double effectiveTargetX = input.getTargetX();
-        double effectiveTargetY = input.getTargetY();
-        double distance = input.getHorizontalDistanceMeters();
-        
-        // compensation for robot velocity
-        boolean moving = Math.abs(input.getRobotVx()) > SolverConstants.getMovementThresholdMps() 
+        // Motion
+        boolean moving = Math.abs(input.getRobotVx()) > SolverConstants.getMovementThresholdMps()
                       || Math.abs(input.getRobotVy()) > SolverConstants.getMovementThresholdMps();
-        int iterations = moving ? SolverConstants.getMovingIterations() : SolverConstants.getStationaryIterations();
+        int convergenceIterations = moving
+            ? SolverConstants.getMovingConvergenceIterations()
+            : SolverConstants.getStationaryIterations();
+        
+        double distance = input.getHorizontalDistanceMeters();
         double estimatedTof = distance / SolverConstants.getInitialVelocityEstimateMps();
         
-        for (int i = 0; i < iterations; i++) {
+        double effectiveTargetX = input.getTargetX();
+        double effectiveTargetY = input.getTargetY();
+
+        for (int i = 0; i < convergenceIterations; i++) {
             if (moving) {
                 effectiveTargetX = input.getTargetX() - input.getRobotVx() * estimatedTof;
                 effectiveTargetY = input.getTargetY() - input.getRobotVy() * estimatedTof;
                 double dx = effectiveTargetX - input.getShooterX();
                 double dy = effectiveTargetY - input.getShooterY();
                 distance = Math.sqrt(dx * dx + dy * dy);
+                estimatedTof = distance / SolverConstants.getInitialVelocityEstimateMps();
             }
-        } 
+        }
 
         double heightDiff = input.getHeightDifferenceMeters();
         
@@ -308,9 +401,29 @@ public class TrajectorySolver {
             );
         }
         
-        double minVelocity = projectileMotion.calculateMinimumVelocity(distance, heightDiff);
+        // Obstacle and arc requirements
+        boolean pathCrossesObstacle = input.pathRequiresArc();
+        double requiredClearance = input.getRequiredClearanceHeight();
+
+    
+        double effectiveMinPitch = input.getMinPitchDegrees();
+        double effectiveMaxPitch = input.getMaxPitchDegrees();
         
-        double targetVelocity = minVelocity * SolverConstants.getVelocityBufferMultiplier();
+        if (pathCrossesObstacle) {
+            effectiveMinPitch = Math.max(effectiveMinPitch, SolverConstants.getForceHighArcMinPitchDegrees());
+        }
+
+        double minVelocity = projectileMotion.calculateMinimumVelocity(distance, heightDiff);
+
+        boolean isCloseRange = distance < SolverConstants.getCloseRangeThresholdMeters();
+        double velocityBuffer;
+        if (isCloseRange) {
+            velocityBuffer = SolverConstants.getCloseRangeVelocityMultiplier();
+        } else {
+            velocityBuffer = SolverConstants.getVelocityBufferMultiplier()
+                * SolverConstants.getDragCompensationMultiplier();
+        }
+        double targetVelocity = minVelocity * velocityBuffer;
         
         FlywheelGenerator.GenerationResult genResult;
         if (cachedFlywheel != null) {
@@ -352,108 +465,93 @@ public class TrajectorySolver {
         
         double actualVelocity = flywheelSim.exitVelocityMps;
         
-        // Final solve loop to converge TOF and Angles with precise velocity
-        double pitchAngle = 0;
-        ProjectileMotion.TrajectoryResult trajSim = null;
+        double bestPitchAngle = Double.NaN;
+        ProjectileMotion.TrajectoryResult bestTrajSim = null;
+        double bestScore = Double.NEGATIVE_INFINITY;
         
-        for (int i = 0; i < iterations; i++) {
+        double angleStep = input.getAngleStepDegrees();
+        
+        for (double pitchDeg = effectiveMinPitch; pitchDeg <= effectiveMaxPitch; pitchDeg += angleStep) {
+            double pitchRad = Math.toRadians(pitchDeg);
+            
+            double iterTargetX = effectiveTargetX;
+            double iterTargetY = effectiveTargetY;
+
             if (moving) {
-                effectiveTargetX = input.getTargetX() - input.getRobotVx() * estimatedTof;
-                effectiveTargetY = input.getTargetY() - input.getRobotVy() * estimatedTof;
+                iterTargetX = input.getTargetX() - input.getRobotVx() * estimatedTof;
+                iterTargetY = input.getTargetY() - input.getRobotVy() * estimatedTof;
             }
             
-            pitchAngle = projectileMotion.solveForAngle(
-                gamePiece,
-                input.getShooterX(), input.getShooterY(), input.getShooterZ(),
-                actualVelocity,
-                effectiveTargetX, effectiveTargetY, input.getTargetZ(),
-                input.getTargetRadius(),
-                input.isPreferHighArc(),
-                flywheelSim.ballSpinRpm
-            );
-            
-            if (Double.isNaN(pitchAngle)) break;
-            
-            // Recalculate yaw required for this compensated target
-            double dx = effectiveTargetX - input.getShooterX();
-            double dy = effectiveTargetY - input.getShooterY();
+            double dx = iterTargetX - input.getShooterX();
+            double dy = iterTargetY - input.getShooterY();
             double requiredYaw = Math.atan2(dy, dx);
             
-            trajSim = projectileMotion.simulate(
+            ProjectileMotion.TrajectoryResult trajSim = projectileMotion.simulate(
                 gamePiece,
                 input.getShooterX(), input.getShooterY(), input.getShooterZ(),
+                actualVelocity, pitchRad, requiredYaw,
                 flywheelSim.ballSpinRpm,
-                actualVelocity, pitchAngle, requiredYaw,
-                effectiveTargetX, effectiveTargetY, input.getTargetZ(),
+                iterTargetX, iterTargetY, input.getTargetZ(),
                 input.getTargetRadius()
             );
             
-            estimatedTof = trajSim.flightTime;
-        }
-        
-        if (Double.isNaN(pitchAngle)) {
-            return TrajectoryResult.failure(
-                TrajectoryResult.Status.OUT_OF_RANGE,
-                "No trajectory solution exists for given distance and velocity",
-                input
-            );
-        }
-        
-        // Use pitch limits from ShotInput if provided, otherwise fall back to config
-        double effectiveMinPitch = input.getMinPitchDegrees();
-        double effectiveMaxPitch = input.getMaxPitchDegrees();
-        
-        double pitchDegrees = Math.toDegrees(pitchAngle);
-        if (pitchDegrees < effectiveMinPitch || pitchDegrees > effectiveMaxPitch) {
-            return TrajectoryResult.failure(
-                TrajectoryResult.Status.ANGLE_EXCEEDED,
-                String.format("Required pitch %.1f° outside limits [%.1f°, %.1f°]",
-                    pitchDegrees, effectiveMinPitch, effectiveMaxPitch),
-                input
-            );
-        }
-        
-        // Validate minimum arc height if specified
-        double minArcHeight = input.getMinArcHeightMeters();
-        if (minArcHeight > 0 && trajSim != null) {
-            double requiredApexHeight = input.getTargetZ() + minArcHeight;
-            if (trajSim.maxHeight < requiredApexHeight) {
-                return TrajectoryResult.failure(
-                    TrajectoryResult.Status.OUT_OF_RANGE,
-                    String.format("Trajectory apex %.2fm is below required height %.2fm (target + %.2fm)",
-                        trajSim.maxHeight, requiredApexHeight, minArcHeight),
-                    input
-                );
+            if (trajSim.flightTime > 0) {
+                estimatedTof = trajSim.flightTime;
+            }
+
+            if (trajectoryCollides(trajSim, input, input.getShooterX(), input.getShooterY())) continue;
+
+            double minArcHeight = input.getMinArcHeightMeters();
+            if (minArcHeight > 0) {
+                double requiredApexHeight = input.getTargetZ() + minArcHeight;
+                if (trajSim.maxHeight < requiredApexHeight) {
+                    continue;
+                }
+            }
+
+            if (requiredClearance > 0 && trajSim.maxHeight < requiredClearance) {
+                continue;
+            }
+
+            double hoopTolerance = input.getTargetRadius() * config.getHoopToleranceMultiplier();
+            boolean hitsTarget = trajSim.hitTarget || trajSim.closestApproach <= hoopTolerance;
+            
+            if (!hitsTarget) continue;
+
+            double score = scoreCandidate(trajSim, pitchDeg, input, requiredClearance);
+            
+            if (score > bestScore) {
+                bestScore = score;
+                bestPitchAngle = pitchRad;
+                bestTrajSim = trajSim;
             }
         }
-        
-        // Validate that trajectory actually reaches the target
-        // Use configurable hoop tolerance - the ball doesn't need to hit a precise point,
-        // it just needs to pass through a hoop/basket opening
-        double hoopTolerance = input.getTargetRadius() * config.getHoopToleranceMultiplier();
-        if (trajSim != null && !trajSim.hitTarget && trajSim.closestApproach > hoopTolerance) {
+        // Never trust lingfeng 
+        if (Double.isNaN(bestPitchAngle) || bestTrajSim == null) {
+            String reason = pathCrossesObstacle 
+                ? "No collision-free trajectory found; all angles hit obstacles or miss target"
+                : "No trajectory solution exists for given distance and velocity";
             return TrajectoryResult.failure(
                 TrajectoryResult.Status.OUT_OF_RANGE,
-                String.format("Trajectory misses target by %.2fm (closest approach), tolerance is %.2fm", 
-                    trajSim.closestApproach, hoopTolerance),
+                reason,
                 input
             );
         }
         
-        // Calculate Yaw Adjustment based on effective target
+        double pitchDegrees = Math.toDegrees(bestPitchAngle);
+        
+
         double dx = effectiveTargetX - input.getShooterX();
         double dy = effectiveTargetY - input.getShooterY();
         double requiredYaw = Math.atan2(dy, dx);
         double yawAdjustment = requiredYaw - input.getShooterYaw();
-        // Normalize
         while (yawAdjustment > Math.PI) yawAdjustment -= 2 * Math.PI;
         while (yawAdjustment < -Math.PI) yawAdjustment += 2 * Math.PI;
         
         double requiredRpm = flywheelSim.requiredWheelRpm;
-        double timeOfFlight = trajSim.flightTime;
-        double maxHeight = trajSim.maxHeight;
-        
-        double marginOfError = trajSim.closestApproach;
+        double timeOfFlight = bestTrajSim.flightTime;
+        double maxHeight = bestTrajSim.maxHeight;
+        double marginOfError = bestTrajSim.closestApproach;
         
         TrajectoryResult.DiscreteShot discreteSolution = new TrajectoryResult.DiscreteShot(
             requiredRpm, pitchDegrees,
@@ -464,7 +562,7 @@ public class TrajectorySolver {
         
         double confidence = calculateConfidence(
             bestFlywheel.score, 
-            trajSim.hitTarget, 
+            bestTrajSim.hitTarget, 
             marginOfError, 
             input.getTargetRadius(),
             discreteSolution.score
@@ -472,11 +570,56 @@ public class TrajectorySolver {
         
         return new TrajectoryResult(
             input, gamePiece,
-            pitchAngle, yawAdjustment, actualVelocity,
+            bestPitchAngle, yawAdjustment, actualVelocity,
             flywheel, flywheelSim, requiredRpm,
             timeOfFlight, maxHeight, marginOfError,
             discreteSolution, confidence
         );
+    }
+    
+    /**
+     * Scores a trajectory candidate based on accuracy, arc preference, 
+     * obstacle clearance, and stability.
+     * Higher score = better candidate.
+     */
+    private double scoreCandidate(ProjectileMotion.TrajectoryResult traj, double pitchDeg,
+                                   ShotInput input, double requiredClearance) {
+        double score = 0;
+
+        double relativeApproach = traj.closestApproach / Math.max(0.01, input.getTargetRadius());
+        score += Math.max(0, 40 - relativeApproach * 20);
+
+        if (traj.hitTarget) {
+            score += 15;
+        }
+
+        double optimalAngle = STABILITY_OPTIMAL_ANGLE_DEG;
+        double angleDeviation = Math.abs(pitchDeg - optimalAngle);
+        score += Math.max(0, 10 - angleDeviation * 0.2);
+
+        score += Math.max(0, 20 - traj.flightTime * 5);
+        
+        // clearance 
+        if (requiredClearance > 0 && traj.maxHeight > requiredClearance) {
+            double clearanceMargin = traj.maxHeight - requiredClearance;
+            score += Math.min(10, clearanceMargin * 10);
+        }
+        
+        double preferredArc = input.getPreferredArcHeightMeters();
+        double biasStrength = input.getArcBiasStrength();
+
+        if (preferredArc > 0 && biasStrength > 0) {
+            double arcDeviation = Math.abs(traj.maxHeight - preferredArc);
+            double arcBonus = Math.max(0, 20 - arcDeviation * 10);
+            score += arcBonus * biasStrength;
+        } else if (input.pathRequiresArc()) {
+            double autoBias = SolverConstants.getDefaultArcBiasStrength();
+            double autoPreferred = requiredClearance + 0.3;
+            double arcDeviation = Math.abs(traj.maxHeight - autoPreferred);
+            score += Math.max(0, 15 - arcDeviation * 8) * autoBias;
+        }
+        
+        return score;
     }
     
     /**
@@ -491,7 +634,8 @@ public class TrajectorySolver {
         double distance = input.getHorizontalDistanceMeters();
         double heightDiff = input.getHeightDifferenceMeters();
         
-        double minVelocity = projectileMotion.calculateMinimumVelocity(distance, heightDiff);
+        double minVelocity = projectileMotion.calculateMinimumVelocity(distance, heightDiff)
+            * SolverConstants.getDragCompensationMultiplier();
         double maxVelocity = minVelocity * SolverConstants.getMaxVelocityRangeMultiplier();
         
         TrajectoryResult[] results = new TrajectoryResult[velocitySteps];
@@ -561,14 +705,14 @@ public class TrajectorySolver {
         ProjectileMotion.TrajectoryResult trajSim = projectileMotion.simulate(
             gamePiece,
             input.getShooterX(), input.getShooterY(), input.getShooterZ(),
-            simResult.ballSpinRpm,
             velocity, pitchRadians, input.getRequiredYawRadians(),
+            simResult.ballSpinRpm,
             input.getTargetX(), input.getTargetY(), input.getTargetZ(),
             input.getTargetRadius()
         );
         
-        double confidence = trajSim.hitTarget ? SolverConstants.getConfidenceHitScore() : 
-            Math.max(0, SolverConstants.getConfidenceMissBase() - trajSim.closestApproach * SolverConstants.getConfidenceMissMultiplier());
+        double confidence = trajSim.hitTarget ? CONFIDENCE_HIT_SCORE : 
+            Math.max(0, CONFIDENCE_MISS_BASE - trajSim.closestApproach * CONFIDENCE_MISS_MULTIPLIER);
         
         TrajectoryResult.DiscreteShot discreteSolution = 
             new TrajectoryResult.DiscreteShot(
@@ -587,11 +731,211 @@ public class TrajectorySolver {
         );
     }
     
+    /**
+     * Solves for the best pitch angle given the current measured flywheel RPM.
+     * 
+     * <p>Used for RPM feedback during rapid-fire shooting. When shooting many balls
+     * in succession (20-50), the flywheel slows down between shots. Instead of waiting
+     * for the flywheel to spin back up to the ideal RPM, this method finds the best
+     * angle to shoot at the <em>current</em> RPM — treating velocity as a fixed constraint
+     * and optimizing angle only.</p>
+     * 
+     * <p>Typical usage pattern:</p>
+     * <ol>
+     *   <li>First shot: use {@link #solve(ShotInput)} for the ideal RPM + angle</li>
+     *   <li>Subsequent shots: read actual flywheel RPM from encoder, call this method
+     *       to get the best angle at that velocity</li>
+     * </ol>
+     * 
+     * <pre>
+     * TrajectoryResult ideal = solver.solve(input);
+     * // ... shoot, flywheel slows down ...
+     * double currentRpm = flywheelEncoder.getVelocity();
+     * TrajectoryResult adjusted = solver.solveAtCurrentRpm(input, flywheelConfig, currentRpm);
+     * if (adjusted.isSuccess()) {
+     *     setPitch(adjusted.getPitchAngleDegrees());
+     * }
+     * </pre>
+     * 
+     * @param input Shot input parameters (position, target, obstacles, etc.)
+     * @param flywheel The flywheel configuration to simulate with
+     * @param currentRpm The current measured flywheel RPM from encoder feedback
+     * @return Trajectory result with the best angle for the given RPM, or failure if
+     *         the current RPM cannot reach the target at any valid angle
+     */
+    public TrajectoryResult solveAtCurrentRpm(ShotInput input, FlywheelConfig flywheel, double currentRpm) {
+        if (input == null) {
+            return TrajectoryResult.failure(
+                TrajectoryResult.Status.INVALID_INPUT,
+                "Shot input cannot be null",
+                input
+            );
+        }
+        
+        FlywheelSimulator simulator = new FlywheelSimulator(flywheel, gamePiece);
+        FlywheelSimulator.SimulationResult simResult = simulator.simulateAtRpm(currentRpm);
+        
+        if (!simResult.isAchievable) {
+            return TrajectoryResult.failure(
+                TrajectoryResult.Status.VELOCITY_EXCEEDED,
+                String.format("Current RPM (%.0f) not achievable with this flywheel", currentRpm),
+                input
+            );
+        }
+        
+        double actualVelocity = simResult.exitVelocityMps;
+        double ballSpin = simResult.ballSpinRpm;
+        
+        boolean moving = Math.abs(input.getRobotVx()) > SolverConstants.getMovementThresholdMps()
+                      || Math.abs(input.getRobotVy()) > SolverConstants.getMovementThresholdMps();
+        int convergenceIterations = moving
+            ? SolverConstants.getMovingConvergenceIterations()
+            : SolverConstants.getStationaryIterations();
+        
+        double distance = input.getHorizontalDistanceMeters();
+        double estimatedTof = distance / SolverConstants.getInitialVelocityEstimateMps();
+        
+        double effectiveTargetX = input.getTargetX();
+        double effectiveTargetY = input.getTargetY();
+
+        for (int i = 0; i < convergenceIterations; i++) {
+            if (moving) {
+                effectiveTargetX = input.getTargetX() - input.getRobotVx() * estimatedTof;
+                effectiveTargetY = input.getTargetY() - input.getRobotVy() * estimatedTof;
+                double ddx = effectiveTargetX - input.getShooterX();
+                double ddy = effectiveTargetY - input.getShooterY();
+                distance = Math.sqrt(ddx * ddx + ddy * ddy);
+                estimatedTof = distance / SolverConstants.getInitialVelocityEstimateMps();
+            }
+        }
+        
+        if (distance < SolverConstants.getMinTargetDistanceMeters()) {
+            return TrajectoryResult.failure(
+                TrajectoryResult.Status.INVALID_INPUT,
+                String.format("Target too close (< %.2fm)", SolverConstants.getMinTargetDistanceMeters()),
+                input
+            );
+        }
+        
+        boolean pathCrossesObstacle = input.pathRequiresArc();
+        double requiredClearance = input.getRequiredClearanceHeight();
+        
+        double effectiveMinPitch = input.getMinPitchDegrees();
+        double effectiveMaxPitch = input.getMaxPitchDegrees();
+        
+        if (pathCrossesObstacle) {
+            effectiveMinPitch = Math.max(effectiveMinPitch, SolverConstants.getForceHighArcMinPitchDegrees());
+        }
+        
+        double bestPitchAngle = Double.NaN;
+        ProjectileMotion.TrajectoryResult bestTrajSim = null;
+        double bestScore = Double.NEGATIVE_INFINITY;
+        
+        double angleStep = input.getAngleStepDegrees();
+        
+        for (double pitchDeg = effectiveMinPitch; pitchDeg <= effectiveMaxPitch; pitchDeg += angleStep) {
+            double pitchRad = Math.toRadians(pitchDeg);
+            
+            double iterTargetX = effectiveTargetX;
+            double iterTargetY = effectiveTargetY;
+
+            if (moving) {
+                iterTargetX = input.getTargetX() - input.getRobotVx() * estimatedTof;
+                iterTargetY = input.getTargetY() - input.getRobotVy() * estimatedTof;
+            }
+            
+            double dx = iterTargetX - input.getShooterX();
+            double dy = iterTargetY - input.getShooterY();
+            double requiredYaw = Math.atan2(dy, dx);
+            
+            ProjectileMotion.TrajectoryResult trajSim = projectileMotion.simulate(
+                gamePiece,
+                input.getShooterX(), input.getShooterY(), input.getShooterZ(),
+                actualVelocity, pitchRad, requiredYaw,
+                ballSpin,
+                iterTargetX, iterTargetY, input.getTargetZ(),
+                input.getTargetRadius()
+            );
+            
+            if (trajSim.flightTime > 0) {
+                estimatedTof = trajSim.flightTime;
+            }
+
+            if (trajectoryCollides(trajSim, input, input.getShooterX(), input.getShooterY())) continue;
+
+            double minArcHeight = input.getMinArcHeightMeters();
+            if (minArcHeight > 0) {
+                double requiredApexHeight = input.getTargetZ() + minArcHeight;
+                if (trajSim.maxHeight < requiredApexHeight) {
+                    continue;
+                }
+            }
+
+            if (requiredClearance > 0 && trajSim.maxHeight < requiredClearance) {
+                continue;
+            }
+
+            double hoopTolerance = input.getTargetRadius() * config.getHoopToleranceMultiplier();
+            boolean hitsTarget = trajSim.hitTarget || trajSim.closestApproach <= hoopTolerance;
+            
+            if (!hitsTarget) continue;
+
+            double score = scoreCandidate(trajSim, pitchDeg, input, requiredClearance);
+            
+            if (score > bestScore) {
+                bestScore = score;
+                bestPitchAngle = pitchRad;
+                bestTrajSim = trajSim;
+            }
+        }
+        
+        if (Double.isNaN(bestPitchAngle) || bestTrajSim == null) {
+            return TrajectoryResult.failure(
+                TrajectoryResult.Status.OUT_OF_RANGE,
+                String.format("No trajectory found at current RPM (%.0f, exit velocity %.2f m/s)",
+                    currentRpm, actualVelocity),
+                input
+            );
+        }
+        
+        double pitchDegrees = Math.toDegrees(bestPitchAngle);
+        
+        double dx = effectiveTargetX - input.getShooterX();
+        double dy = effectiveTargetY - input.getShooterY();
+        double requiredYaw = Math.atan2(dy, dx);
+        double yawAdjustment = requiredYaw - input.getShooterYaw();
+        while (yawAdjustment > Math.PI) yawAdjustment -= 2 * Math.PI;
+        while (yawAdjustment < -Math.PI) yawAdjustment += 2 * Math.PI;
+        
+        TrajectoryResult.DiscreteShot discreteSolution = new TrajectoryResult.DiscreteShot(
+            currentRpm, pitchDegrees,
+            (int)(currentRpm / config.getCrtRpmResolution()),
+            (int)(pitchDegrees / config.getCrtAngleResolution()),
+            50.0
+        );
+        
+        double confidence = calculateConfidence(
+            simulator.scoreConfiguration(actualVelocity),
+            bestTrajSim.hitTarget,
+            bestTrajSim.closestApproach,
+            input.getTargetRadius(),
+            discreteSolution.score
+        );
+        
+        return new TrajectoryResult(
+            input, gamePiece,
+            bestPitchAngle, yawAdjustment, actualVelocity,
+            flywheel, simResult, currentRpm,
+            bestTrajSim.flightTime, bestTrajSim.maxHeight, bestTrajSim.closestApproach,
+            discreteSolution, confidence
+        );
+    }
     
     /**
      * Finds all possible shot candidates for the given input.
      * Returns candidates sorted by confidence (best first).
      * 
+     * Supports collision-aware filtering, motion compensation, and arc bias scoring.
      * This is O(n) where n = (maxAngle - minAngle) / angleStep.
      * Default settings give ~80 iterations max.
      * 
@@ -609,13 +953,45 @@ public class TrajectorySolver {
                 String.format("Target too close (< %.2fm)", SolverConstants.getMinTargetDistanceMeters()));
         }
         
-        double heightDiff = input.getHeightDifferenceMeters();
-        double yawAngle = input.getRequiredYawRadians();
+        // ===== Motion compensation =====
+        boolean moving = Math.abs(input.getRobotVx()) > SolverConstants.getMovementThresholdMps()
+                      || Math.abs(input.getRobotVy()) > SolverConstants.getMovementThresholdMps();
+        double estimatedTof = distance / SolverConstants.getInitialVelocityEstimateMps();
         
-        // Calculate minimum velocity needed
+        double effectiveTargetX = input.getTargetX();
+        double effectiveTargetY = input.getTargetY();
+        
+        if (moving) {
+            int convergenceIters = SolverConstants.getMovingConvergenceIterations();
+            for (int i = 0; i < convergenceIters; i++) {
+                effectiveTargetX = input.getTargetX() - input.getRobotVx() * estimatedTof;
+                effectiveTargetY = input.getTargetY() - input.getRobotVy() * estimatedTof;
+                double dx = effectiveTargetX - input.getShooterX();
+                double dy = effectiveTargetY - input.getShooterY();
+                distance = Math.sqrt(dx * dx + dy * dy);
+                estimatedTof = distance / SolverConstants.getInitialVelocityEstimateMps();
+            }
+        }
+        
+        double heightDiff = input.getHeightDifferenceMeters();
+        double yawAngle = Math.atan2(effectiveTargetY - input.getShooterY(), 
+                                     effectiveTargetX - input.getShooterX());
+        
+        // ===== Obstacle analysis =====
+        boolean pathCrossesObstacle = input.pathRequiresArc();
+        double requiredClearance = input.getRequiredClearanceHeight();
+
+        double effectiveMinPitch = input.getMinPitchDegrees();
+        double effectiveMaxPitch = input.getMaxPitchDegrees();
+        
+        if (pathCrossesObstacle) {
+            effectiveMinPitch = Math.max(effectiveMinPitch, SolverConstants.getForceHighArcMinPitchDegrees());
+        }
+
         double minRequiredVelocity = projectileMotion.calculateMinimumVelocity(distance, heightDiff);
-        double effectiveMinVelocity = Math.max(input.getMinVelocityMps(), 
-            minRequiredVelocity * SolverConstants.getMinVelocityRangeMultiplier());
+        double dragComp = SolverConstants.getDragCompensationMultiplier();
+        double effectiveMinVelocity = Math.max(input.getMinVelocityMps(),
+            minRequiredVelocity * SolverConstants.getMinVelocityRangeMultiplier() * dragComp);
         double effectiveMaxVelocity = input.getMaxVelocityMps();
         
         if (effectiveMinVelocity > effectiveMaxVelocity) {
@@ -628,9 +1004,9 @@ public class TrajectorySolver {
         ProjectileMotion.AngleEvaluation[] evaluations = projectileMotion.findAllAnglesWithVelocity(
             gamePiece,
             input.getShooterX(), input.getShooterY(), input.getShooterZ(),
-            input.getTargetX(), input.getTargetY(), input.getTargetZ(),
+            effectiveTargetX, effectiveTargetY, input.getTargetZ(),
             input.getTargetRadius(), 0, // No spin for initial calculation
-            input.getMinPitchDegrees(), input.getMaxPitchDegrees(), input.getAngleStepDegrees(),
+            effectiveMinPitch, effectiveMaxPitch, input.getAngleStepDegrees(),
             effectiveMinVelocity, effectiveMaxVelocity
         );
         
@@ -638,32 +1014,47 @@ public class TrajectorySolver {
             return ShotCandidateList.empty(input, "No valid trajectories found in angle/velocity range");
         }
         
-        // Convert evaluations to candidates with scoring
         java.util.List<ShotCandidate> candidates = new java.util.ArrayList<>();
-        
-        // Find ranges for normalization
+
         double maxTof = 0, minTof = Double.MAX_VALUE;
         double maxHeight = 0;
         
         for (ProjectileMotion.AngleEvaluation eval : evaluations) {
+            if (evaluationCollides(eval, input, input.getShooterX(), input.getShooterY())) continue;
+
+            if (requiredClearance > 0 && eval.maxHeight < requiredClearance) {
+                continue;
+            }
+            
             if (eval.timeOfFlight > maxTof) maxTof = eval.timeOfFlight;
             if (eval.timeOfFlight < minTof && eval.timeOfFlight > 0) minTof = eval.timeOfFlight;
             if (eval.maxHeight > maxHeight) maxHeight = eval.maxHeight;
         }
         
         double tofRange = maxTof - minTof;
-        if (tofRange < SolverConstants.getMinTofRangeSeconds()) tofRange = 1; // Prevent division by zero
+        if (tofRange < MIN_TOF_RANGE) tofRange = 1;
         
         for (ProjectileMotion.AngleEvaluation eval : evaluations) {
+            if (evaluationCollides(eval, input, input.getShooterX(), input.getShooterY())) continue;
+            
+            if (requiredClearance > 0 && eval.maxHeight < requiredClearance) {
+                continue;
+            }
+            
             ShotCandidate candidate = buildCandidate(eval, input, yawAngle, minTof, tofRange, maxHeight);
             candidates.add(candidate);
         }
         
-        // Limit to maxCandidates
         if (candidates.size() > input.getMaxCandidates()) {
-            // Sort first, then truncate
             java.util.Collections.sort(candidates);
             candidates = candidates.subList(0, input.getMaxCandidates());
+        }
+        
+        if (candidates.isEmpty()) {
+            String reason = pathCrossesObstacle 
+                ? "All trajectories collide with obstacles or fail clearance" 
+                : "No valid trajectories found in angle/velocity range";
+            return ShotCandidateList.empty(input, reason);
         }
         
         return new ShotCandidateList(candidates, input);
@@ -704,15 +1095,13 @@ public class TrajectorySolver {
      */
     private double calculateAccuracyScore(ProjectileMotion.AngleEvaluation eval, double targetRadius) {
         if (eval.hitsTarget) {
-            // Score based on how centered the hit is
             double relativeApproach = eval.closestApproach / targetRadius;
-            return Math.max(SolverConstants.getAccuracyScoreHitMin(), 
-                SolverConstants.getAccuracyScoreMax() - relativeApproach * SolverConstants.getAccuracyScoreHitMultiplier());
+            return Math.max(ACCURACY_SCORE_HIT_MIN, 
+                ACCURACY_SCORE_MAX - relativeApproach * ACCURACY_HIT_MULTIPLIER);
         } else {
-            // Partial score for near misses
             double relativeError = eval.closestApproach / targetRadius;
-            return Math.max(0, SolverConstants.getAccuracyScoreMissBase() 
-                - (relativeError - 1) * SolverConstants.getAccuracyScoreMissMultiplier());
+            return Math.max(0, ACCURACY_MISS_BASE 
+                - (relativeError - 1) * ACCURACY_MISS_MULTIPLIER);
         }
     }
     
@@ -723,19 +1112,17 @@ public class TrajectorySolver {
     private double calculateStabilityScore(ProjectileMotion.AngleEvaluation eval) {
         double angleDeg = eval.getPitchDegrees();
         
-        // Peak stability around optimal angle
-        double optimalAngle = SolverConstants.getStabilityOptimalAngleDegrees();
+        double optimalAngle = STABILITY_OPTIMAL_ANGLE_DEG;
         double deviation = Math.abs(angleDeg - optimalAngle);
         
-        // Steep angles and very flat angles are less stable
-        if (angleDeg > SolverConstants.getStabilityMaxAngleDegrees() 
-                || angleDeg < SolverConstants.getStabilityMinAngleDegrees()) {
-            return Math.max(SolverConstants.getStabilityUnstableMin(), 
-                SolverConstants.getStabilityUnstableBase() - deviation);
+        if (angleDeg > STABILITY_MAX_ANGLE_DEG
+                || angleDeg < STABILITY_MIN_ANGLE_DEG) {
+            return Math.max(STABILITY_UNSTABLE_MIN, 
+                STABILITY_UNSTABLE_BASE - deviation);
         }
         
-        return Math.max(SolverConstants.getStabilityStableMin(), 
-            SolverConstants.getStabilityStableBase() - deviation);
+        return Math.max(STABILITY_STABLE_MIN, 
+            STABILITY_STABLE_BASE - deviation);
     }
     
     /**
@@ -743,13 +1130,12 @@ public class TrajectorySolver {
      * Faster (lower TOF) = higher score.
      */
     private double calculateSpeedScore(ProjectileMotion.AngleEvaluation eval, double minTof, double tofRange) {
-        if (tofRange < SolverConstants.getMinTofRangeSeconds()) {
-            return SolverConstants.getSpeedScoreDefault(); // Default if all TOFs are similar
+        if (tofRange < MIN_TOF_RANGE) {
+            return SPEED_SCORE_DEFAULT;
         }
         
         double normalizedTof = (eval.timeOfFlight - minTof) / tofRange;
-        // Invert: lower TOF = higher score
-        return SolverConstants.getSpeedScoreMax() - (normalizedTof * SolverConstants.getSpeedScoreRange());
+        return SPEED_SCORE_MAX - (normalizedTof * SPEED_SCORE_RANGE);
     }
     
     /**
@@ -757,25 +1143,24 @@ public class TrajectorySolver {
      * Higher trajectories get better clearance scores for obstacle avoidance.
      */
     private double calculateClearanceScore(ProjectileMotion.AngleEvaluation eval, double maxHeight) {
-        if (maxHeight < SolverConstants.getClearanceMinHeightMeters()) {
-            return SolverConstants.getClearanceScoreDefault(); // Default
+        if (maxHeight < CLEARANCE_MIN_HEIGHT) {
+            return CLEARANCE_SCORE_DEFAULT;
         }
         
         double relativeHeight = eval.maxHeight / maxHeight;
-        // Higher = better clearance
-        return SolverConstants.getClearanceScoreBase() + (relativeHeight * SolverConstants.getClearanceScoreRange());
+        return CLEARANCE_SCORE_BASE + (relativeHeight * CLEARANCE_SCORE_RANGE);
     }
     
     /**
      * Determines arc type based on pitch angle.
      */
     private ShotCandidate.ArcType determineArcType(double pitchDegrees) {
-        if (pitchDegrees < SolverConstants.getArcTypeLowMaxDegrees()) {
+        if (pitchDegrees < ARC_LOW_MAX_DEG) {
             return ShotCandidate.ArcType.LOW_ARC;
-        } else if (pitchDegrees > SolverConstants.getArcTypeHighMinDegrees()) {
+        } else if (pitchDegrees > ARC_HIGH_MIN_DEG) {
             return ShotCandidate.ArcType.HIGH_ARC;
-        } else if (pitchDegrees >= SolverConstants.getArcTypeOptimalMinDegrees() 
-                && pitchDegrees <= SolverConstants.getArcTypeOptimalMaxDegrees()) {
+        } else if (pitchDegrees >= ARC_OPTIMAL_MIN_DEG 
+                && pitchDegrees <= ARC_OPTIMAL_MAX_DEG) {
             return ShotCandidate.ArcType.OPTIMAL_RANGE;
         } else {
             return ShotCandidate.ArcType.INTERMEDIATE;
@@ -865,6 +1250,7 @@ public class TrajectorySolver {
         confidence += Math.min(30, flywheelScore / 5);
         
         if (hitTarget) {
+            /// God help me
             confidence += 40;
         } else {
             double relativeError = marginOfError / targetRadius;
@@ -892,7 +1278,6 @@ public class TrajectorySolver {
         cachedFlywheel = flywheel;
     }
     
-    // Getters
     public GamePiece getGamePiece() { return gamePiece; }
     public SolverConfig getConfig() { return config; }
     public ProjectileMotion getProjectileMotion() { return projectileMotion; }

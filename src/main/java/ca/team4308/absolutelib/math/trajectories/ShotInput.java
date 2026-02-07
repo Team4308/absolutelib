@@ -1,10 +1,29 @@
 package ca.team4308.absolutelib.math.trajectories;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+
 import edu.wpi.first.math.util.Units;
 
 /**
  * Input parameters for a trajectory shot calculation.
  * Immutable data class representing the shot setup.
+ * 
+ * <h2>Obstacle-Aware Shots</h2>
+ * <pre>
+ * ObstacleConfig hub = ObstacleConfig.builder()
+ *     .position(4.03, 4.0).baseSize(1.19).wallHeight(1.83)
+ *     .upperStructureHeight(0.41).openingDiameter(1.06).build();
+ * 
+ * ShotInput input = ShotInput.builder()
+ *     .shooterPositionMeters(1.0, 2.0, 0.5)
+ *     .targetPositionMeters(5.0, 5.0, 2.5)
+ *     .addObstacle(hub)
+ *     .collisionCheckEnabled(true)
+ *     .preferredArcHeightMeters(2.5)  // Bias toward this apex height
+ *     .build();
+ * </pre>
  */
 public class ShotInput {
     
@@ -32,31 +51,24 @@ public class ShotInput {
         PREFER_LOW_ARC
     }
     
-    // Shooter position (meters)
     private final double shooterX;
     private final double shooterY;
     private final double shooterZ;
-    
-    // Shooter orientation (radians)
+
     private final double shooterYaw;
-    
-    // Target position (meters)
+
     private final double targetX;
     private final double targetY;
     private final double targetZ;
-    
-    // Target acceptance radius (meters)
+
     private final double targetRadius;
-    
-    // Robot velocity (meters/sec)
+
     private final double robotVx;
     private final double robotVy;
-    
-    // Shot preferences
-    private final boolean preferHighArc;  // Legacy support
+
+    private final boolean preferHighArc;
     private final boolean includeAirResistance;
-    
-    // New preferences
+
     private final ShotPreference shotPreference;
     private final int maxCandidates;
     private final double minPitchDegrees;
@@ -64,7 +76,12 @@ public class ShotInput {
     private final double minVelocityMps;
     private final double maxVelocityMps;
     private final double angleStepDegrees;
-    private final double minArcHeightMeters; // Minimum apex height above target
+    private final double minArcHeightMeters;
+
+    private final List<ObstacleConfig> obstacles;
+    private final boolean collisionCheckEnabled;
+    private final double preferredArcHeightMeters;
+    private final double arcBiasStrength;
     
     /**
      * Creates a shot input with all parameters (legacy constructor).
@@ -81,7 +98,8 @@ public class ShotInput {
              targetX, targetY, targetZ, targetRadius,
              robotVx, robotVy, preferHighArc, includeAirResistance,
              preferHighArc ? ShotPreference.PREFER_HIGH_ARC : ShotPreference.PREFER_LOW_ARC,
-             50, 0, 90, 5, 50, 1.0, 0.0);
+             50, 0, 90, 5, 50, 1.0, 0.0,
+             Collections.emptyList(), false, 0.0, 0.0);
     }
     
     /**
@@ -96,7 +114,9 @@ public class ShotInput {
                       ShotPreference shotPreference, int maxCandidates,
                       double minPitchDegrees, double maxPitchDegrees,
                       double minVelocityMps, double maxVelocityMps,
-                      double angleStepDegrees, double minArcHeightMeters) {
+                      double angleStepDegrees, double minArcHeightMeters,
+                      List<ObstacleConfig> obstacles, boolean collisionCheckEnabled,
+                      double preferredArcHeightMeters, double arcBiasStrength) {
         this.shooterX = shooterX;
         this.shooterY = shooterY;
         this.shooterZ = shooterZ;
@@ -117,6 +137,10 @@ public class ShotInput {
         this.maxVelocityMps = maxVelocityMps;
         this.angleStepDegrees = angleStepDegrees;
         this.minArcHeightMeters = minArcHeightMeters;
+        this.obstacles = obstacles != null ? Collections.unmodifiableList(new ArrayList<>(obstacles)) : Collections.emptyList();
+        this.collisionCheckEnabled = collisionCheckEnabled;
+        this.preferredArcHeightMeters = preferredArcHeightMeters;
+        this.arcBiasStrength = arcBiasStrength;
     }
     
     /**
@@ -130,21 +154,25 @@ public class ShotInput {
         private double targetX = 0;
         private double targetY = 0;
         private double targetZ = 0;
-        private double targetRadius = 0.15; // 15cm default
+        private double targetRadius = 0.15;
         private double robotVx = 0;
         private double robotVy = 0;
         private boolean preferHighArc = true;
         private boolean includeAirResistance = true;
         
-        // New parameters
         private ShotPreference shotPreference = ShotPreference.AUTO;
         private int maxCandidates = 50;
         private double minPitchDegrees = 5;
         private double maxPitchDegrees = 85;
         private double minVelocityMps = 5;
         private double maxVelocityMps = 50;
-        private double angleStepDegrees = 1.0;  // 1 degree steps = O(80) iterations max
-        private double minArcHeightMeters = 0.0; // 0 = no minimum arc height requirement
+        private double angleStepDegrees = 1.0;
+        private double minArcHeightMeters = 0.0;
+
+        private List<ObstacleConfig> obstacles = new ArrayList<>();
+        private boolean collisionCheckEnabled = false;
+        private double preferredArcHeightMeters = 0.0;
+        private double arcBiasStrength = 0.5;
         
         /**
          * Sets shooter position in meters.
@@ -272,7 +300,6 @@ public class ShotInput {
          */
         public Builder shotPreference(ShotPreference preference) {
             this.shotPreference = preference;
-            // Update legacy field for backward compatibility
             this.preferHighArc = (preference == ShotPreference.PREFER_HIGH_ARC || 
                                   preference == ShotPreference.HIGH_CLEARANCE);
             return this;
@@ -340,6 +367,77 @@ public class ShotInput {
         }
         
         /**
+         * Adds a field obstacle for collision-aware trajectory solving.
+         * When collision checking is enabled, trajectories that intersect obstacles
+         * are rejected and the solver searches for clear paths.
+         * 
+         * @param obstacle The obstacle configuration
+         */
+        public Builder addObstacle(ObstacleConfig obstacle) {
+            if (obstacle != null) {
+                this.obstacles.add(obstacle);
+                this.collisionCheckEnabled = true; // Auto-enable when obstacles are added
+            }
+            return this;
+        }
+        
+        /**
+         * Adds multiple obstacles at once.
+         */
+        public Builder obstacles(List<ObstacleConfig> obstacles) {
+            if (obstacles != null) {
+                this.obstacles.addAll(obstacles);
+                if (!obstacles.isEmpty()) this.collisionCheckEnabled = true;
+            }
+            return this;
+        }
+        
+        /**
+         * Enables or disables collision checking against obstacles.
+         * Auto-enabled when obstacles are added, but can be toggled.
+         */
+        public Builder collisionCheckEnabled(boolean enabled) {
+            this.collisionCheckEnabled = enabled;
+            return this;
+        }
+        
+        /**
+         * Sets the preferred arc height (soft bias, not a hard limit).
+         * The solver will prefer trajectories with apex heights near this value.
+         * Combined with arcBiasStrength to control how aggressively to prefer it.
+         * 
+         * Use this to encourage "up and over" shots without forcing extreme angles.
+         * Set to 0 to disable arc preference.
+         * 
+         * @param meters Preferred trajectory apex height in meters
+         */
+        public Builder preferredArcHeightMeters(double meters) {
+            this.preferredArcHeightMeters = Math.max(0.0, meters);
+            return this;
+        }
+        
+        /**
+         * Sets the preferred arc height in feet.
+         */
+        public Builder preferredArcHeightFeet(double feet) {
+            this.preferredArcHeightMeters = Math.max(0.0, Units.feetToMeters(feet));
+            return this;
+        }
+        
+        /**
+         * Sets how strongly the solver prefers the preferred arc height.
+         * 0.0 = no preference (ignore preferredArcHeight)
+         * 0.5 = moderate bias (default)
+         * 1.0 = strong bias toward preferred arc
+         * 
+         * @param strength Bias strength from 0.0 to 1.0
+         */
+        public Builder arcBiasStrength(double strength) {
+            this.arcBiasStrength = Math.max(0.0, Math.min(1.0, strength));
+            return this;
+        }
+        
+        /**
          * Configures for fast solving with fewer candidates.
          */
         public Builder fastMode() {
@@ -368,7 +466,9 @@ public class ShotInput {
                 shotPreference, maxCandidates,
                 minPitchDegrees, maxPitchDegrees,
                 minVelocityMps, maxVelocityMps,
-                angleStepDegrees, minArcHeightMeters
+                angleStepDegrees, minArcHeightMeters,
+                obstacles, collisionCheckEnabled,
+                preferredArcHeightMeters, arcBiasStrength
             );
         }
     }
@@ -377,11 +477,6 @@ public class ShotInput {
         return new Builder();
     }
     
-    // Derived properties
-    
-    /**
-     * Calculates horizontal distance from shooter to target.
-     */
     public double getHorizontalDistanceMeters() {
         double dx = targetX - shooterX;
         double dy = targetY - shooterY;
@@ -442,7 +537,6 @@ public class ShotInput {
     public boolean isPreferHighArc() { return preferHighArc; }
     public boolean isIncludeAirResistance() { return includeAirResistance; }
     
-    // New getters
     public ShotPreference getShotPreference() { return shotPreference; }
     public int getMaxCandidates() { return maxCandidates; }
     public double getMinPitchDegrees() { return minPitchDegrees; }
@@ -451,6 +545,40 @@ public class ShotInput {
     public double getMaxVelocityMps() { return maxVelocityMps; }
     public double getAngleStepDegrees() { return angleStepDegrees; }
     public double getMinArcHeightMeters() { return minArcHeightMeters; }
+    
+    public List<ObstacleConfig> getObstacles() { return obstacles; }
+    public boolean isCollisionCheckEnabled() { return collisionCheckEnabled; }
+    public double getPreferredArcHeightMeters() { return preferredArcHeightMeters; }
+    public double getArcBiasStrength() { return arcBiasStrength; }
+    
+    /**
+     * Whether any obstacle's footprint lies between shooter and target.
+     * If true, the solver should strongly prefer high-arc solutions.
+     */
+    public boolean pathRequiresArc() {
+        if (!collisionCheckEnabled || obstacles.isEmpty()) return false;
+        for (ObstacleConfig obstacle : obstacles) {
+            if (obstacle.pathCrossesObstacle(shooterX, shooterY, targetX, targetY)) {
+                return true;
+            }
+        }
+        return false;
+    }
+    
+    /**
+     * Returns the maximum clearance height needed across all obstacles.
+     * The trajectory must arc above this height to avoid all obstacles.
+     */
+    public double getRequiredClearanceHeight() {
+        double maxClearance = 0;
+        if (!collisionCheckEnabled) return 0;
+        for (ObstacleConfig obstacle : obstacles) {
+            if (obstacle.isEnabled() && obstacle.pathCrossesObstacle(shooterX, shooterY, targetX, targetY)) {
+                maxClearance = Math.max(maxClearance, obstacle.getClearanceHeight());
+            }
+        }
+        return maxClearance;
+    }
     
     @Override
     public String toString() {

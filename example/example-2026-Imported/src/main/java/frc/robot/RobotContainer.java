@@ -158,6 +158,14 @@ public class RobotContainer {
             }
         }));
 
+        // B Button: Toggle stationary aggressive solve (finer angle step, more candidates)
+        driver.b().onTrue(Commands.runOnce(() -> {
+            m_shooter.setStationarySolveEnabled(!m_shooter.isStationarySolveEnabled());
+            if (m_shooter.isStationarySolveEnabled()) {
+                m_leds.setProgress(0.7, edu.wpi.first.wpilibj.util.Color.kCyan);
+            }
+        }));
+
         driver.start().onTrue(
                 m_shooter.spinUp().withTimeout(3.0)
                         .andThen(Commands.runOnce(() -> m_leds.setSuccess())));

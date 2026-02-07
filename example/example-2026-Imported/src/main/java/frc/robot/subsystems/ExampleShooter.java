@@ -3,6 +3,7 @@ package frc.robot.subsystems;
 import ca.team4308.absolutelib.math.trajectories.*;
 import ca.team4308.absolutelib.math.trajectories.flywheel.*;
 import ca.team4308.absolutelib.math.trajectories.gamepiece.*;
+import ca.team4308.absolutelib.math.trajectories.physics.ProjectileMotion;
 import ca.team4308.absolutelib.wrapper.AbsoluteSubsystem;
 import ca.team4308.absolutelib.wrapper.MotorWrapper;
 import ca.team4308.absolutelib.wrapper.MotorWrapper.MotorType;
@@ -20,6 +21,7 @@ import edu.wpi.first.util.sendable.Sendable;
 import edu.wpi.first.util.sendable.SendableBuilder;
 import edu.wpi.first.wpilibj2.command.Command;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.Supplier;
@@ -31,15 +33,11 @@ import java.util.function.Supplier;
  */
 public class ExampleShooter extends AbsoluteSubsystem {
 
-    // Hardware
     private final MotorWrapper flywheelLeader;
-
-    // Trajectory System
     private final TrajectorySolver solver;
     private final FlywheelConfig flywheelConfig;
     private final GamePiece gamePiece;
 
-    // State
     private double targetRpm = 0.0;
     private double targetPitchDegrees = 0.0;
     private double targetYawDegrees = 0.0;
@@ -52,20 +50,39 @@ public class ExampleShooter extends AbsoluteSubsystem {
     
     private Supplier<ChassisSpeeds> chassisSpeedsSupplier = null;
     
-    private double shooterHeightMeters = 0.6; // Height of shooter on robot
-    
-    private Translation2d shooterOffset = new Translation2d(0.2, 0); // 20cm forward from center
-    private double minPitchDegrees = 5.0;
-    private double maxPitchDegrees = 45.0;
-    private double minArcHeightMeters = 0.0; // Minimum height above target for arc apex
-    
-    private Translation3d targetPosition = new Translation3d(6.0, 4.0, 5.1); // Default to blue alliance goal
-    
-    // Enable/disable continuous tracking
+    private double shooterHeightMeters = 0.6;
+    private Translation2d shooterOffset = new Translation2d(0.2, 0);
+    private double minPitchDegrees = 0.0;
+    private double maxPitchDegrees = 90.0;
+    private double minArcHeightMeters = 0.75;
+    private double targetRadiusMeters = 0.53;
+    private Translation3d targetPosition = new Translation3d(6.0, 6.0, 5.1);
+
+    private ObstacleConfig hubObstacle;
+    private static final double FIELD_LENGTH_METERS = 16.46;
+    private Pose3d[] cachedHubObstaclePoints = new Pose3d[0];
+    private boolean hubObstaclePointsCacheValid = false;
+
+    private boolean collisionEnabled = true;
+    private double preferredArcHeightMeters = 2.5;
+    private double arcBiasStrength = 0.6;
+    private boolean isRedAlliance = false;
     private boolean trackingEnabled = true;
-    
-    // Debug: store distance for logging
+    private boolean debugExtendTrajectory = true;
+    private boolean stationarySolveEnabled = true;
+    private static final double STATIONARY_ANGLE_STEP = 0.01;
+    private static final int STATIONARY_MAX_CANDIDATES = 1000;
+
+    private Supplier<Double> currentRpmSupplier = null;
+    private boolean rpmFeedbackEnabled = false;
+    private double rpmFeedbackThreshold = 50.0;
+    private double idealTargetRpm = 0.0;
+    private double feedbackAdjustedPitchDegrees = Double.NaN;
+
     private double lastDistanceToTarget = 0.0;
+    private double lastMaxTrajectoryHeight = 0.0;
+    private boolean lastShotClearsHub = false;
+    private String lastCollisionWarning = "";
 
     public ExampleShooter() {
         super();
@@ -73,8 +90,27 @@ public class ExampleShooter extends AbsoluteSubsystem {
         flywheelLeader = new MotorWrapper(MotorType.TALONFX, 40);
    
 
+        SolverConstants.setHoopToleranceMultiplier(10000.0);
+        SolverConstants.setBasketDescentToleranceMultiplier(6.0);
+        SolverConstants.setMinTargetDistanceMeters(0.05);
+        SolverConstants.setVelocityBufferMultiplier(1.2);
+
         gamePiece = GamePieces.REBUILT_2026_BALL;
-        solver = TrajectorySolver.forGame2026();
+
+        TrajectorySolver.SolverConfig solverConfig = TrajectorySolver.SolverConfig.highAccuracy()
+                .toBuilder()
+                .hoopToleranceMultiplier(10.0)
+                .build();
+        solver = new TrajectorySolver(gamePiece, solverConfig);
+
+        hubObstacle = ObstacleConfig.builder()
+                .position(4.03, 4.0)
+                .baseSize(1.19, 1.19)
+                .wallHeight(1.83)
+                .upperStructureHeight(0.41)
+                .openingDiameter(1.06)
+                .enabled(true)
+                .build();
 
         FlywheelGenerator generator = new FlywheelGenerator(gamePiece);
         FlywheelGenerator.GenerationResult result = generator.generateAndEvaluate(15.0);
@@ -83,7 +119,6 @@ public class ExampleShooter extends AbsoluteSubsystem {
             flywheelConfig = result.bestConfig.config;
             System.out.println("Using flywheel config: " + flywheelConfig.getName());
         } else {
-            // Fallback to a preset configuration
             flywheelConfig = FlywheelConfig.builder()
                     .name("2026 Shooter")
                     .arrangement(FlywheelConfig.WheelArrangement.DUAL_OVER_UNDER)
@@ -150,6 +185,114 @@ public class ExampleShooter extends AbsoluteSubsystem {
     }
     
     /**
+     * Set the target radius (goal opening size).
+     * Larger values make hit detection more forgiving.
+     * Standard basketball hoop is ~0.457m (18 inches).
+     * 
+     * @param radiusMeters Target radius in meters
+     */
+    public void setTargetRadius(double radiusMeters) {
+        this.targetRadiusMeters = radiusMeters;
+    }
+    
+    /**
+     * Set the hub center position on the field.
+     * Rebuilds the obstacle with the new position.
+     * 
+     * @param x Hub center X position in meters
+     * @param y Hub center Y position in meters
+     */
+    public void setHubPosition(double x, double y) {
+        hubObstacle = ObstacleConfig.builder()
+                .position(x, y)
+                .baseSize(hubObstacle.getBaseSizeX(), hubObstacle.getBaseSizeY())
+                .wallHeight(hubObstacle.getWallHeight())
+                .upperStructureHeight(hubObstacle.getUpperStructureHeight())
+                .openingDiameter(hubObstacle.getOpeningDiameter())
+                .collisionMargin(hubObstacle.getCollisionMargin())
+                .enabled(hubObstacle.isEnabled())
+                .build();
+        hubObstaclePointsCacheValid = false;
+    }
+    
+    /**
+     * Set whether this is red alliance (mirrors obstacle positions).
+     * When red alliance, the hub obstacle X position is mirrored across the field center.
+     * 
+     * @param redAlliance true for red alliance, false for blue
+     */
+    public void setAlliance(boolean redAlliance) {
+        this.isRedAlliance = redAlliance;
+        hubObstaclePointsCacheValid = false;
+    }
+    
+    /**
+     * Enable or disable collision-aware trajectory solving.
+     * When enabled, the solver will reject trajectories that pass through the hub.
+     * 
+     * @param enabled true to enable collision checking
+     */
+    public void setCollisionEnabled(boolean enabled) {
+        this.collisionEnabled = enabled;
+    }
+    
+    /**
+     * Set the hub obstacle enabled state directly.
+     * 
+     * @param enabled true to enable the hub obstacle for collision detection
+     */
+    public void setHubObstacleEnabled(boolean enabled) {
+        hubObstacle = ObstacleConfig.builder()
+                .position(hubObstacle.getCenterX(), hubObstacle.getCenterY())
+                .baseSize(hubObstacle.getBaseSizeX(), hubObstacle.getBaseSizeY())
+                .wallHeight(hubObstacle.getWallHeight())
+                .upperStructureHeight(hubObstacle.getUpperStructureHeight())
+                .openingDiameter(hubObstacle.getOpeningDiameter())
+                .collisionMargin(hubObstacle.getCollisionMargin())
+                .enabled(enabled)
+                .build();
+        hubObstaclePointsCacheValid = false;
+    }
+    
+    /**
+     * Set the preferred arc height for shots. Higher values encourage steeper arcs.
+     * 
+     * @param heightMeters Preferred arc height in meters (e.g., 2.5 for hub clearance)
+     */
+    public void setPreferredArcHeight(double heightMeters) {
+        this.preferredArcHeightMeters = Math.max(0.0, heightMeters);
+    }
+    
+    /**
+     * Set the arc bias strength. Controls how strongly the solver prefers
+     * trajectories matching the preferred arc height.
+     * 
+     * @param strength 0.0 = no bias, 1.0 = strongly prefer preferred arc height
+     */
+    public void setArcBiasStrength(double strength) {
+        this.arcBiasStrength = Math.max(0.0, Math.min(1.0, strength));
+    }
+    
+    /**
+     * Replace the hub obstacle with a custom obstacle configuration.
+     * 
+     * @param obstacle The new obstacle configuration
+     */
+    public void setHubObstacle(ObstacleConfig obstacle) {
+        this.hubObstacle = obstacle;
+        hubObstaclePointsCacheValid = false;
+    }
+    
+    /**
+     * Get the current hub obstacle configuration.
+     * 
+     * @return The current ObstacleConfig for the hub
+     */
+    public ObstacleConfig getHubObstacle() {
+        return hubObstacle;
+    }
+    
+    /**
      * Set the hood/pivot angle limits.
      * 
      * @param minDegrees Minimum pitch angle in degrees
@@ -189,21 +332,96 @@ public class ExampleShooter extends AbsoluteSubsystem {
         return trackingEnabled;
     }
 
+    /**
+     * Enable or disable debug trajectory extension.
+     * When enabled, the trajectory visualization extends past the target
+     * until the ball hits the ground, showing the full flight path.
+     * Useful for verifying arc shapes in AdvantageScope.
+     * 
+     * @param enabled true to show the full extended trajectory
+     */
+    public void setDebugExtendTrajectory(boolean enabled) {
+        this.debugExtendTrajectory = enabled;
+    }
+
+    /**
+     * Check if debug trajectory extension is enabled.
+     */
+    public boolean isDebugExtendTrajectory() {
+        return debugExtendTrajectory;
+    }
+
+    /**
+     * Enable or disable stationary (aggressive) solve mode.
+     * When enabled, the solver uses a much finer angle step and evaluates
+     * far more candidates to find the absolute best trajectory.
+     * Use this when the robot is standing still and accuracy matters more than speed.
+     * 
+     * @param enabled true to enable aggressive solving
+     */
+    public void setStationarySolveEnabled(boolean enabled) {
+        this.stationarySolveEnabled = enabled;
+    }
+
+    /**
+     * Check if stationary solve mode is enabled.
+     */
+    public boolean isStationarySolveEnabled() {
+        return stationarySolveEnabled;
+    }
+
+    /**
+     * Sets the current RPM supplier for flywheel feedback.
+     * This should read the actual flywheel RPM from an encoder or sensor.
+     * 
+     * @param supplier Supplier that returns the current flywheel RPM
+     */
+    public void setCurrentRpmSupplier(Supplier<Double> supplier) {
+        this.currentRpmSupplier = supplier;
+    }
+
+    /**
+     * Enable or disable RPM feedback mode.
+     * When enabled, the solver adjusts the pitch angle based on the actual flywheel RPM
+     * instead of assuming the flywheel has reached the target RPM. This compensates for
+     * flywheel spindown during rapid-fire shooting.
+     * 
+     * @param enabled true to enable RPM feedback
+     */
+    public void setRpmFeedbackEnabled(boolean enabled) {
+        this.rpmFeedbackEnabled = enabled;
+    }
+
+    /**
+     * Check if RPM feedback mode is enabled.
+     */
+    public boolean isRpmFeedbackEnabled() {
+        return rpmFeedbackEnabled;
+    }
+
+    /**
+     * Sets the RPM threshold below which feedback re-solving kicks in.
+     * If the actual RPM is more than this amount below the target RPM,
+     * the solver will find a new angle for the current velocity.
+     * 
+     * @param threshold RPM difference threshold (default 50.0)
+     */
+    public void setRpmFeedbackThreshold(double threshold) {
+        this.rpmFeedbackThreshold = threshold;
+    }
+
     @Override
     public void periodic() {
-        // Continuous tracking: update trajectory calculation every cycle if enabled
         if (trackingEnabled && poseSupplier != null) {
             Pose2d currentPose = poseSupplier.get();
             calculateShot(
                 currentPose.getX(), currentPose.getY(), shooterHeightMeters,
                 targetPosition.getX(), targetPosition.getY(), targetPosition.getZ()
             );
-            // Log robot position for debugging
             recordOutput("RobotX", currentPose.getX());
             recordOutput("RobotY", currentPose.getY());
         }
         
-        // Update motor control based on target RPM
         if (targetRpm > 0) {
             double percentOutput = Math.min(targetRpm / 6000.0, 1.0);
             flywheelLeader.set(percentOutput);
@@ -256,11 +474,75 @@ public class ExampleShooter extends AbsoluteSubsystem {
             recordOutput("Confidence", lastTrajectoryResult.getConfidenceScore());
             recordOutput("MarginOfError", lastTrajectoryResult.getMarginOfErrorMeters());
         }
+        
+        recordOutput("MaxTrajectoryHeight", lastMaxTrajectoryHeight);
+        recordOutput("ShotClearsHub", lastShotClearsHub);
+        recordOutput("CollisionEnabled", collisionEnabled);
+        recordOutput("ArcBiasStrength", arcBiasStrength);
+        recordOutput("PreferredArcHeight", preferredArcHeightMeters);
+        recordOutput("IsRedAlliance", isRedAlliance);
+        recordOutput("DebugExtendTrajectory", debugExtendTrajectory);
+        recordOutput("StationarySolveEnabled", stationarySolveEnabled);
+
+        recordOutput("RpmFeedbackEnabled", rpmFeedbackEnabled);
+        recordOutput("IdealTargetRPM", idealTargetRpm);
+        if (currentRpmSupplier != null) {
+            recordOutput("MeasuredRPM", currentRpmSupplier.get());
+            recordOutput("RpmDeficit", idealTargetRpm - currentRpmSupplier.get());
+        }
+        if (!Double.isNaN(feedbackAdjustedPitchDegrees)) {
+            recordOutput("FeedbackAdjustedPitch", feedbackAdjustedPitchDegrees);
+        }
+
+        ObstacleConfig effectiveObs = isRedAlliance ? hubObstacle.mirrorX(FIELD_LENGTH_METERS) : hubObstacle;
+        recordOutput("HubObstacleEnabled", hubObstacle.isEnabled());
+        recordOutput("HubTotalHeight", effectiveObs.getTotalHeight());
+        recordOutput("HubCenterX", effectiveObs.getCenterX());
+        recordOutput("HubCenterY", effectiveObs.getCenterY());
+        if (!lastCollisionWarning.isEmpty()) {
+            recordOutput("CollisionWarning", lastCollisionWarning);
+        } else {
+            recordOutput("CollisionWarning", "None");
+        }
+        // Calculate and log clearance metrics
+        double heightClearance = lastMaxTrajectoryHeight - effectiveObs.getTotalHeight();
+        recordOutput("HeightClearance", heightClearance);
+        recordOutput("TrajectoryArcOK", heightClearance > 0);
+        
+        if (!hubObstaclePointsCacheValid) {
+            cachedHubObstaclePoints = generateHubObstaclePoints(effectiveObs);
+            hubObstaclePointsCacheValid = true;
+        }
+        Logger.recordOutput("ExampleShooter/HubObstacle", cachedHubObstaclePoints);
+    }
+
+    private Pose3d[] generateHubObstaclePoints(ObstacleConfig obstacle) {
+        List<Pose3d> points = new ArrayList<>();
+        double centerX = obstacle.getCenterX();
+        double centerY = obstacle.getCenterY();
+        double sizeX = obstacle.getBaseSizeX();
+        double sizeY = obstacle.getBaseSizeY();
+        double totalHeight = obstacle.getTotalHeight();
+        
+        double halfX = sizeX / 2.0;
+        double halfY = sizeY / 2.0;
+        
+        for (double x = centerX - halfX; x <= centerX + halfX; x += 0.2) {
+            for (double y = centerY - halfY; y <= centerY + halfY; y += 0.2) {
+                for (double z = 0; z <= totalHeight; z += 0.4) {
+                    points.add(new Pose3d(new Translation3d(x, y, z), new Rotation3d()));
+                }
+            }
+        }
+        
+        return points.toArray(new Pose3d[0]);
     }
 
     /**
      * Calculate shot parameters for a target position. Call this before
      * shooting to update targetRpm and targetPitchDegrees.
+     * 
+     * Now includes robot velocity compensation and proper target radius.
      *
      * @param shooterX Shooter X position on field (meters)
      * @param shooterY Shooter Y position on field (meters)
@@ -275,26 +557,105 @@ public class ExampleShooter extends AbsoluteSubsystem {
         double dy = targetY - shooterY;
         double yawToTargetRadians = Math.atan2(dy, dx);
         lastDistanceToTarget = Math.sqrt(dx * dx + dy * dy);
-        ShotInput input = ShotInput.builder()
+        
+        double robotVx = 0.0;
+        double robotVy = 0.0;
+        if (chassisSpeedsSupplier != null) {
+            ChassisSpeeds speeds = chassisSpeedsSupplier.get();
+            robotVx = speeds.vxMetersPerSecond;
+            robotVy = speeds.vyMetersPerSecond;
+        }
+        
+        ObstacleConfig effectiveObstacle = isRedAlliance
+                ? hubObstacle.mirrorX(FIELD_LENGTH_METERS)
+                : hubObstacle;
+
+        ShotInput.Builder inputBuilder = ShotInput.builder()
                 .shooterPositionMeters(shooterX, shooterY, shooterZ)
-                .shooterYawRadians(yawToTargetRadians) // Set yaw to point at target (This shouldnt be used in real life as it doesnt account for the turret limits)
+                .shooterYawRadians(yawToTargetRadians)
                 .targetPositionMeters(targetX, targetY, targetZ)
-                .pitchRangeDegrees(minPitchDegrees, maxPitchDegrees) // Hood limits
-                .minArcHeightMeters(minArcHeightMeters) // Ensure ball arcs high enough to drop into goal
-                .shotPreference(ShotInput.ShotPreference.AUTO)
-                .build();
+                .targetRadiusMeters(targetRadiusMeters)
+                .robotVelocity(robotVx, robotVy)
+                .pitchRangeDegrees(minPitchDegrees, maxPitchDegrees)
+                .minArcHeightMeters(minArcHeightMeters)
+                .shotPreference(ShotInput.ShotPreference.HIGH_CLEARANCE)
+                .addObstacle(effectiveObstacle)
+                .collisionCheckEnabled(collisionEnabled)
+                .preferredArcHeightMeters(preferredArcHeightMeters)
+                .arcBiasStrength(arcBiasStrength);
+        
+        if (stationarySolveEnabled) {
+            inputBuilder.angleStepDegrees(STATIONARY_ANGLE_STEP)
+                    .maxCandidates(STATIONARY_MAX_CANDIDATES);
+        }
+        
+        ShotInput input = inputBuilder.build();
 
         lastTrajectoryResult = solver.solve(input);
         
         if (lastTrajectoryResult.isSuccess()) {
             List<Pose3d> flightPathList = lastTrajectoryResult.getFlightPath();
             
-            lastFlightPath = flightPathList.toArray(new Pose3d[0]);
+            if (debugExtendTrajectory) {
+                ProjectileMotion debugSim = new ProjectileMotion();
+                ProjectileMotion.TrajectoryResult debugResult = debugSim.simulate(
+                        gamePiece,
+                        shooterX, shooterY, shooterZ,
+                        lastTrajectoryResult.getRequiredVelocityMps(),
+                        lastTrajectoryResult.getPitchAngleRadians(),
+                        yawToTargetRadians,
+                        0,
+                        targetX, targetY, 1000.0,
+                        targetRadiusMeters
+                );
+                List<Pose3d> debugPath = new ArrayList<>();
+                for (ProjectileMotion.TrajectoryState state : debugResult.trajectory) {
+                    if (state == null) continue;
+                    Translation3d pos = new Translation3d(state.x, state.y, state.z);
+                    Rotation3d rot = new Rotation3d(
+                            0.0,
+                            Math.atan2(state.vz, Math.sqrt(state.vx * state.vx + state.vy * state.vy)),
+                            Math.atan2(state.vy, state.vx)
+                    );
+                    debugPath.add(new Pose3d(pos, rot));
+                }
+                lastFlightPath = debugPath.toArray(new Pose3d[0]);
+            } else {
+                lastFlightPath = flightPathList.toArray(new Pose3d[0]);
+            }
+            
+            lastMaxTrajectoryHeight = lastTrajectoryResult.getMaxHeightMeters();
+            lastShotClearsHub = lastMaxTrajectoryHeight > effectiveObstacle.getTotalHeight();
+            lastCollisionWarning = "";
+
+            double clearance = lastMaxTrajectoryHeight - effectiveObstacle.getTotalHeight();
+            if (clearance < 0.1 && clearance > 0) {
+                lastCollisionWarning = String.format("LOW CLEARANCE: %.2fm above hub structure", clearance);
+            }
             
             targetPitchDegrees = lastTrajectoryResult.getPitchAngleDegrees();
             targetYawDegrees = Math.toDegrees(yawToTargetRadians);
             targetRpm = lastTrajectoryResult.getRecommendedRpm();
+            idealTargetRpm = targetRpm;
+            feedbackAdjustedPitchDegrees = Double.NaN;
             hasValidShot = true;
+            
+            if (rpmFeedbackEnabled && currentRpmSupplier != null) {
+                double measuredRpm = currentRpmSupplier.get();
+                double rpmDeficit = idealTargetRpm - measuredRpm;
+                
+                if (rpmDeficit > rpmFeedbackThreshold && measuredRpm > 0) {
+                    TrajectoryResult feedbackResult = solver.solveAtCurrentRpm(
+                        input, flywheelConfig, measuredRpm
+                    );
+                    
+                    if (feedbackResult.isSuccess()) {
+                        feedbackAdjustedPitchDegrees = feedbackResult.getPitchAngleDegrees();
+                        targetPitchDegrees = feedbackAdjustedPitchDegrees;
+                        lastTrajectoryResult = feedbackResult;
+                    }
+                }
+            }
             
             lastShot = ShotCandidate.builder()
                     .pitchAngleRadians(lastTrajectoryResult.getPitchAngleRadians())
@@ -314,9 +675,9 @@ public class ExampleShooter extends AbsoluteSubsystem {
                 lastShot = fastest.get();
                 targetPitchDegrees = lastShot.getPitchAngleDegrees();
                 targetYawDegrees = lastShot.getYawAngleDegrees();
-                targetRpm = lastShot.getSpeedScore();
+                targetRpm = lastShot.getRequiredVelocityMps() * 300.0;
                 hasValidShot = true;
-                lastFlightPath = new Pose3d[0]; // No trajectory available from candidates
+                lastFlightPath = new Pose3d[0];
             } else {
                 hasValidShot = false;
                 targetRpm = 0;
@@ -377,21 +738,28 @@ public class ExampleShooter extends AbsoluteSubsystem {
         ChassisSpeeds chassisSpeeds = chassisSpeedsSupplier != null ? 
                 chassisSpeedsSupplier.get() : new ChassisSpeeds();
         
-        // Get shooter rotation (robot rotation + any turret offset)
-        Rotation2d shooterRotation = robotPose.getRotation();
+        double launchSpeed;
+        double launchAngleRad;
+        double yawRad;
         
-        // Calculate launch velocity based on RPM (assume 20 m/s at 6000 RPM)
-        double launchSpeed = (targetRpm / 6000.0) * 20.0;
-        if (launchSpeed < 1.0) {
-            launchSpeed = 15.0; // Default launch speed if no RPM calculated
+        if (hasValidShot && lastTrajectoryResult != null && lastTrajectoryResult.isSuccess()) {
+            launchSpeed = lastTrajectoryResult.getRequiredVelocityMps();
+            launchAngleRad = lastTrajectoryResult.getPitchAngleRadians();
+            yawRad = Math.toRadians(targetYawDegrees);
+        } else if (hasValidShot && lastShot != null) {
+            launchSpeed = lastShot.getRequiredVelocityMps();
+            launchAngleRad = lastShot.getPitchAngleRadians();
+            yawRad = lastShot.getYawAngleRadians();
+        } else {
+            launchSpeed = 15.0;
+            launchAngleRad = Math.toRadians(55);
+            yawRad = robotPose.getRotation().getRadians();
         }
+
+        double cosYaw = Math.cos(yawRad);
+        double sinYaw = Math.sin(yawRad);
         
-        // Use the calculated pitch angle, or default to 55 degrees
-        double launchAngleRad = hasValidShot ? 
-                Math.toRadians(targetPitchDegrees) : Math.toRadians(55);
-        
-        // Calculate the shooter's world position
-        // Transform shooter offset from robot frame to world frame
+        Rotation2d shooterRotation = robotPose.getRotation();
         double cosTheta = shooterRotation.getCos();
         double sinTheta = shooterRotation.getSin();
         double worldOffsetX = shooterOffset.getX() * cosTheta - shooterOffset.getY() * sinTheta;
@@ -403,18 +771,15 @@ public class ExampleShooter extends AbsoluteSubsystem {
                 shooterHeightMeters
         );
         
-        // Calculate velocity components
         double horizontalSpeed = launchSpeed * Math.cos(launchAngleRad);
         double verticalSpeed = launchSpeed * Math.sin(launchAngleRad);
-        
-        // Add chassis velocity (field-relative) to the ball's initial velocity
+
         Translation3d launchVel = new Translation3d(
-                horizontalSpeed * cosTheta + chassisSpeeds.vxMetersPerSecond,
-                horizontalSpeed * sinTheta + chassisSpeeds.vyMetersPerSecond,
+                horizontalSpeed * cosYaw + chassisSpeeds.vxMetersPerSecond,
+                horizontalSpeed * sinYaw + chassisSpeeds.vyMetersPerSecond,
                 verticalSpeed
         );
         
-        // Spawn the fuel in simulation
         FuelSim.getInstance().spawnFuel(shooterPos, launchVel);
         
         System.out.println("Shot ball! Pos: " + shooterPos + " Vel: " + launchVel + 
@@ -429,7 +794,6 @@ public class ExampleShooter extends AbsoluteSubsystem {
         return runOnce(this::shootBallSim);
     }
 
-    // Getters for state
     public double getTargetRpm() {
         return targetRpm;
     }
@@ -527,14 +891,10 @@ public class ExampleShooter extends AbsoluteSubsystem {
                 builder.addDoubleProperty("TargetYawDeg", () -> targetYawDegrees, null);
                 builder.addBooleanProperty("HasValidShot", () -> hasValidShot, null);
                 builder.addIntegerProperty("TrajectoryPoints", () -> lastFlightPath.length, null);
-                
-                // Shot metrics
                 builder.addDoubleProperty("TimeOfFlight", () -> lastShot != null ? lastShot.getTimeOfFlightSeconds() : 0.0, null);
                 builder.addDoubleProperty("MaxHeight", () -> lastShot != null ? lastShot.getMaxHeightMeters() : 0.0, null);
                 builder.addDoubleProperty("RequiredVelocity", () -> lastShot != null ? lastShot.getRequiredVelocityMps() : 0.0, null);
                 builder.addDoubleProperty("Confidence", () -> lastShot != null ? lastShot.getAccuracyScore() : 0.0, null);
-                
-                // Trajectory result specific data
                 builder.addDoubleProperty("MarginOfError", () -> lastTrajectoryResult != null && lastTrajectoryResult.isSuccess() 
                         ? lastTrajectoryResult.getMarginOfErrorMeters() : 0.0, null);
             }

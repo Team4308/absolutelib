@@ -1,5 +1,18 @@
 # Changelog for AbsoluteLib V2
 
+## 1.2.9
+
+- Fixed critical bug where `simulate()` parameters were shifted by one position — `ballSpinRpm` was being passed as velocity, causing absurd TOF (5s) and max heights (70m+). This was the root cause of pitch always being ~40 deg and TOF always being 5 seconds.
+- Added obstacle-aware trajectory solving. You can now define field obstacles like the 2026 hub with `ObstacleConfig` and the solver will automatically reject trajectories that collide with them.
+- Added collision grace distance — balls near the launch point skip collision checks so you can shoot from close to (or inside) an obstacle's footprint.
+- Added opening exemption — balls descending into the basket opening aren't blocked by the obstacle structure above it.
+- Added `solveAtCurrentRpm()` to `TrajectorySolver` for RPM feedback. When the flywheel hasn't fully spun up, it adjusts pitch angle to compensate for lower velocity.
+- Added RPM feedback loop to `ExampleShooter` with `setCurrentRpmSupplier()`, `setRpmFeedbackEnabled()`, and `setRpmFeedbackThreshold()`.
+- Reduced `SolverConstants` from 56 fields down to 19. Removed all the scoring weight constants that nobody should be touching.
+- Added `isWithinOpening()` to `ObstacleConfig` for checking if a point is within the basket opening.
+- Rebalanced scoring — reduced stability weight, increased speed weight so the solver actually picks faster shots.
+- Added drag compensation to velocity estimation.
+
 ## 1.2.8
 
 - Added `SolverConstants` class with 45 parameters for the trajectory system. These numbers more then likely are fine as they are, but incase a change needs to be made its there

@@ -11,6 +11,17 @@ public class ProjectileMotion {
     
     private final AirResistance airResistance;
     private final double timeStep;
+
+    // ===== Internal angle search constants (not user-tunable) =====
+    private static final double MIN_ANGLE_BOUND = 0.1;
+    private static final double MAX_ANGLE_OFFSET = 0.1;
+    private static final double ANGLE_SWEEP_STEP = 0.05;
+    private static final double ANGLE_CONVERGENCE = 0.00001;
+    private static final double HIGH_ARC_LOW_BOUND_MULT = 0.8;
+    private static final double LOW_ARC_HIGH_BOUND_MULT = 1.2;
+    private static final double HIGH_ARC_MAX_OFFSET = 0.05;
+    private static final double LOW_ARC_MIN_BOUND = 0.05;
+    private static final double VELOCITY_ZERO_THRESHOLD = 1e-6;
     
     /**
      * State vector for trajectory simulation.
@@ -279,7 +290,7 @@ public class ProjectileMotion {
      */
     public double calculateTimeOfFlight(double distance, double launchAngle, double velocity) {
         double horizontalVelocity = velocity * Math.cos(launchAngle);
-        if (Math.abs(horizontalVelocity) < SolverConstants.getVelocityZeroThreshold()) {
+        if (Math.abs(horizontalVelocity) < VELOCITY_ZERO_THRESHOLD) {
             return Double.POSITIVE_INFINITY;
         }
         return distance / horizontalVelocity;
@@ -405,9 +416,9 @@ public class ProjectileMotion {
             double bestAngle = Double.NaN;
             double bestApproach = Double.MAX_VALUE;
             
-            double sweepMin = SolverConstants.getMinAngleBoundRadians();
-            double sweepMax = Math.PI / 2 - SolverConstants.getHighArcMaxOffsetRadians();
-            double sweepStep = SolverConstants.getAngleSweepStepRadians();
+            double sweepMin = MIN_ANGLE_BOUND;
+            double sweepMax = Math.PI / 2 - HIGH_ARC_MAX_OFFSET;
+            double sweepStep = ANGLE_SWEEP_STEP;
             
             for (double testAngle = sweepMin; testAngle < sweepMax; testAngle += sweepStep) {
                 TrajectoryResult result = simulate(gamePiece, x0, y0, z0, 
@@ -435,15 +446,15 @@ public class ProjectileMotion {
             return angle;
         }
         
-        double angleLow = SolverConstants.getMinAngleBoundRadians();
-        double angleHigh = Math.PI / 2 - SolverConstants.getMaxAngleOffsetRadians();
+        double angleLow = MIN_ANGLE_BOUND;
+        double angleHigh = Math.PI / 2 - MAX_ANGLE_OFFSET;
         
         if (preferHighArc) {
-            angleLow = angle * SolverConstants.getHighArcLowBoundMultiplier();
-            angleHigh = Math.PI / 2 - SolverConstants.getHighArcMaxOffsetRadians();
+            angleLow = angle * HIGH_ARC_LOW_BOUND_MULT;
+            angleHigh = Math.PI / 2 - HIGH_ARC_MAX_OFFSET;
         } else {
-            angleLow = SolverConstants.getLowArcMinBoundRadians();
-            angleHigh = angle * SolverConstants.getLowArcHighBoundMultiplier();
+            angleLow = LOW_ARC_MIN_BOUND;
+            angleHigh = angle * LOW_ARC_HIGH_BOUND_MULT;
         }
         
         for (int i = 0; i < PhysicsConstants.MAX_ITERATIONS * 2; i++) {
@@ -479,7 +490,7 @@ public class ProjectileMotion {
                 angleLow = angle;
             }
             
-            if (angleHigh - angleLow < SolverConstants.getAngleConvergenceThreshold()) {
+            if (angleHigh - angleLow < ANGLE_CONVERGENCE) {
                 break; 
             }
         }

@@ -23,7 +23,7 @@ Before building, install all required libraries:
 - Rev Hardware Client
 - AdvantageKit
 - PathPlannerLib
-- Phoenix6-Replay (6 and 5)
+- Phoenix6-Replay (**6 and 5**)
 - PhotonLib
 - REVLib
 - Studica
@@ -56,10 +56,12 @@ Before building, install all required libraries:
 - `leds/*`: Addressable LED patterns and simulation helpers
 
 ### Trajectory System (2026 REBUILT)
-- `TrajectorySolver`: Complete trajectory solving for turret shooters
+- `TrajectorySolver`: Complete trajectory solving for turret shooters with obstacle avoidance
 - `FlywheelGenerator`: Automated flywheel configuration generation and optimization
 - `FlywheelSimulator`: Physics-based flywheel and ball exit velocity simulation
-- `ProjectileMotion`: Projectile physics with air resistance and spin
+- `ProjectileMotion`: Projectile physics with air resistance, drag, and Magnus effect
+- `ObstacleConfig`: Collision-aware field obstacle definition (e.g., 2026 hub)
+- `SolverConstants`: Runtime-tunable constants for all solver behavior
 - `GamePieces`: Predefined game pieces including 2026 REBUILT ball
 
 ### Example Code
@@ -404,6 +406,84 @@ candidates.getMostStable();      // Most stable angle
 candidates.getMaxClearance();    // Highest arc for obstacles
 candidates.getBestHighArc();     // Best high-arc shot
 candidates.getBestLowArc();      // Best low-arc shot
+```
+
+### Obstacle-Aware Solving
+
+The solver can detect and avoid field obstacles like the 2026 hub. Trajectories that collide with obstacles are automatically rejected, and the solver biases toward higher arcs when the shot path crosses an obstacle.
+
+```java
+// Define the 2026 hub as an obstacle
+ObstacleConfig hub = ObstacleConfig.builder()
+    .position(4.03, 4.0)           // Center of hub on field
+    .baseSize(1.19)                // 1.19m x 1.19m footprint
+    .wallHeight(1.83)              // Solid wall height
+    .upperStructureHeight(0.41)    // Polycarbonate above wall
+    .openingDiameter(1.06)         // Basket opening
+    .collisionMargin(0.05)         // Safety margin
+    .build();
+
+// Add obstacle to shot input
+ShotInput input = ShotInput.builder()
+    .shooterPositionMeters(1.0, 2.0, 0.5)
+    .targetPositionMeters(4.03, 4.0, 2.1)
+    .addObstacle(hub)
+    .collisionCheckEnabled(true)
+    .build();
+
+// Solver automatically avoids hub collisions
+TrajectoryResult result = solver.solve(input);
+```
+
+The collision system includes:
+- **Grace distance**: Balls near the launch point skip collision checks, so you can shoot from close to (or even inside) an obstacle's footprint
+- **Opening exemption**: Balls descending into the basket opening aren't blocked by the obstacle
+- **Auto arc bias**: When the shot path crosses an obstacle, the solver biases toward higher arcs to clear it
+
+### RPM Feedback Loop
+
+For rapid-fire scenarios where the flywheel hasn't fully spun up between shots, `solveAtCurrentRpm` adjusts the pitch angle to compensate for lower-than-ideal velocity:
+
+```java
+// Solve at the flywheel's current measured RPM instead of the ideal RPM
+double currentRpm = flywheelEncoder.getVelocity(); // Actual measured RPM
+TrajectoryResult adjusted = solver.solveAtCurrentRpm(input, flywheelConfig, currentRpm);
+
+if (adjusted.isSuccess()) {
+    // Use the adjusted pitch — steeper angle compensates for lower velocity
+    double adjustedPitch = adjusted.getPitchAngleDegrees();
+}
+```
+
+### Tuning with SolverConstants
+
+All solver parameters are runtime-configurable via `SolverConstants`. Set them before creating a solver instance:
+
+```java
+// Target detection
+SolverConstants.setHoopToleranceMultiplier(8.0);      // How lenient "hit" detection is
+SolverConstants.setMinTargetDistanceMeters(0.05);      // Minimum shot distance
+SolverConstants.setBasketDescentToleranceMultiplier(6); // Descent detection radius
+
+// Velocity tuning
+SolverConstants.setVelocityBufferMultiplier(1.2);      // Safety margin on velocity
+SolverConstants.setDragCompensationMultiplier(1.8);     // Compensate for air resistance
+SolverConstants.setCloseRangeVelocityMultiplier(1.3);   // Buffer for < 3m shots
+SolverConstants.setCloseRangeThresholdMeters(3.0);      // Close range cutoff
+
+// Collision
+SolverConstants.setCollisionGraceDistanceMeters(0.5);   // Skip checks near launch
+SolverConstants.setObstacleClearanceMarginMeters(0.15);  // Safety above obstacles
+
+// Arc behavior
+SolverConstants.setForceHighArcMinPitchDegrees(35.0);   // Min pitch for obstacle shots
+SolverConstants.setDefaultArcBiasStrength(0.6);          // How strongly to bias high arc
+
+// Create solver with modified constants
+TrajectorySolver solver = TrajectorySolver.forGame2026();
+
+// Reset when done
+SolverConstants.resetToDefaults();
 ```
 
 ### Legacy API
