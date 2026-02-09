@@ -285,13 +285,22 @@ public class TrajectorySolver {
      */
     private static boolean trajectoryCollides(ProjectileMotion.TrajectoryResult trajSim,
             ShotInput input, double shooterX, double shooterY) {
+        return trajectoryCollidesInternal(trajSim, input, shooterX, shooterY, false);
+    }
+    
+    /**
+     * Checks collision with optional verbose logging for diagnostics.
+     */
+    static boolean trajectoryCollidesInternal(ProjectileMotion.TrajectoryResult trajSim,
+            ShotInput input, double shooterX, double shooterY, boolean verbose) {
         if (!input.isCollisionCheckEnabled() || trajSim.trajectory.length == 0) return false;
         
         double graceDistance = SolverConstants.getCollisionGraceDistanceMeters();
         double graceDist2 = graceDistance * graceDistance;
         
         for (ObstacleConfig obstacle : input.getObstacles()) {
-            for (ProjectileMotion.TrajectoryState state : trajSim.trajectory) {
+            for (int i = 0; i < trajSim.trajectory.length; i++) {
+                ProjectileMotion.TrajectoryState state = trajSim.trajectory[i];
                 double sdx = state.x - shooterX;
                 double sdy = state.y - shooterY;
                 if (sdx * sdx + sdy * sdy < graceDist2) continue;
@@ -299,6 +308,16 @@ public class TrajectorySolver {
                 if (state.vz < 0 && obstacle.isWithinOpening(state.x, state.y)) continue;
                 
                 if (obstacle.checkCollision(state.x, state.y, state.z)) {
+                    if (verbose) {
+                        double distFromCenter = Math.sqrt(
+                            Math.pow(state.x - obstacle.getCenterX(), 2) + 
+                            Math.pow(state.y - obstacle.getCenterY(), 2));
+                        System.out.printf("    COLLISION at pt[%d]: (%.3f, %.3f, %.3f) vz=%.2f " +
+                            "distFromCenter=%.3f opening=%.3f wallH=%.2f totalH=%.2f%n",
+                            i, state.x, state.y, state.z, state.vz,
+                            distFromCenter, obstacle.getOpeningDiameter() / 2.0,
+                            obstacle.getWallHeight(), obstacle.getTotalHeight());
+                    }
                     return true;
                 }
             }

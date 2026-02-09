@@ -72,15 +72,12 @@ public class RobotContainer {
             .headingWhile(true);
 
     public RobotContainer() {
-        // Set up shooter with pose supplier for continuous trajectory tracking
         m_shooter.setPoseSupplier(drivebase::getPose);
-        m_shooter.setChassisSpeedsSupplier(drivebase::getFieldVelocity); // For FuelSim shooting
-        m_shooter.setShooterHeight(0.6); // Shooter height in meters
-        m_shooter.setPitchLimits(0.0, 50.0); // Hood limits: 0-50 degrees
-        m_shooter.setTrackingEnabled(true); // Enable continuous tracking
+        m_shooter.setChassisSpeedsSupplier(drivebase::getFieldVelocity); 
+        m_shooter.setShooterHeight(0.6);
+        m_shooter.setPitchLimits(0.0, 85.0);
+        m_shooter.setTrackingEnabled(true); 
 
-        // Set target based on alliance (2026 REBUILT goals)
-        // Blue alliance goal: (4, 4, 2.1) - Red alliance goal: (12, 4, 2.1)
         updateTargetForAlliance();
 
         configureBindings();
@@ -89,7 +86,6 @@ public class RobotContainer {
         DriverStation.silenceJoystickConnectionWarning(true);
         autoChooser = AutoBuilder.buildAutoChooser();
         SmartDashboard.putData("Auto Chooser", autoChooser);
-        // Initialize LEDs to idle pattern
         m_leds.setIdle();
 
     }
@@ -105,10 +101,8 @@ public class RobotContainer {
         var alliance = DriverStation.getAlliance();
         double goalZ = 2.1; // Goal opening height
         if (alliance.isPresent() && alliance.get() == DriverStation.Alliance.Red) {
-            // Red alliance shoots at X=12, Y=4
             m_shooter.setTarget(12.0, 4.0, goalZ);
         } else {
-            // Blue alliance (or unknown) shoots at X=4, Y=4
             m_shooter.setTarget(4.0, 4.0, goalZ);
         }
     }
@@ -118,11 +112,7 @@ public class RobotContainer {
         Command driveRobotOrientedAngularVelocity = drivebase.driveFieldOriented(driveRobotOriented);
         Command driveFieldOrientedAnglularVelocityKeyboard = drivebase.driveFieldOriented(driveAngularVelocityKeyboard);
 
-        // ==================== Shooter Control (Bumpers/Triggers) ====================
-        // Trajectory is calculated continuously when tracking is enabled
-        // The shooter always knows the shot solution based on current robot position
 
-        // Right Bumper: Aim pivot to calculated angle (tracking already running)
         driver.rightBumper().whileTrue(
                 Commands.run(() -> {
                     if (m_shooter.hasValidShot()) {
@@ -131,10 +121,8 @@ public class RobotContainer {
                     }
                 }));
 
-        // Left Bumper: Spin up flywheel to target RPM
         driver.leftBumper().whileTrue(m_shooter.spinUp());
 
-        // Right Trigger: Full auto-aim shot sequence (aim + spin up)
         driver.rightTrigger().whileTrue(
                 Commands.run(() -> {
                     if (m_shooter.hasValidShot()) {
@@ -142,13 +130,11 @@ public class RobotContainer {
                     }
                 }).alongWith(m_shooter.spinUp()));
 
-        // Left Trigger: Stop shooter and stow
         driver.leftTrigger(0.5).onTrue(
                 m_shooter.stopCommand()
                         .andThen(m_pivot.setAngle(0.0))
                         .andThen(Commands.runOnce(() -> m_leds.setIdle())));
 
-        // A Button: Toggle tracking on/off
         driver.a().onTrue(Commands.runOnce(() -> {
             m_shooter.setTrackingEnabled(!m_shooter.isTrackingEnabled());
             if (m_shooter.isTrackingEnabled()) {
@@ -158,7 +144,6 @@ public class RobotContainer {
             }
         }));
 
-        // B Button: Toggle stationary aggressive solve (finer angle step, more candidates)
         driver.b().onTrue(Commands.runOnce(() -> {
             m_shooter.setStationarySolveEnabled(!m_shooter.isStationarySolveEnabled());
             if (m_shooter.isStationarySolveEnabled()) {

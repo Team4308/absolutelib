@@ -71,8 +71,8 @@ public class ExampleShooter extends AbsoluteSubsystem {
     private boolean trackingEnabled = true;
     private boolean debugExtendTrajectory = true;
     private boolean stationarySolveEnabled = true;
-    private static final double STATIONARY_ANGLE_STEP = 0.01;
-    private static final int STATIONARY_MAX_CANDIDATES = 1000;
+    private static final double STATIONARY_ANGLE_STEP = 0.00001;
+    private static final int STATIONARY_MAX_CANDIDATES = 1000000000;
 
     private Supplier<Double> currentRpmSupplier = null;
     private boolean rpmFeedbackEnabled = false;

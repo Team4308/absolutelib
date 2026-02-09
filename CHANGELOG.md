@@ -1,7 +1,15 @@
 # Changelog for  AbsoluteLib V2
 
+
+## 1.3.2
+- Fix Runtime error
+
 ## 1.3.1
-- Added Debugging 
+- Added `SolveDebugInfo` class that tracks exactly why every candidate angle is accepted or rejected during a solve. Records rejection reason (collision, arc too low, clearance, missed target, flyover), score, closest approach, max height, TOF, and full trajectory for each tested pitch angle.
+- Instrumented `TrajectorySolver.solve()` with debug recording at all 5 filter points. Enable with `solver.setDebugEnabled(true)`.
+- Added `getDebugInfo()` to `TrajectoryResult` — returns the full `SolveDebugInfo` for the solve that produced the result.
+- Added debug telemetry publishing to `ExampleShooter` — publishes per-rejection-type counts, best score/pitch, up to 10 accepted candidate paths, and one sample rejected path per rejection type to NetworkTables.
+- Added `trajectory-debug.html` — a standalone NT4 WebSocket dashboard for real-time solver debugging. Shows rejection breakdowns, shot parameters, 2D trajectory visualization, live log, and raw NT value table. Connect to your robot IP on port 5810.
 
 ## 1.3.0
 

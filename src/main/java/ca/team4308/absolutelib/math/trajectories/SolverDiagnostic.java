@@ -1,5 +1,6 @@
 package ca.team4308.absolutelib.math.trajectories;
 
+import ca.team4308.absolutelib.math.trajectories.flywheel.FlywheelGenerator;
 import ca.team4308.absolutelib.math.trajectories.gamepiece.GamePiece;
 import ca.team4308.absolutelib.math.trajectories.gamepiece.GamePieces;
 import ca.team4308.absolutelib.math.trajectories.physics.ProjectileMotion;
@@ -79,6 +80,11 @@ public class SolverDiagnostic {
         
         System.out.println("\n=== Collision Analysis at Close Range ===");
         analyzeCollisionAtCloseRange(3.612, 4.023, 0.6);
+        
+        System.out.println("\n=== User's Actual Position (2.023, 2.897) ===");
+        testScenario(solver, "User position with collision", 2.023, 2.897, 0.6, true);
+        testScenario(solver, "User position NO collision", 2.023, 2.897, 0.6, false);
+        analyzeCollisionDetail(2.023, 2.897, 0.6);
         
         System.out.println("\n=== Velocity Analysis ===");
         analyzeVelocity(solver, gamePiece);
@@ -222,6 +228,98 @@ public class SolverDiagnostic {
             System.out.printf("  %-8.0f %-10s %-10.3f %-10.3f %-10.2f %s%n",
                 pitch, traj.hitTarget, traj.closestApproach, traj.flightTime,
                 traj.maxHeight, collisionInfo);
+        }
+    }
+    
+    private static void analyzeCollisionDetail(double shooterX, double shooterY, double shooterZ) {
+        System.out.println("\n  --- Detailed Collision Analysis (ExampleShooter-matched) ---");
+        double dx = 4.0 - shooterX;
+        double dy = 4.0 - shooterY;
+        double distToTarget = Math.sqrt(dx * dx + dy * dy);
+        double yaw = Math.atan2(dy, dx);
+        
+        System.out.printf("  Distance to target (4.0, 4.0, 2.1): %.3fm%n", distToTarget);
+        
+        // Match ExampleShooter EXACTLY: defaults config, target (4.0,4.0,2.1), radius 0.15
+        TrajectorySolver.SolverConfig matchConfig = TrajectorySolver.SolverConfig.defaults()
+                .toBuilder()
+                .hoopToleranceMultiplier(10.0)
+                .build();
+        
+        GamePiece gp = GamePieces.REBUILT_2026_BALL;
+        TrajectorySolver matchSolver = new TrajectorySolver(gp, matchConfig);
+        matchSolver.setDebugEnabled(true);
+        
+        // Exact ExampleShooter ShotInput
+        ShotInput matchInput = ShotInput.builder()
+                .shooterPositionMeters(shooterX, shooterY, shooterZ)
+                .shooterYawRadians(yaw)
+                .targetPositionMeters(4.0, 4.0, 2.1)
+                .targetRadiusMeters(0.15)
+                .pitchRangeDegrees(0, 90)
+                .angleStepDegrees(0.1)
+                .maxCandidates(1000000000)
+                .shotPreference(ShotInput.ShotPreference.AUTO)
+                .addObstacle(HUB_OBSTACLE)
+                .collisionCheckEnabled(true)
+                .build();
+        System.out.printf("  ShotInput: pitch=[%.1f, %.1f] step=%.1f target=%.2fm radius=%.2f%n",
+            matchInput.getMinPitchDegrees(), matchInput.getMaxPitchDegrees(),
+            matchInput.getAngleStepDegrees(), matchInput.getTargetRadius(),
+            matchInput.getTargetRadius());
+        System.out.printf("  pathCrossesObstacle: %s%n", matchInput.pathRequiresArc());
+        System.out.printf("  effectiveMinPitch with force: %.1f%n",
+            matchInput.pathRequiresArc() ? Math.max(matchInput.getMinPitchDegrees(), 
+            SolverConstants.getForceHighArcMinPitchDegrees()) : matchInput.getMinPitchDegrees());
+        
+        // Run full solve and get debug info
+        TrajectoryResult matchResult = matchSolver.solve(matchInput);
+        System.out.printf("  SOLVE result: %s - %s%n", matchResult.getStatus(), matchResult.getStatusMessage());
+        if (matchResult.isSuccess()) {
+            System.out.printf("  pitch=%.1f° rpm=%.0f velocity=%.2f m/s%n",
+                matchResult.getPitchAngleDegrees(), matchResult.getRecommendedRpm(),
+                matchResult.getRequiredVelocityMps());
+        }
+        if (matchResult.getDebugInfo() != null) {
+            System.out.println(matchResult.getDebugInfo().getSummary());
+        }
+        
+        // Now do manual per-pitch collision analysis with VERBOSE logging
+        System.out.println("\n  --- Per-Pitch Verbose Collision Check (every 5°) ---");
+        ProjectileMotion pm = new ProjectileMotion();
+        double minV = pm.calculateMinimumVelocity(distToTarget, 2.1 - shooterZ);
+        boolean closeRange = distToTarget < SolverConstants.getCloseRangeThresholdMeters();
+        double velocityBuffer = closeRange ? SolverConstants.getCloseRangeVelocityMultiplier()
+                : SolverConstants.getVelocityBufferMultiplier() 
+                * TrajectorySolver.calculateDragCompensation(distToTarget);
+        double targetVelocity = minV * velocityBuffer;
+        System.out.printf("  Velocity calc: minV=%.2f buffer=%.2f (closeRange=%s) targetV=%.2f%n",
+            minV, velocityBuffer, closeRange, targetVelocity);
+        
+        // Use same flywheel generation as solver
+        FlywheelGenerator gen = new FlywheelGenerator(gp, matchConfig.getFlywheelGenParams());
+        FlywheelGenerator.GenerationResult genResult = gen.generateAndEvaluate(targetVelocity);
+        double actualVelocity = genResult.bestConfig != null ? genResult.bestConfig.simulation.exitVelocityMps : targetVelocity;
+        System.out.printf("  Flywheel: achievable=%d actual exitV=%.2f m/s%n", 
+            genResult.achievableCount, actualVelocity);
+        
+        for (double pitch = 35; pitch <= 85; pitch += 5) {
+            ProjectileMotion.TrajectoryResult traj = pm.simulate(
+                gp, shooterX, shooterY, shooterZ,
+                actualVelocity, Math.toRadians(pitch), yaw,
+                genResult.bestConfig != null ? genResult.bestConfig.simulation.ballSpinRpm : 0,
+                4.0, 4.0, 2.1, 0.15
+            );
+            
+            System.out.printf("  pitch=%2.0f° pts=%d hit=%s closest=%.3f maxH=%.2f tof=%.3f%n",
+                pitch, traj.trajectory.length, traj.hitTarget, traj.closestApproach, 
+                traj.maxHeight, traj.flightTime);
+            
+            boolean collides = TrajectorySolver.trajectoryCollidesInternal(
+                traj, matchInput, shooterX, shooterY, true);
+            if (!collides) {
+                System.out.println("    -> CLEAR (no collision)");
+            }
         }
     }
     
