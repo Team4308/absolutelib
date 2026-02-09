@@ -288,6 +288,32 @@ public class TrajectorySolver {
     }
     
     /**
+     * Checks if a trajectory is a flyover — the ball passes above the target
+     * without descending close enough to the target height.
+     * At the point of closest horizontal approach to the target, the ball's
+     * altitude must be within one target radius above the target center height.
+     */
+    private static boolean isFlyover(ProjectileMotion.TrajectoryState[] trajectory,
+            double targetX, double targetY, double targetZ, double targetRadius) {
+        if (trajectory == null || trajectory.length == 0) return false;
+
+        double bestHorizDist2 = Double.MAX_VALUE;
+        double heightAtBestHoriz = 0;
+
+        for (ProjectileMotion.TrajectoryState st : trajectory) {
+            double dx = st.x - targetX;
+            double dy = st.y - targetY;
+            double hd2 = dx * dx + dy * dy;
+            if (hd2 < bestHorizDist2) {
+                bestHorizDist2 = hd2;
+                heightAtBestHoriz = st.z;
+            }
+        }
+
+        return heightAtBestHoriz > targetZ + targetRadius;
+    }
+
+    /**
      * Overload for findAllCandidates which uses AngleEvaluation trajectory data.
      */
     private static boolean evaluationCollides(ProjectileMotion.AngleEvaluation eval,
@@ -548,6 +574,9 @@ public class TrajectorySolver {
             boolean hitsTarget = trajSim.hitTarget || trajSim.closestApproach <= hoopTolerance;
             
             if (!hitsTarget) continue;
+
+            if (isFlyover(trajSim.trajectory, iterTargetX, iterTargetY,
+                    input.getTargetZ(), input.getTargetRadius())) continue;
 
             double score = scoreCandidate(trajSim, pitchDeg, input, requiredClearance);
             
@@ -911,6 +940,9 @@ public class TrajectorySolver {
             
             if (!hitsTarget) continue;
 
+            if (isFlyover(trajSim.trajectory, iterTargetX, iterTargetY,
+                    input.getTargetZ(), input.getTargetRadius())) continue;
+
             double score = scoreCandidate(trajSim, pitchDeg, input, requiredClearance);
             
             if (score > bestScore) {
@@ -1056,6 +1088,9 @@ public class TrajectorySolver {
             if (requiredClearance > 0 && eval.maxHeight < requiredClearance) {
                 continue;
             }
+
+            if (eval.trajectory != null && isFlyover(eval.trajectory.trajectory,
+                    effectiveTargetX, effectiveTargetY, input.getTargetZ(), input.getTargetRadius())) continue;
             
             if (eval.timeOfFlight > maxTof) maxTof = eval.timeOfFlight;
             if (eval.timeOfFlight < minTof && eval.timeOfFlight > 0) minTof = eval.timeOfFlight;
@@ -1071,6 +1106,9 @@ public class TrajectorySolver {
             if (requiredClearance > 0 && eval.maxHeight < requiredClearance) {
                 continue;
             }
+
+            if (eval.trajectory != null && isFlyover(eval.trajectory.trajectory,
+                    effectiveTargetX, effectiveTargetY, input.getTargetZ(), input.getTargetRadius())) continue;
             
             ShotCandidate candidate = buildCandidate(eval, input, yawAngle, minTof, tofRange, maxHeight);
             candidates.add(candidate);

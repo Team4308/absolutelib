@@ -1,4 +1,11 @@
-# Changelog for AbsoluteLib V2
+# Changelog for  AbsoluteLib V2
+
+
+## 1.3.0
+
+- Added flyover detection — the solver now rejects trajectories where the ball passes above the target without descending into it. At the point of closest horizontal approach, the ball must be within one target radius of the target height or the trajectory is skipped.
+- Added distance-scaled drag compensation. Instead of applying a flat 1.8x drag multiplier at all distances, velocity compensation now linearly ramps from 1.0 at close range (≤3m) to the full multiplier at 8m+. Fixes medium-range shots (3–5m) being wildly over-powered.
+- Applied flyover and drag compensation checks across all solve paths: `solve()`, `solveAtCurrentRpm()`, and `findAllCandidates()`.
 
 ## 1.2.9
 

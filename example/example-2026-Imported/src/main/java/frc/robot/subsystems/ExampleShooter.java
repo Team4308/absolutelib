@@ -52,8 +52,9 @@ public class ExampleShooter extends AbsoluteSubsystem {
     
     private double shooterHeightMeters = 0.6;
     private Translation2d shooterOffset = new Translation2d(0.2, 0);
-    private double minPitchDegrees = 0.0;
-    private double maxPitchDegrees = 90.0;
+    // 7.5 - 43.5
+    private double minPitchDegrees = 7.5;
+    private double maxPitchDegrees = 43.5;
     private double minArcHeightMeters = 0.75;
     private double targetRadiusMeters = 0.53;
     private Translation3d targetPosition = new Translation3d(6.0, 6.0, 5.1);
