@@ -53,8 +53,8 @@ public class ExampleShooter extends AbsoluteSubsystem {
     private double shooterHeightMeters = 0.6;
     private Translation2d shooterOffset = new Translation2d(0.2, 0);
     // 7.5 - 43.5
-    private double minPitchDegrees = 0;
-    private double maxPitchDegrees = 90;
+    private double minPitchDegrees = 47.5;
+    private double maxPitchDegrees = 82.5;
     private double minArcHeightMeters = 0.75;
     private double targetRadiusMeters = 0.53;
     private Translation3d targetPosition = new Translation3d(6.0, 4.0, 5.1);
@@ -64,7 +64,7 @@ public class ExampleShooter extends AbsoluteSubsystem {
     private Pose3d[] cachedHubObstaclePoints = new Pose3d[0];
     private boolean hubObstaclePointsCacheValid = false;
 
-    private boolean collisionEnabled = true;
+    private boolean collisionEnabled = false;
     private double preferredArcHeightMeters = 2.5;
     private double arcBiasStrength = 0.6;
     private boolean isRedAlliance = false;
@@ -91,7 +91,7 @@ public class ExampleShooter extends AbsoluteSubsystem {
         flywheelLeader = new MotorWrapper(MotorType.TALONFX, 40);
    
 
-        SolverConstants.setHoopToleranceMultiplier(10000.0);
+        SolverConstants.setHoopToleranceMultiplier(10.0);
         SolverConstants.setBasketDescentToleranceMultiplier(6.0);
         SolverConstants.setMinTargetDistanceMeters(0.05);
         SolverConstants.setVelocityBufferMultiplier(1.2);

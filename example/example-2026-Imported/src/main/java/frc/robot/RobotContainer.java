@@ -64,7 +64,6 @@ public class RobotContainer {
             .scaleTranslation(0.8)
             .allianceRelativeControl(true);
 
-    // Derive the heading axis with math!
     SwerveInputStream driveDirectAngleKeyboard = driveAngularVelocityKeyboard.copy()
             .withControllerHeadingAxis(() -> Math.sin(
                     driver.getLeftTriggerAxis() * Math.PI) * (Math.PI * 2),
@@ -75,7 +74,7 @@ public class RobotContainer {
         m_shooter.setPoseSupplier(drivebase::getPose);
         m_shooter.setChassisSpeedsSupplier(drivebase::getFieldVelocity); 
         m_shooter.setShooterHeight(0.6);
-        m_shooter.setPitchLimits(0.0, 85.0);
+        m_shooter.setPitchLimits(47.5, 82.5);
         m_shooter.setTrackingEnabled(true); 
 
         updateTargetForAlliance();
@@ -90,16 +89,10 @@ public class RobotContainer {
 
     }
 
-    /**
-     * Updates the shooter target based on current alliance.
-     * Call this periodically or when alliance changes.
-     * 
-     * Target is the goal opening. The trajectory solver will find an arc
-     * where the ball lands INTO the goal (descending into it).
-     */
+
     public void updateTargetForAlliance() {
         var alliance = DriverStation.getAlliance();
-        double goalZ = 2.1; // Goal opening height
+        double goalZ = 2.1; 
         if (alliance.isPresent() && alliance.get() == DriverStation.Alliance.Red) {
             m_shooter.setTarget(12.0, 4.0, goalZ);
         } else {
@@ -186,7 +179,6 @@ public class RobotContainer {
      */
     public Command getAutonomousCommand() {
         return Commands.sequence(
-                // Simple auto: aim, spin up, and shoot
                 Commands.runOnce(() -> m_shooter.calculateShot(2.0, 4.0, 0.6, 8.0, 4.0, 2.1)),
                 m_pivot.setAngle(35.0),
                 Commands.waitSeconds(0.3),

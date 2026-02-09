@@ -1,6 +1,13 @@
 # Changelog for  AbsoluteLib V2
 
 
+## 1.3.3
+- **Per-pitch velocity calculation**: The solver now calculates the exact velocity needed for each pitch angle using projectile kinematics, instead of using a single fixed velocity. This eliminates most flyover rejections and lets the solver find solutions at angles that were previously unreachable.
+- **Floating-point pitch loop fix**: Changed pitch iteration from accumulated `+= step` to integer-indexed `min + i * step`, preventing the final angle from being skipped due to IEEE 754 drift. With 300 iterations of `+= 0.1`, the last angle (e.g., 37.5°) was silently excluded.
+- **Arc height fallback**: When no candidate passes the `minArcHeightMeters` check but valid trajectories exist (collision-free, on-target, no flyover), the solver now falls back to the best of those. Hardware pitch limits often prevent achieving the required apex height at certain positions — the solver now handles this gracefully instead of returning OUT_OF_RANGE.
+- **Angle-dependent drag compensation**: Steep pitch angles now receive less drag compensation since the ball spends less time traveling horizontally. Scales as `1 + (baseDragComp - 1) * cos(pitch)`. Reduces flyovers at high angles (6m test: 27 flyovers → 10) and improves accepted candidate count (14 → 30).
+- **Smart force-high-arc**: When hardware pitch limits restrict the range (e.g., max 37.5°), forcing high-arc from 35°+ would leave only 2.5° of range. Now skips the force if the remaining range would be less than 15°, allowing the full hardware range to be searched.
+
 ## 1.3.2
 - Fix Runtime error
 
