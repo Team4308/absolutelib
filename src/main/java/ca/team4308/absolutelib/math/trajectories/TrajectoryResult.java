@@ -107,6 +107,9 @@ public class TrajectoryResult {
     // Confidence score (0-100)
     private final double confidenceScore;
 
+    // Debug info (null unless debug mode was enabled on the solver)
+    private SolveDebugInfo debugInfo;
+
     /**
      * Represents an RPM/angle combination that satisfies constraints.
      */
@@ -328,6 +331,22 @@ public class TrajectoryResult {
 
     public double getConfidenceScore() {
         return confidenceScore;
+    }
+
+    /**
+     * Returns debug information from the solver run, or null if debug mode was not enabled.
+     * Contains rejection reasons for every tested angle and all candidate trajectory paths.
+     * @see TrajectorySolver#setDebugEnabled(boolean)
+     */
+    public SolveDebugInfo getDebugInfo() {
+        return debugInfo;
+    }
+
+    /**
+     * Attaches debug info to this result. Called internally by the solver.
+     */
+    void setDebugInfo(SolveDebugInfo info) {
+        this.debugInfo = info;
     }
 
     @Override

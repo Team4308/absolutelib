@@ -57,6 +57,7 @@ public class SolverDiagnostic {
                 .hoopToleranceMultiplier(10.0)
                 .build();
         TrajectorySolver solver = new TrajectorySolver(gamePiece, solverConfig);
+        solver.setDebugEnabled(true);
         
         System.out.println("--- Hub Obstacle ---");
         System.out.printf("  Center: (%.2f, %.2f)%n", HUB_X, HUB_Y);
@@ -130,6 +131,9 @@ public class SolverDiagnostic {
             }
         } else {
             System.out.printf("  FAILED: %s - %s%n", result.getStatus(), result.getStatusMessage());
+        }
+        if (result.getDebugInfo() != null) {
+            System.out.println(result.getDebugInfo().getSummary());
         }
         System.out.println();
     }

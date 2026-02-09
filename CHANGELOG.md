@@ -1,5 +1,7 @@
 # Changelog for  AbsoluteLib V2
 
+## 1.3.1
+- Added Debugging 
 
 ## 1.3.0
 

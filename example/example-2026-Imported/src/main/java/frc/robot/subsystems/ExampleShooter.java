@@ -53,11 +53,11 @@ public class ExampleShooter extends AbsoluteSubsystem {
     private double shooterHeightMeters = 0.6;
     private Translation2d shooterOffset = new Translation2d(0.2, 0);
     // 7.5 - 43.5
-    private double minPitchDegrees = 7.5;
-    private double maxPitchDegrees = 43.5;
+    private double minPitchDegrees = 0;
+    private double maxPitchDegrees = 90;
     private double minArcHeightMeters = 0.75;
     private double targetRadiusMeters = 0.53;
-    private Translation3d targetPosition = new Translation3d(6.0, 6.0, 5.1);
+    private Translation3d targetPosition = new Translation3d(6.0, 4.0, 5.1);
 
     private ObstacleConfig hubObstacle;
     private static final double FIELD_LENGTH_METERS = 16.46;
@@ -98,11 +98,12 @@ public class ExampleShooter extends AbsoluteSubsystem {
 
         gamePiece = GamePieces.REBUILT_2026_BALL;
 
-        TrajectorySolver.SolverConfig solverConfig = TrajectorySolver.SolverConfig.highAccuracy()
+        TrajectorySolver.SolverConfig solverConfig = TrajectorySolver.SolverConfig.defaults()
                 .toBuilder()
                 .hoopToleranceMultiplier(10.0)
                 .build();
         solver = new TrajectorySolver(gamePiece, solverConfig);
+        solver.setDebugEnabled(true);
 
         hubObstacle = ObstacleConfig.builder()
                 .position(4.03, 4.0)
@@ -122,7 +123,7 @@ public class ExampleShooter extends AbsoluteSubsystem {
         } else {
             flywheelConfig = FlywheelConfig.builder()
                     .name("2026 Shooter")
-                    .arrangement(FlywheelConfig.WheelArrangement.DUAL_OVER_UNDER)
+                    .arrangement(FlywheelConfig.WheelArrangement.DUAL_PARALLEL)
                     .wheelDiameterInches(4.0)
                     .wheelWidthInches(2.0)
                     .material(WheelMaterial.VERY_HARD)
@@ -515,6 +516,97 @@ public class ExampleShooter extends AbsoluteSubsystem {
             hubObstaclePointsCacheValid = true;
         }
         Logger.recordOutput("ExampleShooter/HubObstacle", cachedHubObstaclePoints);
+
+        // ===== Debug info: rejection stats + candidate trajectories =====
+        publishDebugInfo();
+    }
+
+    /**
+     * Publishes solver debug information to NetworkTables.
+     * Shows rejection breakdown and all candidate trajectory paths for visualization.
+     */
+    private void publishDebugInfo() {
+        if (lastTrajectoryResult == null) return;
+        SolveDebugInfo debug = lastTrajectoryResult.getDebugInfo();
+        if (debug == null) {
+            recordOutput("Debug/Enabled", false);
+            return;
+        }
+        recordOutput("Debug/Enabled", true);
+        recordOutput("Debug/TotalTested", debug.getTotalTested());
+        recordOutput("Debug/Accepted", debug.getAcceptedCount());
+        recordOutput("Debug/TotalRejected", debug.getTotalRejected());
+        recordOutput("Debug/RejectedCollision", debug.getRejectedCollisionCount());
+        recordOutput("Debug/RejectedArcTooLow", debug.getRejectedArcTooLowCount());
+        recordOutput("Debug/RejectedClearance", debug.getRejectedClearanceCount());
+        recordOutput("Debug/RejectedMiss", debug.getRejectedMissCount());
+        recordOutput("Debug/RejectedFlyover", debug.getRejectedFlyoverCount());
+        recordOutput("Debug/BestScore", debug.getBestScore());
+        recordOutput("Debug/BestPitchDeg", debug.getBestPitchDegrees());
+        recordOutput("Debug/Summary", debug.getSummary());
+
+        // Publish each accepted candidate's trajectory as a separate Pose3d[]
+        java.util.List<SolveDebugInfo.CandidateInfo> accepted = debug.getAcceptedCandidates();
+        recordOutput("Debug/AcceptedPaths", accepted.size());
+
+        // Publish all accepted paths combined into numbered keys
+        int pathIndex = 0;
+        for (SolveDebugInfo.CandidateInfo candidate : accepted) {
+            if (candidate.getTrajectory() == null) continue;
+            Pose3d[] path = trajectoryStatesToPose3d(candidate.getTrajectory());
+            if (path.length > 0) {
+                Logger.recordOutput("ExampleShooter/CandidatePath" + pathIndex, path);
+                recordOutput("Debug/Candidate" + pathIndex + "/Pitch", candidate.getPitchDegrees());
+                recordOutput("Debug/Candidate" + pathIndex + "/Score", candidate.getScore());
+                recordOutput("Debug/Candidate" + pathIndex + "/Closest", candidate.getClosestApproach());
+                recordOutput("Debug/Candidate" + pathIndex + "/TOF", candidate.getTimeOfFlight());
+                recordOutput("Debug/Candidate" + pathIndex + "/MaxHeight", candidate.getMaxHeight());
+                pathIndex++;
+            }
+            if (pathIndex >= 10) break; // Cap at 10 paths to limit NT bandwidth
+        }
+        // Clear any stale paths beyond current count
+        for (int i = pathIndex; i < 10; i++) {
+            Logger.recordOutput("ExampleShooter/CandidatePath" + i, new Pose3d[0]);
+        }
+
+        // Publish a few rejected paths (sample: first of each rejection type)
+        int rejIndex = 0;
+        boolean[] typeSeen = new boolean[SolveDebugInfo.RejectionReason.values().length];
+        for (SolveDebugInfo.CandidateInfo candidate : debug.getRejectedCandidates()) {
+            int ord = candidate.getRejection().ordinal();
+            if (typeSeen[ord]) continue;
+            typeSeen[ord] = true;
+            if (candidate.getTrajectory() != null) {
+                Pose3d[] path = trajectoryStatesToPose3d(candidate.getTrajectory());
+                if (path.length > 0) {
+                    Logger.recordOutput("ExampleShooter/RejectedPath_" + candidate.getRejection().name(), path);
+                    recordOutput("Debug/Rejected_" + candidate.getRejection().name() + "/Pitch", candidate.getPitchDegrees());
+                    rejIndex++;
+                }
+            }
+            if (rejIndex >= 5) break;
+        }
+    }
+
+    /**
+     * Converts raw TrajectoryState array to Pose3d array for AdvantageScope visualization.
+     */
+    private static Pose3d[] trajectoryStatesToPose3d(
+            ca.team4308.absolutelib.math.trajectories.physics.ProjectileMotion.TrajectoryState[] states) {
+        if (states == null) return new Pose3d[0];
+        List<Pose3d> poses = new ArrayList<>();
+        for (var state : states) {
+            if (state == null) continue;
+            Translation3d pos = new Translation3d(state.x, state.y, state.z);
+            Rotation3d rot = new Rotation3d(
+                    0.0,
+                    Math.atan2(state.vz, Math.sqrt(state.vx * state.vx + state.vy * state.vy)),
+                    Math.atan2(state.vy, state.vx)
+            );
+            poses.add(new Pose3d(pos, rot));
+        }
+        return poses.toArray(new Pose3d[0]);
     }
 
     private Pose3d[] generateHubObstaclePoints(ObstacleConfig obstacle) {
@@ -579,7 +671,7 @@ public class ExampleShooter extends AbsoluteSubsystem {
                 .robotVelocity(robotVx, robotVy)
                 .pitchRangeDegrees(minPitchDegrees, maxPitchDegrees)
                 .minArcHeightMeters(minArcHeightMeters)
-                .shotPreference(ShotInput.ShotPreference.HIGH_CLEARANCE)
+                .shotPreference(ShotInput.ShotPreference.AUTO)
                 .addObstacle(effectiveObstacle)
                 .collisionCheckEnabled(collisionEnabled)
                 .preferredArcHeightMeters(preferredArcHeightMeters)

@@ -193,6 +193,25 @@ public class TrajectorySolver {
     private final FlywheelGenerator flywheelGenerator;
     
     private FlywheelConfig cachedFlywheel;
+    private boolean debugEnabled = false;
+
+    /**
+     * Enables or disables debug mode. When enabled, the solver records every
+     * tested angle, its rejection reason, score, and full trajectory path
+     * into a {@link SolveDebugInfo} attached to the result.
+     *
+     * <p>This adds overhead (stores all trajectory arrays) — disable for competition.</p>
+     *
+     * @param enabled true to enable debug recording
+     */
+    public void setDebugEnabled(boolean enabled) {
+        this.debugEnabled = enabled;
+    }
+
+    /** Returns whether debug mode is currently enabled. */
+    public boolean isDebugEnabled() {
+        return debugEnabled;
+    }
 
     // ===== Internal scoring constants (not user-tunable) =====
     private static final double ACCURACY_SCORE_MAX = 100.0;
@@ -292,6 +311,8 @@ public class TrajectorySolver {
      * without descending close enough to the target height.
      * At the point of closest horizontal approach to the target, the ball's
      * altitude must be within one target radius above the target center height.
+     * However, if the ball is actively descending (vz &lt; 0) at that point,
+     * it is heading toward the target and is not a flyover.
      */
     private static boolean isFlyover(ProjectileMotion.TrajectoryState[] trajectory,
             double targetX, double targetY, double targetZ, double targetRadius) {
@@ -299,6 +320,7 @@ public class TrajectorySolver {
 
         double bestHorizDist2 = Double.MAX_VALUE;
         double heightAtBestHoriz = 0;
+        double vzAtBestHoriz = 0;
 
         for (ProjectileMotion.TrajectoryState st : trajectory) {
             double dx = st.x - targetX;
@@ -307,8 +329,13 @@ public class TrajectorySolver {
             if (hd2 < bestHorizDist2) {
                 bestHorizDist2 = hd2;
                 heightAtBestHoriz = st.z;
+                vzAtBestHoriz = st.vz;
             }
         }
+
+        // If the ball is descending at closest horizontal approach, it's heading
+        // toward the target — not a flyover (high-arc shots are always descending here)
+        if (vzAtBestHoriz < 0) return false;
 
         return heightAtBestHoriz > targetZ + targetRadius;
     }
@@ -526,6 +553,8 @@ public class TrajectorySolver {
         ProjectileMotion.TrajectoryResult bestTrajSim = null;
         double bestScore = Double.NEGATIVE_INFINITY;
         
+        SolveDebugInfo debugInfo = debugEnabled ? new SolveDebugInfo() : null;
+        
         double angleStep = input.getAngleStepDegrees();
         
         for (double pitchDeg = effectiveMinPitch; pitchDeg <= effectiveMaxPitch; pitchDeg += angleStep) {
@@ -556,29 +585,48 @@ public class TrajectorySolver {
                 estimatedTof = trajSim.flightTime;
             }
 
-            if (trajectoryCollides(trajSim, input, input.getShooterX(), input.getShooterY())) continue;
+            if (trajectoryCollides(trajSim, input, input.getShooterX(), input.getShooterY())) {
+                if (debugInfo != null) debugInfo.recordRejected(pitchDeg, SolveDebugInfo.RejectionReason.COLLISION,
+                        trajSim.closestApproach, trajSim.maxHeight, trajSim.flightTime, trajSim.hitTarget, trajSim.trajectory);
+                continue;
+            }
 
             double minArcHeight = input.getMinArcHeightMeters();
             if (minArcHeight > 0) {
                 double requiredApexHeight = input.getTargetZ() + minArcHeight;
                 if (trajSim.maxHeight < requiredApexHeight) {
+                    if (debugInfo != null) debugInfo.recordRejected(pitchDeg, SolveDebugInfo.RejectionReason.ARC_TOO_LOW,
+                            trajSim.closestApproach, trajSim.maxHeight, trajSim.flightTime, trajSim.hitTarget, trajSim.trajectory);
                     continue;
                 }
             }
 
             if (requiredClearance > 0 && trajSim.maxHeight < requiredClearance) {
+                if (debugInfo != null) debugInfo.recordRejected(pitchDeg, SolveDebugInfo.RejectionReason.CLEARANCE_TOO_LOW,
+                        trajSim.closestApproach, trajSim.maxHeight, trajSim.flightTime, trajSim.hitTarget, trajSim.trajectory);
                 continue;
             }
 
             double hoopTolerance = input.getTargetRadius() * config.getHoopToleranceMultiplier();
             boolean hitsTarget = trajSim.hitTarget || trajSim.closestApproach <= hoopTolerance;
             
-            if (!hitsTarget) continue;
+            if (!hitsTarget) {
+                if (debugInfo != null) debugInfo.recordRejected(pitchDeg, SolveDebugInfo.RejectionReason.MISSED_TARGET,
+                        trajSim.closestApproach, trajSim.maxHeight, trajSim.flightTime, trajSim.hitTarget, trajSim.trajectory);
+                continue;
+            }
 
             if (isFlyover(trajSim.trajectory, iterTargetX, iterTargetY,
-                    input.getTargetZ(), input.getTargetRadius())) continue;
+                    input.getTargetZ(), input.getTargetRadius())) {
+                if (debugInfo != null) debugInfo.recordRejected(pitchDeg, SolveDebugInfo.RejectionReason.FLYOVER,
+                        trajSim.closestApproach, trajSim.maxHeight, trajSim.flightTime, trajSim.hitTarget, trajSim.trajectory);
+                continue;
+            }
 
             double score = scoreCandidate(trajSim, pitchDeg, input, requiredClearance);
+            
+            if (debugInfo != null) debugInfo.recordAccepted(pitchDeg, score,
+                    trajSim.closestApproach, trajSim.maxHeight, trajSim.flightTime, trajSim.hitTarget, trajSim.trajectory);
             
             if (score > bestScore) {
                 bestScore = score;
@@ -591,11 +639,13 @@ public class TrajectorySolver {
             String reason = pathCrossesObstacle 
                 ? "No collision-free trajectory found; all angles hit obstacles or miss target"
                 : "No trajectory solution exists for given distance and velocity";
-            return TrajectoryResult.failure(
+            TrajectoryResult failResult = TrajectoryResult.failure(
                 TrajectoryResult.Status.OUT_OF_RANGE,
                 reason,
                 input
             );
+            if (debugInfo != null) failResult.setDebugInfo(debugInfo);
+            return failResult;
         }
         
         double pitchDegrees = Math.toDegrees(bestPitchAngle);
@@ -628,13 +678,15 @@ public class TrajectorySolver {
             discreteSolution.score
         );
         
-        return new TrajectoryResult(
+        TrajectoryResult successResult = new TrajectoryResult(
             input, gamePiece,
             bestPitchAngle, yawAdjustment, actualVelocity,
             flywheel, flywheelSim, requiredRpm,
             timeOfFlight, maxHeight, marginOfError,
             discreteSolution, confidence
         );
+        if (debugInfo != null) successResult.setDebugInfo(debugInfo);
+        return successResult;
     }
     
     /**
