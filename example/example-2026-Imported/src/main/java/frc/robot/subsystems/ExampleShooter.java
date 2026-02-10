@@ -6,7 +6,7 @@ import ca.team4308.absolutelib.math.trajectories.gamepiece.*;
 import ca.team4308.absolutelib.wrapper.AbsoluteSubsystem;
 import ca.team4308.absolutelib.wrapper.MotorWrapper;
 import ca.team4308.absolutelib.wrapper.MotorWrapper.MotorType;
-import frc.robot.Util.FuelSim;
+
 import org.littletonrobotics.junction.Logger;
 
 import edu.wpi.first.math.geometry.Pose2d;
@@ -19,6 +19,7 @@ import edu.wpi.first.math.kinematics.ChassisSpeeds;
 import edu.wpi.first.util.sendable.Sendable;
 import edu.wpi.first.util.sendable.SendableBuilder;
 import edu.wpi.first.wpilibj2.command.Command;
+import frc.robot.subsystems.Util.FuelSim;
 
 import java.util.List;
 import java.util.function.Supplier;
@@ -34,13 +35,14 @@ public class ExampleShooter extends AbsoluteSubsystem {
     private ShotParameters currentShot = ShotParameters.invalid("Not yet calculated");
     private double targetYawDegrees = 0.0;
     private double lastDistanceMeters = 0.0;
+    private double lastComputationTimeMs = 0.0;
 
     private Supplier<Pose2d> poseSupplier = null;
     private Supplier<ChassisSpeeds> chassisSpeedsSupplier = null;
     private Supplier<Double> currentRpmSupplier = null;
 
-    private double shooterHeightMeters = 0.6;
-    private Translation2d shooterOffset = new Translation2d(0.2, 0);
+    private double shooterHeightMeters = 0.5;
+    private Translation2d shooterOffset = new Translation2d(0.1, 0.1);
     private Translation3d targetPosition = new Translation3d(6.0, 4.0, 2.1);
     private boolean trackingEnabled = true;
 
@@ -63,17 +65,17 @@ public class ExampleShooter extends AbsoluteSubsystem {
                 .build();
 
         ShotLookupTable table = new ShotLookupTable()
-                .addEntry(1.0, 78.0, 1800)   
-                .addEntry(1.5, 75.0, 2000)
-                .addEntry(2.0, 72.0, 2300)
-                .addEntry(2.5, 68.0, 2600)
-                .addEntry(3.0, 65.0, 2900)
-                .addEntry(3.5, 62.0, 3200)
-                .addEntry(4.0, 59.0, 3500)
-                .addEntry(5.0, 55.0, 3900)
-                .addEntry(6.0, 52.0, 4300)
-                .addEntry(7.0, 50.0, 4700)
-                .addEntry(8.0, 48.0, 5100);
+                .addEntry(1.0, 78.0, 1000)   
+                .addEntry(1.5, 75.0, 1100)
+                .addEntry(2.0, 72.0, 1300)
+                .addEntry(2.5, 68.0, 1500)
+                .addEntry(3.0, 65.0, 1700)
+                .addEntry(3.5, 62.0, 1900)
+                .addEntry(4.0, 59.0, 2100)
+                .addEntry(5.0, 55.0, 2400)
+                .addEntry(6.0, 52.0, 2700)
+                .addEntry(7.0, 50.0, 3000)
+                .addEntry(8.0, 48.0, 3300);
 
         GamePiece gamePiece = GamePieces.REBUILT_2026_BALL;
         SolverConstants.setHoopToleranceMultiplier(2.5);
@@ -94,10 +96,10 @@ public class ExampleShooter extends AbsoluteSubsystem {
 
         solver.setScoringWeights(
                 ScoringWeights.builder()
-                        .lowArcWeight(2.0)
+                        .lowArcWeight(5.0)
                         .optimalAngleDegrees(50.0)
                         .accuracyWeight(1.2)
-                        .speedWeight(1.0)
+                        .speedWeight(5.0)
                         .stabilityWeight(0.3)
                         .clearanceWeight(0.5)
                         .build());
@@ -155,6 +157,10 @@ public class ExampleShooter extends AbsoluteSubsystem {
         Logger.recordOutput("ExampleShooter/GoalPose3d", goalPose);
         Logger.recordOutput("ExampleShooter/GoalPose3dArray", new Pose3d[] { goalPose });
 
+        Pose3d shooterYawPose = new Pose3d(new Translation3d(0, 0, 0), new Rotation3d(0, 0, Math.toRadians(targetYawDegrees)));
+        Logger.recordOutput("ExampleShooter/ShooterYawPose3d", shooterYawPose);
+        Logger.recordOutput("ExampleShooter/Test", new Pose3d(new Translation3d(0, 0, 0), new Rotation3d(0, 0, 0)));
+
         recordOutput("TargetX", targetPosition.getX());
         recordOutput("TargetY", targetPosition.getY());
         recordOutput("TargetZ", targetPosition.getZ());
@@ -171,6 +177,7 @@ public class ExampleShooter extends AbsoluteSubsystem {
         recordOutput("Trajectory/Status", trajResult.getStatus().name());
         recordOutput("Trajectory/StatusMessage", trajResult.getStatusMessage());
         recordOutput("Trajectory/Confidence", trajResult.getConfidenceScore());
+        recordOutput("Trajectory/ComputationTimeMs", lastComputationTimeMs);
 
         if (trajResult.isSuccess()) {
             recordOutput("Trajectory/PitchDeg", trajResult.getPitchAngleDegrees());
@@ -288,7 +295,10 @@ public class ExampleShooter extends AbsoluteSubsystem {
                 .robotVelocity(vx, vy)
         );
 
+        long startTime = System.nanoTime();
         currentShot = shooterSystem.calculate(lastDistanceMeters, measuredRpm, vx, vy, yawRad);
+        long endTime = System.nanoTime();
+        lastComputationTimeMs = (endTime - startTime) / 1_000_000.0;
 
         recordOutput("RobotX", pose.getX());
         recordOutput("RobotY", pose.getY());
@@ -348,10 +358,16 @@ public class ExampleShooter extends AbsoluteSubsystem {
         Pose2d robotPose = poseSupplier.get();
         ChassisSpeeds speeds = chassisSpeedsSupplier != null ? chassisSpeedsSupplier.get() : new ChassisSpeeds();
 
-        double launchSpeed = currentShot.valid ? currentShot.exitVelocityMps : 15.0;
-        double pitchRad = currentShot.valid ? currentShot.getPitchRadians() : Math.toRadians(55);
+        // Get the trajectory result for accurate ballistics
+        TrajectoryResult trajResult = shooterSystem.getLastTrajectoryResult();
+        if (trajResult == null || !trajResult.isSuccess()) {
+            System.out.println("Cannot shoot: no valid trajectory");
+            return;
+        }
+
+        double launchSpeed = trajResult.getRequiredVelocityMps();
+        double pitchRad = Math.toRadians(trajResult.getPitchAngleDegrees());
         double yawRad = Math.toRadians(targetYawDegrees);
-        if (!currentShot.valid) yawRad = robotPose.getRotation().getRadians();
 
         Rotation2d rot = robotPose.getRotation();
         double wx = shooterOffset.getX() * rot.getCos() - shooterOffset.getY() * rot.getSin();
@@ -364,8 +380,9 @@ public class ExampleShooter extends AbsoluteSubsystem {
                 hSpeed * Math.sin(yawRad) + speeds.vyMetersPerSecond,
                 launchSpeed * Math.sin(pitchRad));
 
-        FuelSim.getInstance().spawnFuel(pos, vel);
-        System.out.printf("Shot! %.1fm/s @ %.1f° [%s]%n", launchSpeed, currentShot.pitchDegrees, currentShot.source);
+        List<Pose3d> predictedPath = trajResult.getFlightPath();
+        FuelSim.getInstance().spawnFuelTracked(pos, vel, predictedPath);
+        System.out.printf("Shot! %.1fm/s @ %.1f° pitch, %.1f° yaw [%s]%n", launchSpeed, trajResult.getPitchAngleDegrees(), targetYawDegrees, currentShot.source);
     }
 
     public double getTargetRpm()          { return currentShot.rpm; }

@@ -10,9 +10,11 @@ import org.littletonrobotics.junction.Logger;
 import org.littletonrobotics.junction.networktables.NT4Publisher;
 
 import edu.wpi.first.math.geometry.Pose3d;
+import edu.wpi.first.wpilibj.RobotBase;
 import edu.wpi.first.wpilibj.TimedRobot;
 import edu.wpi.first.wpilibj2.command.Command;
 import edu.wpi.first.wpilibj2.command.CommandScheduler;
+import frc.robot.subsystems.Util.FuelSim;
 import swervelib.simulation.ironmaple.simulation.SimulatedArena;
 
 /**
@@ -37,6 +39,7 @@ public class Robot extends LoggedRobot {
     Logger.addDataReceiver(new NT4Publisher());
     Logger.start();
     m_robotContainer = new RobotContainer();
+
   }
 
   /**
@@ -48,16 +51,14 @@ public class Robot extends LoggedRobot {
    */
   @Override
   public void robotPeriodic() {
-    // Runs the Scheduler.  This is responsible for polling buttons, adding newly-scheduled
-    // commands, running already-scheduled commands, removing finished or interrupted commands,
-    // and running subsystem periodic() methods.  This must be called from the robot's periodic
-    // block in order for anything in the Command-based framework to work.
-          // Get the positions of the fuel (both on the field and in the air)
-      Pose3d[] fuelPoses = SimulatedArena.getInstance()
-            .getGamePiecesArrayByType("Fuel");
-      // Publish to telemetry using AdvantageKit
-      Logger.recordOutput("FieldSimulation/FuelPositions", fuelPoses);
+    // Update and log fuel simulation if in simulation
+    if (RobotBase.isSimulation()) {
+      FuelSim.getInstance().updateSim();
+      FuelSim.getInstance().logFuels();
+    }
+
     CommandScheduler.getInstance().run();
+
   }
 
   /** This function is called once each time the robot enters Disabled mode. */

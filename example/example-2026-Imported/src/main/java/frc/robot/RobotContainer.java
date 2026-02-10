@@ -4,8 +4,8 @@
 package frc.robot;
 
 import frc.robot.Constants.OperatorConstants;
-import frc.robot.Util.FuelSim;
 import frc.robot.subsystems.*;
+import frc.robot.subsystems.Util.FuelSim;
 import frc.robot.subsystems.swerve.SwerveSubsystem;
 import swervelib.SwerveInputStream;
 import swervelib.simulation.ironmaple.simulation.SimulatedArena;
@@ -31,6 +31,7 @@ public class RobotContainer {
     private final ExamplePivot m_pivot = new ExamplePivot();
     private final ExampleLEDs m_leds = new ExampleLEDs();
     private final ExampleShooter m_shooter = new ExampleShooter();
+    private final FuelSim m_FuelSim = FuelSim.getInstance();
     private final SwerveSubsystem drivebase = new SwerveSubsystem(new File(Filesystem.getDeployDirectory(), "swerve"));
 
     private final CommandXboxController driver = new CommandXboxController(1);
@@ -76,9 +77,7 @@ public class RobotContainer {
         m_shooter.setShooterHeight(0.6);
         m_shooter.setPitchLimits(47.5, 82.5);
         m_shooter.setTrackingEnabled(true); 
-
         updateTargetForAlliance();
-
         configureBindings();
         configureNamedCommands();
         initFuelSim();
@@ -186,6 +185,7 @@ public class RobotContainer {
                 m_shooter.stopCommand(),
                 m_pivot.setAngle(0.0));
     }
+
 
     private void initFuelSim() {
         FuelSim.getInstance(); // gets singleton instance of FuelSim

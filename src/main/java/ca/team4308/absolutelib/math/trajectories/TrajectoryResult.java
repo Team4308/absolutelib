@@ -29,7 +29,6 @@ public class TrajectoryResult {
         }
 
         try {
-            // Use the public API to get a new ProjectileMotion instance
             ca.team4308.absolutelib.math.trajectories.physics.ProjectileMotion projectileMotion
                     = new ca.team4308.absolutelib.math.trajectories.physics.ProjectileMotion();
             ca.team4308.absolutelib.math.trajectories.physics.ProjectileMotion.TrajectoryResult simResult = projectileMotion.simulate(
@@ -43,33 +42,14 @@ public class TrajectoryResult {
                     input.getTargetRadius()
             );
             
-            // Find the closest-approach index so we can truncate the path there.
-            // This prevents the visualization from showing the ball flying far
-            // past the target when the simulation continues to the ground.
-            double targetX = input.getTargetX();
-            double targetY = input.getTargetY();
-            double targetZ = input.getTargetZ();
-            int closestIndex = 0;
-            double closestDist = Double.MAX_VALUE;
             int validCount = 0;
             for (int i = 0; i < simResult.trajectory.length; i++) {
-                ca.team4308.absolutelib.math.trajectories.physics.ProjectileMotion.TrajectoryState s = simResult.trajectory[i];
-                if (s == null) break;
+                if (simResult.trajectory[i] == null) break;
                 validCount++;
-                double dx = s.x - targetX;
-                double dy = s.y - targetY;
-                double dz = s.z - targetZ;
-                double dist = dx * dx + dy * dy + dz * dz;
-                if (dist < closestDist) {
-                    closestDist = dist;
-                    closestIndex = i;
-                }
             }
-            // Include a small margin past closest approach for smooth visual
-            int endIndex = Math.min(closestIndex + 3, validCount);
 
             List<Pose3d> path = new ArrayList<>();
-            for (int i = 0; i < endIndex; i++) {
+            for (int i = 0; i < validCount; i++) {
                 ca.team4308.absolutelib.math.trajectories.physics.ProjectileMotion.TrajectoryState state = simResult.trajectory[i];
                 if (state == null) break;
                 Translation3d translation = new Translation3d(state.x, state.y, state.z);

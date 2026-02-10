@@ -1,6 +1,7 @@
-package frc.robot.Util;
+package frc.robot.subsystems.Util;
 
 import edu.wpi.first.math.geometry.Pose2d;
+import edu.wpi.first.math.geometry.Pose3d;
 import edu.wpi.first.math.geometry.Rotation2d;
 import edu.wpi.first.math.geometry.Translation2d;
 import edu.wpi.first.math.geometry.Translation3d;
@@ -8,6 +9,7 @@ import edu.wpi.first.math.kinematics.ChassisSpeeds;
 import swervelib.simulation.ironmaple.simulation.SimulatedArena;
 
 import java.util.ArrayList;
+import java.util.List;
 import java.util.function.BooleanSupplier;
 import java.util.function.Supplier;
 import org.littletonrobotics.junction.Logger;
@@ -24,6 +26,14 @@ public class FuelSim {
     private static final double FIELD_LENGTH = 16.51;
     private static final double FIELD_WIDTH = 8.04;
     private static final double FRICTION = 0.1; // proportion of horizontal velocity to lose per second while on ground
+
+    // Air resistance parameters (must match TrajectorySolver physics)
+    private static final double AIR_DENSITY = 1.204; // kg/m^3 at 20C
+    private static final double DRAG_COEFFICIENT = 0.50; // foam ball Cd
+    private static final double FUEL_MASS = 0.215; // kg (avg of 0.448-0.5 lbs)
+    private static final double CROSS_SECTION_AREA = Math.PI * FUEL_RADIUS * FUEL_RADIUS; // m^2
+    // Pre-computed drag factor: 0.5 * rho * Cd * A / m
+    private static final double DRAG_FACTOR = 0.5 * AIR_DENSITY * DRAG_COEFFICIENT * CROSS_SECTION_AREA / FUEL_MASS;
 
     private static FuelSim instance = null;
 
@@ -68,6 +78,13 @@ public class FuelSim {
             pos = pos.plus(vel.times(PERIOD / subticks));
             if (pos.getZ() > FUEL_RADIUS) {
                 vel = vel.plus(GRAVITY.times(PERIOD / subticks));
+                // Air resistance: F_drag = -0.5 * rho * v^2 * Cd * A in direction of velocity
+                double speed = vel.getNorm();
+                if (speed > 0.01) {
+                    double dragAccelMag = DRAG_FACTOR * speed * speed;
+                    Translation3d dragAccel = vel.div(speed).times(-dragAccelMag);
+                    vel = vel.plus(dragAccel.times(PERIOD / subticks));
+                }
             }
             if (Math.abs(vel.getZ()) < 0.05 && pos.getZ() <= FUEL_RADIUS + 0.03) {
                 vel = new Translation3d(vel.getX(), vel.getY(), 0);
@@ -184,6 +201,14 @@ public class FuelSim {
 
     private ArrayList<Fuel> fuels = new ArrayList<Fuel>();
     private boolean running = false;
+
+    // Trajectory comparison tracking
+    private Fuel trackedFuel = null;
+    private ArrayList<Translation3d> trackedActualPath = new ArrayList<>();
+    private Translation3d[] trackedPredictedPath = null;
+    private int trackedTickCount = 0;
+    private boolean trackedLanded = false; // true once the tracked ball hits the ground
+    private static final int TRACK_SAMPLE_INTERVAL = 5; // record every 5 subticks (= every 0.02s)
     private Supplier<Pose2d> robotSupplier = null;
     private Supplier<ChassisSpeeds> robotSpeedsSupplier = null;
     private double robotWidth; // size along the robot's y axis
@@ -248,6 +273,68 @@ public class FuelSim {
     public void logFuels() {
         Logger.recordOutput(
                 "Fuel Simulation/Fuels", fuels.stream().map((fuel) -> fuel.pos).toArray(Translation3d[]::new));
+        logTrajectoryComparison();
+    }
+
+    private void logTrajectoryComparison() {
+        if (trackedFuel == null) return;
+
+        // Log actual sim path so far
+        Translation3d[] actualArr = trackedActualPath.toArray(new Translation3d[0]);
+        Logger.recordOutput("Fuel Simulation/Comparison/ActualPath", actualArr);
+
+        // Log actual path as arrays for easy plotting
+        double[] ax = new double[actualArr.length];
+        double[] ay = new double[actualArr.length];
+        double[] az = new double[actualArr.length];
+        for (int i = 0; i < actualArr.length; i++) {
+            ax[i] = actualArr[i].getX();
+            ay[i] = actualArr[i].getY();
+            az[i] = actualArr[i].getZ();
+        }
+        Logger.recordOutput("Fuel Simulation/Comparison/Actual_X", ax);
+        Logger.recordOutput("Fuel Simulation/Comparison/Actual_Y", ay);
+        Logger.recordOutput("Fuel Simulation/Comparison/Actual_Z", az);
+        Logger.recordOutput("Fuel Simulation/Comparison/ActualPointCount", actualArr.length);
+
+        // Log predicted path
+        if (trackedPredictedPath != null) {
+            Logger.recordOutput("Fuel Simulation/Comparison/PredictedPath", trackedPredictedPath);
+
+            double[] px = new double[trackedPredictedPath.length];
+            double[] py = new double[trackedPredictedPath.length];
+            double[] pz = new double[trackedPredictedPath.length];
+            for (int i = 0; i < trackedPredictedPath.length; i++) {
+                px[i] = trackedPredictedPath[i].getX();
+                py[i] = trackedPredictedPath[i].getY();
+                pz[i] = trackedPredictedPath[i].getZ();
+            }
+            Logger.recordOutput("Fuel Simulation/Comparison/Predicted_X", px);
+            Logger.recordOutput("Fuel Simulation/Comparison/Predicted_Y", py);
+            Logger.recordOutput("Fuel Simulation/Comparison/Predicted_Z", pz);
+            Logger.recordOutput("Fuel Simulation/Comparison/PredictedPointCount", trackedPredictedPath.length);
+        }
+
+        // Log endpoint error if both paths have data
+        if (trackedPredictedPath != null && trackedPredictedPath.length > 0 && actualArr.length > 0) {
+            Translation3d lastActual = actualArr[actualArr.length - 1];
+            Translation3d lastPredicted = trackedPredictedPath[trackedPredictedPath.length - 1];
+            double endpointError = lastActual.getDistance(lastPredicted);
+            Logger.recordOutput("Fuel Simulation/Comparison/EndpointErrorMeters", endpointError);
+
+            // Also compute error at matching indices
+            int minLen = Math.min(actualArr.length, trackedPredictedPath.length);
+            double[] errors = new double[minLen];
+            double maxError = 0;
+            for (int i = 0; i < minLen; i++) {
+                errors[i] = actualArr[i].getDistance(trackedPredictedPath[i]);
+                if (errors[i] > maxError) maxError = errors[i];
+            }
+            Logger.recordOutput("Fuel Simulation/Comparison/PointErrors", errors);
+            Logger.recordOutput("Fuel Simulation/Comparison/MaxErrorMeters", maxError);
+        }
+
+        Logger.recordOutput("Fuel Simulation/Comparison/TrackingActive", !trackedLanded);
     }
 
     /**
@@ -321,6 +408,18 @@ public class FuelSim {
                 handleRobotCollisions(fuels);
                 handleIntakes(fuels);
             }
+
+            // Record tracked fuel position at sample interval (stop once it lands)
+            if (trackedFuel != null && !trackedLanded && fuels.contains(trackedFuel)) {
+                trackedTickCount++;
+                if (trackedTickCount % TRACK_SAMPLE_INTERVAL == 0) {
+                    trackedActualPath.add(trackedFuel.pos);
+                }
+                // Stop tracking once ball hits the ground
+                if (trackedFuel.pos.getZ() <= FUEL_RADIUS + 0.01 && trackedActualPath.size() > 5) {
+                    trackedLanded = true;
+                }
+            }
         }
 
         logFuels();
@@ -333,7 +432,43 @@ public class FuelSim {
      * @param vel Initial velocity vector
      */
     public void spawnFuel(Translation3d pos, Translation3d vel) {
-        fuels.add(new Fuel(pos, vel));
+        Fuel fuel = new Fuel(pos, vel);
+        fuels.add(fuel);
+    }
+
+    /**
+     * Adds a fuel onto the field and tracks it for trajectory comparison.
+     * 
+     * @param pos           Position to spawn at
+     * @param vel           Initial velocity vector
+     * @param predictedPath Predicted flight path from TrajectorySolver (as Pose3d list)
+     */
+    public void spawnFuelTracked(Translation3d pos, Translation3d vel, List<Pose3d> predictedPath) {
+        Fuel fuel = new Fuel(pos, vel);
+        fuels.add(fuel);
+
+        // Start tracking this fuel
+        trackedFuel = fuel;
+        trackedActualPath.clear();
+        trackedActualPath.add(pos); // record initial position
+        trackedTickCount = 0;
+        trackedLanded = false;
+
+        // Convert predicted Pose3d path to Translation3d array
+        if (predictedPath != null && !predictedPath.isEmpty()) {
+            trackedPredictedPath = predictedPath.stream()
+                    .map(Pose3d::getTranslation)
+                    .toArray(Translation3d[]::new);
+        } else {
+            trackedPredictedPath = null;
+        }
+
+        Logger.recordOutput("Fuel Simulation/Comparison/TrackingActive", true);
+        Logger.recordOutput("Fuel Simulation/Comparison/LaunchPos",
+                new double[] { pos.getX(), pos.getY(), pos.getZ() });
+        Logger.recordOutput("Fuel Simulation/Comparison/LaunchVel",
+                new double[] { vel.getX(), vel.getY(), vel.getZ() });
+        Logger.recordOutput("Fuel Simulation/Comparison/LaunchSpeed", vel.getNorm());
     }
 
     private void handleRobotCollision(Fuel fuel, Pose2d robot, Translation2d robotVel) {
