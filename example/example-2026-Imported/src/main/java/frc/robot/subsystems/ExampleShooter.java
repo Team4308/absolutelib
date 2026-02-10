@@ -76,18 +76,31 @@ public class ExampleShooter extends AbsoluteSubsystem {
                 .addEntry(8.0, 48.0, 5100);
 
         GamePiece gamePiece = GamePieces.REBUILT_2026_BALL;
-        SolverConstants.setHoopToleranceMultiplier(10.0);
-        SolverConstants.setBasketDescentToleranceMultiplier(6.0);
+        SolverConstants.setHoopToleranceMultiplier(2.5);
+        SolverConstants.setBasketDescentToleranceMultiplier(3.0);
         SolverConstants.setMinTargetDistanceMeters(0.05);
         SolverConstants.setVelocityBufferMultiplier(1.2);
         TrajectorySolver.SolverConfig solverConfig = TrajectorySolver.SolverConfig.defaults()
-                .toBuilder().hoopToleranceMultiplier(10.0).build();
+                .toBuilder()
+                .hoopToleranceMultiplier(2.5)
+                .minPitchDegrees(47.5)
+                .maxPitchDegrees(82.5)
+                .build();
         solver = new TrajectorySolver(gamePiece, solverConfig);
 
         shooterSystem = new ShooterSystem(config, table, solver);
         shooterSystem.setMode(ShotMode.SOLVER_ONLY);
         shooterSystem.setFallbackShot(60.0, 3000);
 
+        solver.setScoringWeights(
+                ScoringWeights.builder()
+                        .lowArcWeight(2.0)
+                        .optimalAngleDegrees(50.0)
+                        .accuracyWeight(1.2)
+                        .speedWeight(1.0)
+                        .stabilityWeight(0.3)
+                        .clearanceWeight(0.5)
+                        .build());
         solver.setDebugEnabled(true);
     }
 

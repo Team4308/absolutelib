@@ -1,6 +1,10 @@
 # Changelog for  AbsoluteLib V2
 
 
+# 1.3.6
+- Scoring update
+- Re-made the Website
+
 # 1.3.5
 
 - **Debugging!**: New Website part showing greaterlogs of the trajectorys that are generated to help debug and tune it.

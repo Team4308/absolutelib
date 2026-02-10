@@ -194,6 +194,7 @@ public class TrajectorySolver {
     
     private FlywheelConfig cachedFlywheel;
     private boolean debugEnabled = false;
+    private ScoringWeights scoringWeights = ScoringWeights.defaults();
 
     /**
      * Enables or disables debug mode. When enabled, the solver records every
@@ -211,6 +212,23 @@ public class TrajectorySolver {
     /** Returns whether debug mode is currently enabled. */
     public boolean isDebugEnabled() {
         return debugEnabled;
+    }
+
+    /**
+     * Sets the scoring weights used to rank candidate trajectories.
+     * Use this to control how the solver picks the "best" trajectory.
+     *
+     * @param weights the scoring weights (not null)
+     * @see ScoringWeights
+     */
+    public void setScoringWeights(ScoringWeights weights) {
+        if (weights == null) throw new IllegalArgumentException("weights must not be null");
+        this.scoringWeights = weights;
+    }
+
+    /** Returns the current scoring weights. */
+    public ScoringWeights getScoringWeights() {
+        return scoringWeights;
     }
 
     // ===== Internal scoring constants (not user-tunable) =====
@@ -844,33 +862,59 @@ public class TrajectorySolver {
     }
     
     /**
-     * Scores a trajectory candidate based on accuracy, arc preference, 
-     * obstacle clearance, and stability.
+     * Scores a trajectory candidate based on accuracy, arc height, speed,
+     * stability, and obstacle clearance. Uses the configurable
+     * {@link ScoringWeights} set via {@link #setScoringWeights}.
      * Higher score = better candidate.
+     *
+     * <p>Scoring components (base points before weight):</p>
+     * <ul>
+     *   <li><b>Accuracy</b> (0-40) — inversely proportional to closest approach</li>
+     *   <li><b>Hit bonus</b> (0 or 15) — ball actually enters target radius</li>
+     *   <li><b>Low arc</b> (0-25) — linearly higher score for lower pitch angles</li>
+     *   <li><b>Speed</b> (0-20) — shorter time-of-flight is better</li>
+     *   <li><b>Stability</b> (0-10) — how close to optimal mechanism angle</li>
+     *   <li><b>Clearance</b> (0-10) — margin above obstacles</li>
+     *   <li><b>Arc preference</b> (0-20) — user-specified arc height bias</li>
+     * </ul>
      */
     private double scoreCandidate(ProjectileMotion.TrajectoryResult traj, double pitchDeg,
                                    ShotInput input, double requiredClearance) {
+        ScoringWeights w = this.scoringWeights;
         double score = 0;
 
+        // Accuracy: base 0-40 pts (inversely proportional to closest approach)
         double relativeApproach = traj.closestApproach / Math.max(0.01, input.getTargetRadius());
-        score += Math.max(0, 40 - relativeApproach * 20);
+        score += Math.max(0, 40 - relativeApproach * 20) * w.getAccuracyWeight();
 
+        // Direct hit bonus: 15 pts
         if (traj.hitTarget) {
-            score += 15;
+            score += 15 * w.getHitBonusWeight();
         }
 
-        double optimalAngle = STABILITY_OPTIMAL_ANGLE_DEG;
-        double angleDeviation = Math.abs(pitchDeg - optimalAngle);
-        score += Math.max(0, 10 - angleDeviation * 0.2);
+        // Low arc bonus: 0-25 pts — lower pitch = higher score.
+        // Normalized within the input's pitch range so lowest valid angle gets max points.
+        double pitchRange = input.getMaxPitchDegrees() - input.getMinPitchDegrees();
+        if (pitchRange > 0 && w.getLowArcWeight() > 0) {
+            double normalizedPitch = (pitchDeg - input.getMinPitchDegrees()) / pitchRange;
+            normalizedPitch = Math.max(0, Math.min(1, normalizedPitch));
+            score += (1.0 - normalizedPitch) * 25.0 * w.getLowArcWeight();
+        }
 
-        score += Math.max(0, 20 - traj.flightTime * 5);
-        
-        // clearance 
+        // Speed: base 0-20 pts (shorter TOF = better)
+        score += Math.max(0, 20 - traj.flightTime * 5) * w.getSpeedWeight();
+
+        // Stability: base 0-10 pts (near optimal mechanism angle)
+        double angleDeviation = Math.abs(pitchDeg - w.getOptimalAngleDegrees());
+        score += Math.max(0, 10 - angleDeviation * 0.2) * w.getStabilityWeight();
+
+        // Clearance: base 0-10 pts
         if (requiredClearance > 0 && traj.maxHeight > requiredClearance) {
             double clearanceMargin = traj.maxHeight - requiredClearance;
-            score += Math.min(10, clearanceMargin * 10);
+            score += Math.min(10, clearanceMargin * 10) * w.getClearanceWeight();
         }
-        
+
+        // Arc preference from ShotInput (user-specified preferred arc height)
         double preferredArc = input.getPreferredArcHeightMeters();
         double biasStrength = input.getArcBiasStrength();
 
@@ -884,7 +928,7 @@ public class TrajectorySolver {
             double arcDeviation = Math.abs(traj.maxHeight - autoPreferred);
             score += Math.max(0, 15 - arcDeviation * 8) * autoBias;
         }
-        
+
         return score;
     }
     

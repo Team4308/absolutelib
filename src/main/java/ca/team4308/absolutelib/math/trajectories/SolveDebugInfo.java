@@ -80,7 +80,6 @@ public class SolveDebugInfo {
         public double getMaxHeight() { return maxHeight; }
         public double getTimeOfFlight() { return timeOfFlight; }
         public boolean getHitTarget() { return hitTarget; }
-        /** The full simulated trajectory points. May be null if debug trajectories are disabled. */
         public ProjectileMotion.TrajectoryState[] getTrajectory() { return trajectory; }
 
         @Override
