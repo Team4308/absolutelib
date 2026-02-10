@@ -11,7 +11,7 @@ package ca.team4308.absolutelib.math.trajectories.shooter;
  * interpolates between them. When the distance is outside the range the
  * closest entry is returned (clamped).</p>
  * 
- * <h3>Usage</h3>
+ * <h2>Usage</h2>
  * <pre>{@code
  * ShotLookupTable table = new ShotLookupTable()
  *     .addEntry(1.5, 75.0, 2000)

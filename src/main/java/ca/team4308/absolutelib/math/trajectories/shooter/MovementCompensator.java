@@ -13,7 +13,7 @@ package ca.team4308.absolutelib.math.trajectories.shooter;
  * {@code ShootOnTheFlyCalculator} and the hammerheads5000 {@code TurretCalculator},
  * but simplified to a linear correction term for speed and stability.</p>
  * 
- * <h3>Usage</h3>
+ * <h2>Usage</h2>
  * <pre>{@code
  * MovementCompensator comp = new MovementCompensator(config);
  * ShotParameters adjusted = comp.compensate(baseShotParams, vxMps, vyMps, yawToTargetRad);

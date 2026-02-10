@@ -20,6 +20,7 @@ import edu.wpi.first.util.sendable.Sendable;
 import edu.wpi.first.util.sendable.SendableBuilder;
 import edu.wpi.first.wpilibj2.command.Command;
 
+import java.util.List;
 import java.util.function.Supplier;
 
 
@@ -84,8 +85,10 @@ public class ExampleShooter extends AbsoluteSubsystem {
         solver = new TrajectorySolver(gamePiece, solverConfig);
 
         shooterSystem = new ShooterSystem(config, table, solver);
-        shooterSystem.setMode(ShotMode.LOOKUP_WITH_SOLVER_FALLBACK);
+        shooterSystem.setMode(ShotMode.SOLVER_ONLY);
         shooterSystem.setFallbackShot(60.0, 3000);
+
+        solver.setDebugEnabled(true);
     }
 
     public void setPoseSupplier(Supplier<Pose2d> supplier) { this.poseSupplier = supplier; }
@@ -138,6 +141,100 @@ public class ExampleShooter extends AbsoluteSubsystem {
         Pose3d goalPose = new Pose3d(targetPosition, new Rotation3d());
         Logger.recordOutput("ExampleShooter/GoalPose3d", goalPose);
         Logger.recordOutput("ExampleShooter/GoalPose3dArray", new Pose3d[] { goalPose });
+
+        recordOutput("TargetX", targetPosition.getX());
+        recordOutput("TargetY", targetPosition.getY());
+        recordOutput("TargetZ", targetPosition.getZ());
+        recordOutput("ShooterHeight", shooterHeightMeters);
+        recordOutput("ExitVelocity", currentShot.exitVelocityMps);
+
+        logTrajectoryDebug();
+    }
+
+    private void logTrajectoryDebug() {
+        TrajectoryResult trajResult = shooterSystem.getLastTrajectoryResult();
+        if (trajResult == null) return;
+
+        recordOutput("Trajectory/Status", trajResult.getStatus().name());
+        recordOutput("Trajectory/StatusMessage", trajResult.getStatusMessage());
+        recordOutput("Trajectory/Confidence", trajResult.getConfidenceScore());
+
+        if (trajResult.isSuccess()) {
+            recordOutput("Trajectory/PitchDeg", trajResult.getPitchAngleDegrees());
+            recordOutput("Trajectory/YawAdjustDeg", trajResult.getYawAdjustmentDegrees());
+            recordOutput("Trajectory/Velocity", trajResult.getRequiredVelocityMps());
+            recordOutput("Trajectory/TimeOfFlight", trajResult.getTimeOfFlightSeconds());
+            recordOutput("Trajectory/MaxHeight", trajResult.getMaxHeightMeters());
+            recordOutput("Trajectory/Margin", trajResult.getMarginOfErrorMeters());
+            recordOutput("Trajectory/RPM", trajResult.getRecommendedRpm());
+
+            List<Pose3d> flightPath = trajResult.getFlightPath();
+            if (!flightPath.isEmpty()) {
+                Logger.recordOutput("ExampleShooter/Trajectory/FlightPath",
+                        flightPath.toArray(new Pose3d[0]));
+
+                double[] pathX = new double[flightPath.size()];
+                double[] pathY = new double[flightPath.size()];
+                double[] pathZ = new double[flightPath.size()];
+                for (int i = 0; i < flightPath.size(); i++) {
+                    pathX[i] = flightPath.get(i).getX();
+                    pathY[i] = flightPath.get(i).getY();
+                    pathZ[i] = flightPath.get(i).getZ();
+                }
+                recordOutput("Trajectory/PathX", pathX);
+                recordOutput("Trajectory/PathY", pathY);
+                recordOutput("Trajectory/PathZ", pathZ);
+                recordOutput("Trajectory/PathLength", flightPath.size());
+            }
+        }
+
+        SolveDebugInfo debug = trajResult.getDebugInfo();
+        if (debug != null) {
+            recordOutput("Debug/Enabled", true);
+            recordOutput("Debug/TotalTested", debug.getTotalTested());
+            recordOutput("Debug/Accepted", debug.getAcceptedCount());
+            recordOutput("Debug/TotalRejected", debug.getTotalRejected());
+            recordOutput("Debug/RejectedCollision", debug.getRejectedCollisionCount());
+            recordOutput("Debug/RejectedArcTooLow", debug.getRejectedArcTooLowCount());
+            recordOutput("Debug/RejectedClearance", debug.getRejectedClearanceCount());
+            recordOutput("Debug/RejectedMiss", debug.getRejectedMissCount());
+            recordOutput("Debug/RejectedFlyover", debug.getRejectedFlyoverCount());
+            recordOutput("Debug/BestScore", debug.getBestScore());
+            recordOutput("Debug/BestPitchDeg", debug.getBestPitchDegrees());
+            recordOutput("Debug/Summary", debug.getSummary());
+            recordOutput("Debug/DetailedTable", debug.getDetailedTable());
+
+            List<SolveDebugInfo.CandidateInfo> accepted = debug.getAcceptedCandidates();
+            double[] accPitch = new double[accepted.size()];
+            double[] accScore = new double[accepted.size()];
+            double[] accTOF = new double[accepted.size()];
+            double[] accMaxH = new double[accepted.size()];
+            for (int i = 0; i < accepted.size(); i++) {
+                accPitch[i] = accepted.get(i).getPitchDegrees();
+                accScore[i] = accepted.get(i).getScore();
+                accTOF[i] = accepted.get(i).getTimeOfFlight();
+                accMaxH[i] = accepted.get(i).getMaxHeight();
+            }
+            recordOutput("Debug/AcceptedPitches", accPitch);
+            recordOutput("Debug/AcceptedScores", accScore);
+            recordOutput("Debug/AcceptedTOF", accTOF);
+            recordOutput("Debug/AcceptedMaxHeight", accMaxH);
+
+            List<SolveDebugInfo.CandidateInfo> all = debug.getCandidates();
+            double[] allPitch = new double[all.size()];
+            double[] allClosest = new double[all.size()];
+            String[] allStatus = new String[all.size()];
+            for (int i = 0; i < all.size(); i++) {
+                allPitch[i] = all.get(i).getPitchDegrees();
+                allClosest[i] = all.get(i).getClosestApproach();
+                allStatus[i] = all.get(i).getRejection().name();
+            }
+            recordOutput("Debug/AllPitches", allPitch);
+            recordOutput("Debug/AllClosest", allClosest);
+            recordOutput("Debug/AllStatus", allStatus);
+        } else {
+            recordOutput("Debug/Enabled", false);
+        }
     }
 
     /**
@@ -168,10 +265,22 @@ public class ExampleShooter extends AbsoluteSubsystem {
 
         double measuredRpm = currentRpmSupplier != null ? currentRpmSupplier.get() : 0;
 
+        shooterSystem.setSolverInputTemplate(
+            ShotInput.builder()
+                .shooterPositionMeters(shooterX, shooterY, shooterHeightMeters)
+                .shooterYawRadians(yawRad)
+                .targetPositionMeters(targetPosition.getX(), targetPosition.getY(), targetPosition.getZ())
+                .targetRadiusMeters(0.53)
+                .includeAirResistance(true)
+                .robotVelocity(vx, vy)
+        );
+
         currentShot = shooterSystem.calculate(lastDistanceMeters, measuredRpm, vx, vy, yawRad);
 
         recordOutput("RobotX", pose.getX());
         recordOutput("RobotY", pose.getY());
+        recordOutput("ShooterX", shooterX);
+        recordOutput("ShooterY", shooterY);
     }
 
     /**

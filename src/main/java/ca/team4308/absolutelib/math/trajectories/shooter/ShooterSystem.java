@@ -8,7 +8,7 @@ import ca.team4308.absolutelib.math.trajectories.TrajectorySolver;
  * Hybrid shooter system that combines a lookup table, physics solver, RPM
  * feedback, and movement compensation into a single easy-to-use API.
  * 
- * <h3>Design Goals</h3>
+ * <h2>Design Goals</h2>
  * <ul>
  *   <li>Reliable in matches — lookup table as primary source</li>
  *   <li>Easy to tune on the practice field — just add table entries</li>
@@ -57,6 +57,7 @@ public final class ShooterSystem {
     private ShotParameters lastResult = ShotParameters.invalid("Not yet calculated");
     private SafetyValidator.ValidationResult lastValidation;
     private String lastSourceDescription = "none";
+    private TrajectoryResult lastTrajectoryResult;
 
     private ShotInput.Builder solverInputTemplate = null;
 
@@ -259,6 +260,7 @@ public final class ShooterSystem {
         try {
             ShotInput input = solverInputTemplate.build();
             TrajectoryResult result = solver.solve(input);
+            lastTrajectoryResult = result;
             if (result.isSuccess()) {
                 double pitch = result.getPitchAngleDegrees();
                 double rpm = result.getRecommendedRpm();
@@ -314,6 +316,17 @@ public final class ShooterSystem {
 
     /** Returns the safety validator for direct access. */
     public SafetyValidator getSafetyValidator() { return safetyValidator; }
+
+    /**
+     * Returns the last trajectory result from the solver, or null if the solver
+     * has not been called yet.
+     *
+     * @return the last trajectory result, or null
+     */
+    public TrajectoryResult getLastTrajectoryResult() { return lastTrajectoryResult; }
+
+    /** Returns the underlying trajectory solver, or null if not configured. */
+    public TrajectorySolver getSolver() { return solver; }
 
     private static double lerp(double a, double b, double t) {
         return a + (b - a) * t;

@@ -5,15 +5,14 @@ import java.util.List;
 
 import ca.team4308.absolutelib.math.DoubleUtils;
 import ca.team4308.absolutelib.subsystems.simulation.ArmSimulation;
-import ca.team4308.absolutelib.wrapper.EncoderWrapper;
 import ca.team4308.absolutelib.wrapper.AbsoluteSubsystem;
+import ca.team4308.absolutelib.wrapper.EncoderWrapper;
 import ca.team4308.absolutelib.wrapper.MotorWrapper;
 import ca.team4308.absolutelib.wrapper.MotorWrapper.MotorConfig;
 import edu.wpi.first.math.controller.ArmFeedforward;
 import edu.wpi.first.math.controller.PIDController;
-import edu.wpi.first.util.sendable.Sendable;
-// Added for IK
 import edu.wpi.first.math.geometry.Translation2d;
+import edu.wpi.first.util.sendable.Sendable;
 
 /**
  * Multi-DOF Arm subsystem: per-joint modes (IDLE, MANUAL, POSITION, HOLDING)
@@ -30,12 +29,20 @@ public class Arm extends AbsoluteSubsystem {
     }
 
     /**
-     * Hook: one-time initialization.
+     * A single rotary joint in the arm, with PID, feedforward, and output filtering.
      */
     public static class Joint {
 
+        /** Operating mode for a joint. */
         public enum Mode {
-            IDLE, MANUAL, POSITION, HOLDING
+            /** Joint is idle and not producing output. */
+            IDLE,
+            /** Joint is under direct manual percent control. */
+            MANUAL,
+            /** Joint is moving to a target angle via PID. */
+            POSITION,
+            /** Joint is holding its current angle. */
+            HOLDING
         }
         private final MotorWrapper motor;
         private EncoderWrapper encoder;
@@ -52,6 +59,15 @@ public class Arm extends AbsoluteSubsystem {
         // Cached angle for performance
         private double cachedAngleRad = 0.0;
 
+        /**
+         * Creates a new joint.
+         *
+         * @param motor           motor driving this joint
+         * @param motorConfig     motor configuration to apply (may be null)
+         * @param encoder         encoder measuring joint angle
+         * @param config          joint configuration (limits, tolerance, etc.)
+         * @param initialAngleRad initial angle in radians
+         */
         public Joint(MotorWrapper motor, MotorConfig motorConfig, EncoderWrapper encoder, JointConfig config, double initialAngleRad) {
             this.motor = motor;
             this.encoder = encoder;
@@ -67,6 +83,12 @@ public class Arm extends AbsoluteSubsystem {
         private double minOutputPercent = -1.0;
         private double maxOutputPercent = 1.0;
 
+        /**
+         * Sets the min and max output percent limits for this joint.
+         *
+         * @param minPercent minimum output percent
+         * @param maxPercent maximum output percent
+         */
         public void setOutputLimits(double minPercent, double maxPercent) {
             this.minOutputPercent = Math.min(minPercent, maxPercent);
             this.maxOutputPercent = Math.max(minPercent, maxPercent);
@@ -76,17 +98,28 @@ public class Arm extends AbsoluteSubsystem {
             return DoubleUtils.clamp(p, minOutputPercent, maxOutputPercent);
         }
 
+        /**
+         * Sets the joint to manual mode with the given output percent.
+         *
+         * @param pct output percent in [-1, 1]
+         */
         public void setManualPercent(double pct) {
             manualPercent = clampPercent(pct);
             setMode(Mode.MANUAL);
         }
 
+        /**
+         * Sets the target angle and switches the joint to position mode.
+         *
+         * @param radians desired angle in radians
+         */
         public void setTargetAngleRadians(double radians) {
             targetRadians = DoubleUtils.clamp(radians, config.minAngleRad, config.maxAngleRad);
             setMode(Mode.POSITION);
             positionPid.reset();
         }
 
+        /** Stops the joint and sets it to idle mode. */
         public void stop() {
             manualPercent = 0;
             applyPercentOutput(0);
@@ -94,6 +127,11 @@ public class Arm extends AbsoluteSubsystem {
         }
         // Optimized: return cached angle updated in periodic
 
+        /**
+         * Returns the current joint angle in radians.
+         *
+         * @return current angle in radians
+         */
         public double getAngleRadians() {
             return cachedAngleRad;
         }
@@ -102,18 +140,38 @@ public class Arm extends AbsoluteSubsystem {
             cachedAngleRad = encoder.getPositionMeters() * config.metersToRadians;
         }
 
+        /**
+         * Returns the target joint angle in radians.
+         *
+         * @return target angle in radians
+         */
         public double getTargetAngleRadians() {
             return targetRadians;
         }
 
+        /**
+         * Returns true if the joint is within tolerance of its target.
+         *
+         * @return true if at target
+         */
         public boolean atTarget() {
             return Math.abs(cachedAngleRad - targetRadians) <= config.toleranceRad;
         }
 
+        /**
+         * Returns the current operating mode of this joint.
+         *
+         * @return current mode
+         */
         public Mode getMode() {
             return mode;
         }
 
+        /**
+         * Replaces the encoder used by this joint.
+         *
+         * @param e the new encoder
+         */
         public void setEncoder(EncoderWrapper e) {
             this.encoder = e;
         }
@@ -134,10 +192,11 @@ public class Arm extends AbsoluteSubsystem {
         /**
          * Single overridable computation for arm output including PID, FF,
          * augmentors, and clamping.
-         */
-        /**
-         * Single overridable computation for arm output including PID, FF,
-         * augmentors, and clamping.
+         *
+         * @param mode    current joint operating mode
+         * @param target  target angle in radians
+         * @param current current angle in radians
+         * @return output percent in [-1, 1]
          */
         protected double computeOutputPercent(Mode mode, double target, double current) {
             onPreComputeOutput(mode, target, current);
@@ -189,18 +248,36 @@ public class Arm extends AbsoluteSubsystem {
             return clampPercent(filtered);
         }
 
+        /**
+         * @deprecated Use {@link #computeOutputPercent(Mode, double, double)} instead.
+         * @param target  target angle in radians
+         * @param current current angle in radians
+         * @return output percent
+         */
         @Deprecated
         protected double computePositionOutput(double target, double current) {
             return computeOutputPercent(Mode.POSITION, target, current);
         }
 
+        /**
+         * @deprecated Use {@link #computeOutputPercent(Mode, double, double)} instead.
+         * @param target  target angle in radians
+         * @param current current angle in radians
+         * @return output percent
+         */
         @Deprecated
         protected double computeHoldOutput(double target, double current) {
             return computeOutputPercent(Mode.HOLDING, target, current);
         }
 
+        /** Last voltage applied to the motor (for simulation). */
         public double lastAppliedVoltage = 0.0;
 
+        /**
+         * Sends the computed percent output to the motor.
+         *
+         * @param percent the output percent to apply
+         */
         protected void applyPercentOutput(double percent) {
             onPreApplyOutput(percent);
             if (!config.useSmartMotion) {
@@ -210,6 +287,14 @@ public class Arm extends AbsoluteSubsystem {
             onPostApplyOutput(percent);
         }
 
+        /**
+         * Applies all registered output augmentors to the base output.
+         *
+         * @param base    base output percent
+         * @param target  target angle in radians
+         * @param current current angle in radians
+         * @return augmented output percent
+         */
         protected double applyAugmentors(double base, double target, double current) {
             double out = base;
             for (var fn : augmentors) {
@@ -221,26 +306,63 @@ public class Arm extends AbsoluteSubsystem {
             return out;
         }
 
+        /**
+         * Sets the position PID gains.
+         *
+         * @param kP proportional gain
+         * @param kI integral gain
+         * @param kD derivative gain
+         */
         public void setPositionPID(double kP, double kI, double kD) {
             positionPid.setPID(kP, kI, kD);
         }
 
+        /**
+         * Sets the hold PID gains.
+         *
+         * @param kP proportional gain
+         * @param kI integral gain
+         * @param kD derivative gain
+         */
         public void setHoldPID(double kP, double kI, double kD) {
             holdPid.setPID(kP, kI, kD);
         }
 
+        /**
+         * Sets the arm feedforward gains.
+         *
+         * @param kS   static gain
+         * @param kCos cosine (gravity) gain
+         * @param kV   velocity gain
+         * @param kA   acceleration gain
+         */
         public void setFeedforwardGains(double kS, double kCos, double kV, double kA) {
             feedforward = new ArmFeedforward(kS, kCos, kV, kA);
         }
 
+        /**
+         * Sets the desired joint velocity in radians per second for feedforward.
+         *
+         * @param velocityRadPerSec desired velocity in rad/s
+         */
         public void setDesiredVelocity(double velocityRadPerSec) {
             desiredVelocityRadPerSec = velocityRadPerSec;
         }
 
+        /**
+         * Sets the nominal battery voltage used for percent-to-voltage conversion.
+         *
+         * @param volts nominal voltage
+         */
         public void setNominalVoltage(double volts) {
             nominalVoltage = volts;
         }
 
+        /**
+         * Adds an output augmentor that contributes additional output based on target and current angles.
+         *
+         * @param augment the augmentor function
+         */
         public void addOutputAugmentor(java.util.function.BiFunction<Double, Double, Double> augment) {
             if (augment != null) {
                 augmentors.add(augment);
@@ -248,43 +370,106 @@ public class Arm extends AbsoluteSubsystem {
             }
         }
 
+        /**
+         * Removes a previously registered output augmentor.
+         *
+         * @param augment the augmentor to remove
+         * @return true if the augmentor was found and removed
+         */
         public boolean removeOutputAugmentor(java.util.function.BiFunction<Double, Double, Double> augment) {
             return augmentors.remove(augment);
         }
 
+        /** Removes all registered output augmentors. */
         public void clearOutputAugmentors() {
             augmentors.clear();
         }
 
+        /** Hook called before the periodic computation. */
         protected void onPrePeriodic() {
         }
 
+        /** Hook called after the periodic computation. */
         protected void onPostPeriodic() {
         }
 
+        /**
+         * Hook called before computing the output.
+         *
+         * @param mode       current mode
+         * @param targetRad  target angle in radians
+         * @param currentRad current angle in radians
+         */
         protected void onPreComputeOutput(Mode mode, double targetRad, double currentRad) {
         }
 
+        /**
+         * Hook called after computing the output.
+         *
+         * @param mode          current mode
+         * @param targetRad     target angle in radians
+         * @param currentRad    current angle in radians
+         * @param outputPercent computed output percent
+         */
         protected void onPostComputeOutput(Mode mode, double targetRad, double currentRad, double outputPercent) {
         }
 
+        /**
+         * Hook called after the base output is computed, before augmentors.
+         *
+         * @param mode        current mode
+         * @param targetRad   target angle in radians
+         * @param currentRad  current angle in radians
+         * @param basePercent base output percent
+         * @return modified output percent
+         */
         protected double afterBaseCompute(Mode mode, double targetRad, double currentRad, double basePercent) {
             return basePercent;
         }
 
+        /**
+         * Hook called after augmentors are applied.
+         *
+         * @param mode       current mode
+         * @param targetRad  target angle in radians
+         * @param currentRad current angle in radians
+         * @param percent    output percent after augmentors
+         * @return modified output percent
+         */
         protected double afterAugmentCompute(Mode mode, double targetRad, double currentRad, double percent) {
             return percent;
         }
 
+        /**
+         * Hook called before applying the output to the motor.
+         *
+         * @param percent the output percent about to be applied
+         */
         protected void onPreApplyOutput(double percent) {
         }
 
+        /**
+         * Hook called after applying the output to the motor.
+         *
+         * @param percent the output percent that was applied
+         */
         protected void onPostApplyOutput(double percent) {
         }
 
+        /**
+         * Hook called when the joint reaches its target angle.
+         *
+         * @param targetRad the target angle that was reached
+         */
         protected void onTargetReached(double targetRad) {
         }
 
+        /**
+         * Hook called when the joint mode changes.
+         *
+         * @param from previous mode
+         * @param to   new mode
+         */
         protected void onModeChanged(Mode from, Mode to) {
         }
 
@@ -296,13 +481,27 @@ public class Arm extends AbsoluteSubsystem {
             }
         }
 
+        /** Functional interface for filtering joint output. */
         @FunctionalInterface
         public interface OutputFilter {
 
+            /**
+             * Filters the motor output for a joint.
+             *
+             * @param targetRad       target angle in radians
+             * @param currentRad      current angle in radians
+             * @param proposedPercent the proposed output percent
+             * @return the filtered output percent
+             */
             double filter(double targetRad, double currentRad, double proposedPercent);
         }
         private final java.util.List<OutputFilter> outputFilters = new java.util.ArrayList<>();
 
+        /**
+         * Adds an output filter to the processing chain.
+         *
+         * @param f the output filter to add
+         */
         public void addOutputFilter(OutputFilter f) {
             if (f != null) {
                 outputFilters.add(f);
@@ -310,14 +509,29 @@ public class Arm extends AbsoluteSubsystem {
             }
         }
 
+        /**
+         * Removes a previously registered output filter.
+         *
+         * @param f the filter to remove
+         * @return true if the filter was found and removed
+         */
         public boolean removeOutputFilter(OutputFilter f) {
             return outputFilters.remove(f);
         }
 
+        /** Removes all registered output filters. */
         public void clearOutputFilters() {
             outputFilters.clear();
         }
 
+        /**
+         * Runs the output through all registered filters.
+         *
+         * @param targetRad       target angle in radians
+         * @param currentRad      current angle in radians
+         * @param proposedPercent the output percent before filtering
+         * @return filtered output percent
+         */
         protected double applyOutputFilters(double targetRad, double currentRad, double proposedPercent) {
             double p = proposedPercent;
             for (OutputFilter f : outputFilters) {
@@ -331,6 +545,8 @@ public class Arm extends AbsoluteSubsystem {
 
         /**
          * Get the motor for simulation access.
+         *
+         * @return the motor wrapper
          */
         public MotorWrapper getMotor() {
             return motor;
@@ -338,21 +554,29 @@ public class Arm extends AbsoluteSubsystem {
 
         /**
          * Get the encoder for simulation access.
+         *
+         * @return the encoder wrapper
          */
         public EncoderWrapper getEncoder() {
             return encoder;
         }
     }
 
+    /** Immutable configuration for an arm joint. */
     public static class JointConfig {
 
+        /** Minimum allowed angle in radians. */
         public final double minAngleRad;
+        /** Maximum allowed angle in radians. */
         public final double maxAngleRad;
+        /** Tolerance for at-target checks in radians. */
         public final double toleranceRad;
+        /** Conversion factor from meters to radians. */
         public final double metersToRadians;
-        // Added for IK
+        /** Link length in meters for IK calculations. */
         public final double linkLengthMeters;
 
+        /** Whether to use smart motion profiling. */
         public boolean useSmartMotion = false;
 
         private JointConfig(Builder b) {
@@ -364,46 +588,93 @@ public class Arm extends AbsoluteSubsystem {
             useSmartMotion = b.useSmartMotion;
         }
 
+        /**
+         * Creates a new builder for {@link JointConfig}.
+         *
+         * @return a new builder instance
+         */
         public static Builder builder() {
             return new Builder();
         }
 
+        /** Builder for {@link JointConfig}. */
         public static class Builder {
 
             private double minAngleRad = 0.0, maxAngleRad = Math.PI, toleranceRad = Math.toRadians(2), metersToRadians = 1.0;
             private double linkLengthMeters = 1.0;
             private boolean useSmartMotion = false;
 
+            /**
+             * Sets the minimum angle.
+             *
+             * @param v minimum angle in radians
+             * @return this builder
+             */
             public Builder minAngleRad(double v) {
                 minAngleRad = v;
                 return this;
             }
 
+            /**
+             * Sets the maximum angle.
+             *
+             * @param v maximum angle in radians
+             * @return this builder
+             */
             public Builder maxAngleRad(double v) {
                 maxAngleRad = v;
                 return this;
             }
 
+            /**
+             * Sets the at-target tolerance.
+             *
+             * @param v tolerance in radians
+             * @return this builder
+             */
             public Builder toleranceRad(double v) {
                 toleranceRad = v;
                 return this;
             }
 
+            /**
+             * Sets the meters-to-radians conversion factor.
+             *
+             * @param v conversion factor
+             * @return this builder
+             */
             public Builder metersToRadians(double v) {
                 metersToRadians = v;
                 return this;
             }
 
+            /**
+             * Sets the link length for IK.
+             *
+             * @param v link length in meters
+             * @return this builder
+             */
             public Builder linkLengthMeters(double v) {
                 linkLengthMeters = v;
                 return this;
             }
 
+            /**
+             * Enables or disables smart motion profiling.
+             *
+             * @param v true to enable smart motion
+             * @return this builder
+             */
             public Builder useSmartMotion(boolean v) {
                 useSmartMotion = v;
                 return this;
             }
 
+            /**
+             * Builds an immutable {@link JointConfig}.
+             *
+             * @return the joint configuration
+             */
             public JointConfig build() {
                 return new JointConfig(this);
             }
@@ -420,9 +691,19 @@ public class Arm extends AbsoluteSubsystem {
     private int ikMaxIterations = 40;
     private double ikPosToleranceMeters = 0.01;
 
+    /** Creates a new arm with no joints. */
     public Arm() {
     }
 
+    /**
+     * Adds a joint to this arm.
+     *
+     * @param motor       motor driving the joint
+     * @param config      motor configuration
+     * @param encoder     encoder for the joint
+     * @param jointConfig joint configuration
+     * @return the created joint
+     */
     public Joint addJoint(MotorWrapper motor, MotorConfig config, EncoderWrapper encoder, JointConfig jointConfig) {
         double initialAngle = encoder.getPositionMeters() * jointConfig.metersToRadians;
         Joint j = new Joint(motor, config, encoder, jointConfig, initialAngle);
@@ -436,11 +717,21 @@ public class Arm extends AbsoluteSubsystem {
         return j;
     }
 
+    /**
+     * Returns the list of joints in this arm.
+     *
+     * @return unmodifiable view of joints
+     */
     public List<Joint> getJoints() {
         return joints;
     }
 
     // Direct angle control (non-IK)
+    /**
+     * Sets target angles (in radians) for each joint directly, disabling IK mode.
+     *
+     * @param radians target angles, one per joint
+     */
     public void setTargetAngles(double... radians) {
         ikMode = false;
         int n = Math.min(radians.length, joints.size());
@@ -449,6 +740,11 @@ public class Arm extends AbsoluteSubsystem {
         }
     }
 
+    /**
+     * Sets manual percent outputs for each joint, disabling IK mode.
+     *
+     * @param percents output percents, one per joint
+     */
     public void setManualPercents(double... percents) {
         ikMode = false;
         int n = Math.min(percents.length, joints.size());
@@ -458,24 +754,50 @@ public class Arm extends AbsoluteSubsystem {
     }
 
     // IK control
+    /**
+     * Sets the IK goal pose and solves for joint angles.
+     *
+     * @param x target X in meters
+     * @param y target Y in meters
+     */
     public void setGoalPose(double x, double y) {
         this.goalPose = new Translation2d(x, y);
         this.ikMode = true;
         solveIK();
     }
 
+    /**
+     * Sets the IK goal pose and solves for joint angles.
+     *
+     * @param pose target position
+     */
     public void setGoalPose(Translation2d pose) {
         setGoalPose(pose.getX(), pose.getY());
     }
 
+    /**
+     * Returns true if the arm is currently in IK mode.
+     *
+     * @return true if in IK mode
+     */
     public boolean isIKMode() {
         return ikMode;
     }
 
+    /**
+     * Returns true if the last IK solve converged.
+     *
+     * @return true if converged
+     */
     public boolean isIKSolved() {
         return ikSolved;
     }
 
+    /**
+     * Returns the current IK goal pose.
+     *
+     * @return goal position
+     */
     public Translation2d getGoalPose() {
         return goalPose;
     }
@@ -604,6 +926,11 @@ public class Arm extends AbsoluteSubsystem {
         }
     }
 
+    /**
+     * Returns true if all joints are within tolerance of their targets.
+     *
+     * @return true if all joints are at target
+     */
     public boolean allAtTargets() {
         for (Joint j : joints) {
             if (!j.atTarget()) {
@@ -617,10 +944,20 @@ public class Arm extends AbsoluteSubsystem {
     private ca.team4308.absolutelib.subsystems.simulation.ArmSimulation simulation;
     private boolean enableSimulation = true;
 
+    /**
+     * Enables or disables arm simulation.
+     *
+     * @param enable true to enable simulation
+     */
     public void enableSimulation(boolean enable) {
         this.enableSimulation = enable;
     }
 
+    /**
+     * Returns the arm simulation instance, or null if not initialized.
+     *
+     * @return simulation instance or null
+     */
     public ca.team4308.absolutelib.subsystems.simulation.ArmSimulation getSimulation() {
         return simulation;
     }

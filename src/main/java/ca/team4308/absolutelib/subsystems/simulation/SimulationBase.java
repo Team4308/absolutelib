@@ -267,7 +267,11 @@ public abstract class SimulationBase extends AbsoluteSubsystem {
     }
 
     /**
-     * Add custom telemetry to simulation state
+     * Add custom telemetry to simulation state.
+     *
+     * @param state  the simulation state to modify
+     * @param keys   telemetry key names
+     * @param values telemetry values
      */
     protected void addCustomData(SimState state, String[] keys, double[] values) {
         state.customDataKeys = keys;
@@ -275,7 +279,12 @@ public abstract class SimulationBase extends AbsoluteSubsystem {
     }
 
     /**
-     * Log a 2D pose for visualization (e.g., arm end effector)
+     * Log a 2D pose for visualization (e.g., arm end effector).
+     *
+     * @param key         telemetry key prefix
+     * @param x           X position in meters
+     * @param y           Y position in meters
+     * @param rotationRad rotation in radians
      */
     protected void logPose2d(String key, double x, double y, double rotationRad) {
         recordSimOutput(key + "/x", x);
@@ -284,7 +293,9 @@ public abstract class SimulationBase extends AbsoluteSubsystem {
     }
 
     /**
-     * Log multiple joint angles for multi-DOF mechanisms
+     * Log multiple joint angles for multi-DOF mechanisms.
+     *
+     * @param anglesRad joint angles in radians
      */
     protected void logJointAngles(double... anglesRad) {
         recordSimOutput("jointAngles", anglesRad);

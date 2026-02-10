@@ -1,6 +1,11 @@
 # Changelog for  AbsoluteLib V2
 
 
+# 1.3.5
+
+- **Debugging!**: New Website part showing greaterlogs of the trajectorys that are generated to help debug and tune it.
+- **Path Visuals**: Re-added the 3D Array of path points.
+
 ## 1.3.4
 - **Hybrid shooter system** (`ca.team4308.absolutelib.math.trajectories.shooter`): New package that combines a lookup table, physics solver, RPM feedback, and movement compensation into a unified shot-calculation pipeline.
 - **ShotLookupTable**: Fixed-size sorted lookup table with linear interpolation and edge clamping. Add tested distance/pitch/RPM entries and retrieve interpolated shot parameters in constant time.

@@ -5,7 +5,7 @@ package ca.team4308.absolutelib.math.trajectories.shooter;
  * 
  * <p>Immutable after construction. Use the builder to create instances.</p>
  * 
- * <h3>Usage</h3>
+ * <h2>Usage</h2>
  * <pre>{@code
  * ShooterConfig config = ShooterConfig.builder()
  *     .pitchLimits(30.0, 80.0)

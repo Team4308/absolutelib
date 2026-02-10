@@ -11,7 +11,7 @@ package ca.team4308.absolutelib.math.trajectories.shooter;
  * <p>This corrects for battery sag, wheel slip, motor heating, and gamepiece
  * compression changes — all without a full trajectory re-solve.</p>
  * 
- * <h3>Usage</h3>
+ * <h2>Usage</h2>
  * <pre>{@code
  * RPMCorrector corrector = new RPMCorrector(config);
  * ShotParameters corrected = corrector.correct(baseShotParams, measuredRpm);
