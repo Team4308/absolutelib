@@ -1,6 +1,17 @@
 # Changelog for  AbsoluteLib V2
 
 
+## 1.3.4
+- **Hybrid shooter system** (`ca.team4308.absolutelib.math.trajectories.shooter`): New package that combines a lookup table, physics solver, RPM feedback, and movement compensation into a unified shot-calculation pipeline.
+- **ShotLookupTable**: Fixed-size sorted lookup table with linear interpolation and edge clamping. Add tested distance/pitch/RPM entries and retrieve interpolated shot parameters in constant time.
+- **ShooterConfig**: Immutable builder-pattern configuration for the shooter system. Covers pitch limits, RPM limits, RPM-to-velocity conversion, distance limits, RPM feedback thresholds, movement compensation gain, and safety limits. Includes a `defaults2026()` preset.
+- **ShotMode**: Enum with six operating modes — `LOOKUP_ONLY`, `SOLVER_ONLY`, `LOOKUP_WITH_SOLVER_FALLBACK`, `SOLVER_WITH_LOOKUP_FALLBACK`, `BLENDED`, and `MANUAL`.
+- **ShooterSystem**: Main orchestrator that runs the full pipeline: mode-based base calculation → movement compensation → RPM feedback correction → safety validation → fallback. Single `calculate()` call per loop.
+- **RPMCorrector**: Linear pitch correction when the flywheel is below target speed. Compensates for battery sag, wheel slip, and motor heating without a full trajectory re-solve.
+- **MovementCompensator**: Iterative shoot-on-the-fly compensation. Adjusts effective distance and RPM based on chassis velocity so shots land accurately while the robot is moving.
+- **SafetyValidator**: Pre-fire safety checks for pitch limits, RPM range, exit velocity, distance, and flywheel readiness. Returns detailed failure reasons.
+- **Simplified ExampleShooter**: Rewrote the example from ~1000 lines down to ~280 lines using the new `ShooterSystem` API.
+
 ## 1.3.3
 - **Per-pitch velocity calculation**: The solver now calculates the exact velocity needed for each pitch angle using projectile kinematics, instead of using a single fixed velocity. This eliminates most flyover rejections and lets the solver find solutions at angles that were previously unreachable.
 - **Floating-point pitch loop fix**: Changed pitch iteration from accumulated `+= step` to integer-indexed `min + i * step`, preventing the final angle from being skipped due to IEEE 754 drift. With 300 iterations of `+= 0.1`, the last angle (e.g., 37.5°) was silently excluded.

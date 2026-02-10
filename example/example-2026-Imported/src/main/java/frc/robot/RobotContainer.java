@@ -137,12 +137,10 @@ public class RobotContainer {
             }
         }));
 
-        driver.b().onTrue(Commands.runOnce(() -> {
-            m_shooter.setStationarySolveEnabled(!m_shooter.isStationarySolveEnabled());
-            if (m_shooter.isStationarySolveEnabled()) {
-                m_leds.setProgress(0.7, edu.wpi.first.wpilibj.util.Color.kCyan);
-            }
-        }));
+        // B button: cycle shot mode (LOOKUP_ONLY → SOLVER_ONLY → LOOKUP_WITH_SOLVER_FALLBACK → ...)
+        driver.b().onTrue(m_shooter.cycleModeCommand()
+                .andThen(Commands.runOnce(() -> 
+                        m_leds.setProgress(0.7, edu.wpi.first.wpilibj.util.Color.kCyan))));
 
         driver.start().onTrue(
                 m_shooter.spinUp().withTimeout(3.0)
