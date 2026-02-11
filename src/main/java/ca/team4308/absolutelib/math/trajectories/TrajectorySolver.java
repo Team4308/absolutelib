@@ -752,8 +752,10 @@ public class TrajectorySolver {
             double hoopTolerance = input.getTargetRadius() * config.getHoopToleranceMultiplier();
             // Ball must be descending at closest approach for a hoop tolerance hit —
             // a ball at its apex flying horizontally past is not going into the basket.
+            // Also require minimum entry angle for steep-enough descent.
             boolean hitsTarget = trajSim.hitTarget
-                    || (trajSim.descendingAtClosest && trajSim.closestApproach <= hoopTolerance);
+                    || (trajSim.descendingAtClosest && trajSim.closestApproach <= hoopTolerance
+                        && trajSim.entryAngleDegrees >= SolverConstants.getMinEntryAngleDegrees());
             
             if (!hitsTarget) {
                 if (arcTooLow) {
@@ -883,6 +885,7 @@ public class TrajectorySolver {
      *   <li><b>Speed</b> (0-20) — shorter time-of-flight is better</li>
      *   <li><b>Stability</b> (0-10) — how close to optimal mechanism angle</li>
      *   <li><b>Clearance</b> (0-10) — margin above obstacles</li>
+     *   <li><b>Entry angle</b> (0-20) — steeper descent into target scores higher</li>
      *   <li><b>Arc preference</b> (0-20) — user-specified arc height bias</li>
      * </ul>
      */
@@ -920,6 +923,13 @@ public class TrajectorySolver {
         if (requiredClearance > 0 && traj.maxHeight > requiredClearance) {
             double clearanceMargin = traj.maxHeight - requiredClearance;
             score += Math.min(10, clearanceMargin * 10) * w.getClearanceWeight();
+        }
+
+        // Entry angle: base 0-20 pts — steeper descent into target = higher score.
+        // Normalized so that 90° (straight down) gets full marks.
+        if (traj.entryAngleDegrees > 0 && w.getEntryAngleWeight() > 0) {
+            double normalizedAngle = Math.min(1.0, traj.entryAngleDegrees / 90.0);
+            score += normalizedAngle * 20.0 * w.getEntryAngleWeight();
         }
 
         // Arc preference from ShotInput (user-specified preferred arc height)
@@ -1202,7 +1212,8 @@ public class TrajectorySolver {
 
             double hoopTolerance = input.getTargetRadius() * config.getHoopToleranceMultiplier();
             boolean hitsTarget = trajSim.hitTarget
-                    || (trajSim.descendingAtClosest && trajSim.closestApproach <= hoopTolerance);
+                    || (trajSim.descendingAtClosest && trajSim.closestApproach <= hoopTolerance
+                        && trajSim.entryAngleDegrees >= SolverConstants.getMinEntryAngleDegrees());
             
             if (!hitsTarget) continue;
 

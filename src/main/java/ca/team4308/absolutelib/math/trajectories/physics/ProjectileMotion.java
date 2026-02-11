@@ -70,18 +70,26 @@ public class ProjectileMotion {
         public final double closestApproach;
         /** Whether the ball was descending (vz &lt; 0) at the point of closest approach. */
         public final boolean descendingAtClosest;
+        /**
+         * Entry angle in degrees at the point the ball crosses the rim plane
+         * (z = targetZ) while descending. Measured from horizontal — 90° is
+         * straight down, 0° is perfectly flat. -1 if the ball never crosses.
+         */
+        public final double entryAngleDegrees;
         public final TrajectoryState finalState;
         public final double maxHeight;
         public final double flightTime;
         
         public TrajectoryResult(TrajectoryState[] trajectory, boolean hitTarget,
                                 double closestApproach, boolean descendingAtClosest,
+                                double entryAngleDegrees,
                                 TrajectoryState finalState,
                                 double maxHeight, double flightTime) {
             this.trajectory = trajectory;
             this.hitTarget = hitTarget;
             this.closestApproach = closestApproach;
             this.descendingAtClosest = descendingAtClosest;
+            this.entryAngleDegrees = entryAngleDegrees;
             this.finalState = finalState;
             this.maxHeight = maxHeight;
             this.flightTime = flightTime;
@@ -156,6 +164,7 @@ public class ProjectileMotion {
         boolean pastApex = false;  // Track if ball is descending
         double prevZ = z0;
         TrajectoryState closestState = null;
+        double entryAngleDeg = -1;  // Descent angle at rim crossing, -1 if never crosses
         
         while (state.time < PhysicsConstants.MAX_FLIGHT_TIME && state.z >= 0) {
             if (stepCount % sampleInterval == 0 && pointCount < maxPoints) {
@@ -169,7 +178,6 @@ public class ProjectileMotion {
             if (state.z < prevZ && !pastApex) {
                 pastApex = true;
             }
-            prevZ = state.z;
             
             double dx = state.x - targetX;
             double dy = state.y - targetY;
@@ -182,22 +190,26 @@ public class ProjectileMotion {
                 closestState = state.copy();
             }
             
-            // For basket/funnel goals: the ball must be descending, above the rim,
-            // and horizontally over the opening. A ball passing through a 3D sphere
-            // while ascending or from the side won't actually score.
-            if (pastApex && state.z >= targetZ && horizontalDistToTarget <= targetRadius) {
-                hitTarget = true;
+            // ── Rim-plane crossing detection ──
+            // The ball scores when it crosses z = targetZ while DESCENDING and
+            // is horizontally within the opening radius. This models a real
+            // basket/funnel: the ball must arc above the rim and come DOWN into it.
+            if (pastApex && prevZ >= targetZ && state.z <= targetZ
+                    && horizontalDistToTarget <= targetRadius * SolverConstants.getBasketDescentToleranceMultiplier()) {
+                // Compute entry angle (steepness of descent from horizontal)
+                double hSpeed = Math.sqrt(state.vx * state.vx + state.vy * state.vy);
+                double vSpeed = Math.abs(state.vz); // vz is negative when descending
+                entryAngleDeg = Math.toDegrees(Math.atan2(vSpeed, hSpeed));
+                
+                // Only count as a hit if entry is steep enough
+                if (entryAngleDeg >= SolverConstants.getMinEntryAngleDegrees()
+                        && horizontalDistToTarget <= targetRadius) {
+                    hitTarget = true;
+                }
+                break; // Stop at rim crossing regardless
             }
             
-            // For basket-style goals: Stop simulation when ball descends to/below target height
-            // while being horizontally close to the target
-            if (pastApex && state.z <= targetZ 
-                    && horizontalDistToTarget < targetRadius * SolverConstants.getBasketDescentToleranceMultiplier()) {
-                // Ball has descended into the goal zone - this is a valid landing
-                hitTarget = true;
-                break;
-            }
-            
+            prevZ = state.z;
             state = integrateRK4(gamePiece, state, timeStep, spinRpm, spinAxisX, spinAxisY, spinAxisZ);
             stepCount++;
         }
@@ -205,17 +217,24 @@ public class ProjectileMotion {
         TrajectoryState[] trimmedTrajectory = new TrajectoryState[pointCount];
         System.arraycopy(trajectory, 0, trimmedTrajectory, 0, pointCount);
         
-        // Final validation: check if the trajectory actually reached close to the target.
-        // For hoop/basket targets, the ball must be DESCENDING at closest approach —
-        // a ball at its apex flying horizontally past the target is not a valid score.
+        // Fallback: if the ball never crossed the rim plane but got very close
+        // while descending, still count it (e.g. ball lands just short)
         boolean descending = closestState != null && closestState.vz < 0;
         if (!hitTarget && descending
                 && closestApproach <= targetRadius * SolverConstants.getHoopToleranceMultiplier()) {
-            hitTarget = true; // Descending and close enough counts as a hit for a hoop
+            // Compute entry angle from closest state
+            if (closestState != null && entryAngleDeg < 0) {
+                double hSpeed = Math.sqrt(closestState.vx * closestState.vx + closestState.vy * closestState.vy);
+                double vSpeed = Math.abs(closestState.vz);
+                entryAngleDeg = Math.toDegrees(Math.atan2(vSpeed, hSpeed));
+            }
+            if (entryAngleDeg >= SolverConstants.getMinEntryAngleDegrees()) {
+                hitTarget = true;
+            }
         }
         
         return new TrajectoryResult(trimmedTrajectory, hitTarget, closestApproach,
-            descending, state, maxHeight, state.time);
+            descending, entryAngleDeg, state, maxHeight, state.time);
     }
 
     /**

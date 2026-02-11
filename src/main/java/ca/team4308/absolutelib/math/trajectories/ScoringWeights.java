@@ -24,6 +24,10 @@ package ca.team4308.absolutelib.math.trajectories;
  *       accurate at a specific pitch.</li>
  *   <li><b>clearanceWeight</b> — bonus for clearing obstacles by a wider
  *       margin. Only active when obstacles are present.</li>
+ *   <li><b>entryAngleWeight</b> — preference for steeper entry angles (ball
+ *       coming down more vertically into the target). Higher = more aggressively
+ *       prefer steep descents. Only has effect when trajectory crosses the
+ *       rim plane.</li>
  * </ul>
  *
  * <h2>Usage</h2>
@@ -47,6 +51,7 @@ public final class ScoringWeights {
     private final double speedWeight;
     private final double stabilityWeight;
     private final double clearanceWeight;
+    private final double entryAngleWeight;
     private final double optimalAngleDegrees;
 
     private ScoringWeights(Builder b) {
@@ -56,6 +61,7 @@ public final class ScoringWeights {
         this.speedWeight = b.speedWeight;
         this.stabilityWeight = b.stabilityWeight;
         this.clearanceWeight = b.clearanceWeight;
+        this.entryAngleWeight = b.entryAngleWeight;
         this.optimalAngleDegrees = b.optimalAngleDegrees;
     }
 
@@ -80,6 +86,13 @@ public final class ScoringWeights {
 
     /** Weight for obstacle clearance margin. Default 0.5. */
     public double getClearanceWeight() { return clearanceWeight; }
+
+    /**
+     * Weight for preferring steeper entry angles. Default 1.0.
+     * Higher values more aggressively reward trajectories that descend
+     * steeply into the target. Set to 0 to disable entry-angle preference.
+     */
+    public double getEntryAngleWeight() { return entryAngleWeight; }
 
     /**
      * The pitch angle (degrees) considered mechanically optimal.
@@ -115,6 +128,7 @@ public final class ScoringWeights {
                 .lowArcWeight(0.0)
                 .speedWeight(0.3)
                 .clearanceWeight(2.0)
+                .entryAngleWeight(2.0)
                 .stabilityWeight(0.5)
                 .optimalAngleDegrees(55)
                 .build();
@@ -134,13 +148,14 @@ public final class ScoringWeights {
                 .speedWeight(speedWeight)
                 .stabilityWeight(stabilityWeight)
                 .clearanceWeight(clearanceWeight)
+                .entryAngleWeight(entryAngleWeight)
                 .optimalAngleDegrees(optimalAngleDegrees);
     }
 
     @Override
     public String toString() {
-        return String.format("ScoringWeights[accuracy=%.1f, hit=%.1f, lowArc=%.1f, speed=%.1f, stability=%.1f, clearance=%.1f, optimal=%.0f°]",
-                accuracyWeight, hitBonusWeight, lowArcWeight, speedWeight, stabilityWeight, clearanceWeight, optimalAngleDegrees);
+        return String.format("ScoringWeights[accuracy=%.1f, hit=%.1f, lowArc=%.1f, speed=%.1f, stability=%.1f, clearance=%.1f, entryAngle=%.1f, optimal=%.0f\u00b0]",
+                accuracyWeight, hitBonusWeight, lowArcWeight, speedWeight, stabilityWeight, clearanceWeight, entryAngleWeight, optimalAngleDegrees);
     }
 
     /**
@@ -153,6 +168,7 @@ public final class ScoringWeights {
         private double speedWeight = 1.0;
         private double stabilityWeight = 0.5;
         private double clearanceWeight = 0.5;
+        private double entryAngleWeight = 1.0;
         private double optimalAngleDegrees = 30.0;
 
         /** Sets the accuracy (closest approach) weight. Default 1.0. */
@@ -172,6 +188,9 @@ public final class ScoringWeights {
 
         /** Sets the obstacle clearance weight. Default 0.5. */
         public Builder clearanceWeight(double val) { this.clearanceWeight = val; return this; }
+
+        /** Sets the steep entry angle preference weight. Default 1.0. */
+        public Builder entryAngleWeight(double val) { this.entryAngleWeight = val; return this; }
 
         /** Sets the optimal pitch angle in degrees. Default 30.0. */
         public Builder optimalAngleDegrees(double val) { this.optimalAngleDegrees = val; return this; }

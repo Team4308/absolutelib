@@ -162,6 +162,15 @@ public final class SolverConstants {
      */
     private static double dragCompensationMultiplier = 1.8;
 
+    /**
+     * Minimum entry angle in degrees for a trajectory to count as a hit.
+     * Measured from horizontal — 90° is straight down, 0° is perfectly flat.
+     * Only trajectories where the ball crosses the rim plane at this angle
+     * or steeper are accepted. Steeper entries are more likely to go in.
+     * Default: 30.0° (moderate steepness)
+     */
+    private static double minEntryAngleDegrees = 30.0;
+
     // ==================== Getters ====================
 
     public static double getHoopToleranceMultiplier() { return hoopToleranceMultiplier; }
@@ -183,6 +192,7 @@ public final class SolverConstants {
     public static double getCloseRangeThresholdMeters() { return closeRangeThresholdMeters; }
     public static double getCollisionGraceDistanceMeters() { return collisionGraceDistanceMeters; }
     public static double getDragCompensationMultiplier() { return dragCompensationMultiplier; }
+    public static double getMinEntryAngleDegrees() { return minEntryAngleDegrees; }
 
     // ==================== Setters ====================
 
@@ -205,6 +215,7 @@ public final class SolverConstants {
     public static void setCloseRangeThresholdMeters(double value) { closeRangeThresholdMeters = value; }
     public static void setCollisionGraceDistanceMeters(double value) { collisionGraceDistanceMeters = value; }
     public static void setDragCompensationMultiplier(double value) { dragCompensationMultiplier = value; }
+    public static void setMinEntryAngleDegrees(double value) { minEntryAngleDegrees = value; }
     
     /**
      * Resets all constants to their default values.
@@ -229,5 +240,6 @@ public final class SolverConstants {
         closeRangeThresholdMeters = 3.0;
         collisionGraceDistanceMeters = 0.5;
         dragCompensationMultiplier = 1.8;
+        minEntryAngleDegrees = 30.0;
     }
 }
