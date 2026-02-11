@@ -8,11 +8,9 @@ import ca.team4308.absolutelib.math.trajectories.gamepiece.GamePiece;
  * Uses numerical integration for accurate trajectory simulation.
  */
 public class ProjectileMotion {
-    
+
     private final AirResistance airResistance;
     private final double timeStep;
-
-    // ===== Internal angle search constants (not user-tunable) =====
     private static final double MIN_ANGLE_BOUND = 0.1;
     private static final double MAX_ANGLE_OFFSET = 0.1;
     private static final double ANGLE_SWEEP_STEP = 0.05;
@@ -22,17 +20,18 @@ public class ProjectileMotion {
     private static final double HIGH_ARC_MAX_OFFSET = 0.05;
     private static final double LOW_ARC_MIN_BOUND = 0.05;
     private static final double VELOCITY_ZERO_THRESHOLD = 1e-6;
-    
+
     /**
      * State vector for trajectory simulation.
      */
     public static class TrajectoryState {
-        public double x, y, z;       
-        public double vx, vy, vz;    
-        public double time;          
-        
-        public TrajectoryState(double x, double y, double z, 
-                               double vx, double vy, double vz, double time) {
+
+        public double x, y, z;
+        public double vx, vy, vz;
+        public double time;
+
+        public TrajectoryState(double x, double y, double z,
+                double vx, double vy, double vz, double time) {
             this.x = x;
             this.y = y;
             this.z = z;
@@ -41,36 +40,43 @@ public class ProjectileMotion {
             this.vz = vz;
             this.time = time;
         }
-        
+
         public TrajectoryState copy() {
             return new TrajectoryState(x, y, z, vx, vy, vz, time);
         }
-        
+
         public double getSpeed() {
             return Math.sqrt(vx * vx + vy * vy + vz * vz);
         }
-        
+
         public double getHorizontalDistance() {
             return Math.sqrt(x * x + y * y);
         }
-        
+
         @Override
         public String toString() {
             return String.format("t=%.3fs pos=(%.2f, %.2f, %.2f)m vel=(%.2f, %.2f, %.2f)m/s",
-                time, x, y, z, vx, vy, vz);
+                    time, x, y, z, vx, vy, vz);
         }
     }
-    
+
     /**
      * Result of trajectory simulation.
      */
     public static class TrajectoryResult {
+
         public final TrajectoryState[] trajectory;
         public final boolean hitTarget;
         public final double closestApproach;
-        /** Whether the ball was descending (vz &lt; 0) at the point of closest approach. */
+        /**
+         * Whether the ball was descending (vz &lt; 0) at the point of closest
+         * approach.
+         */
         public final boolean descendingAtClosest;
-        /** Entry angle (deg) at rim-plane crossing. 90 = straight down. -1 if never crosses. */
+        /**
+         * Entry angle (deg) at rim-plane crossing. 90 = straight down. -1 if
+         * never crosses.
+         */
         public final double entryAngleDegrees;
         /**
          * Horizontal distance from the target center when the ball crosses the
@@ -81,12 +87,12 @@ public class ProjectileMotion {
         public final TrajectoryState finalState;
         public final double maxHeight;
         public final double flightTime;
-        
+
         public TrajectoryResult(TrajectoryState[] trajectory, boolean hitTarget,
-                                double closestApproach, boolean descendingAtClosest,
-                                double entryAngleDegrees, double horizontalDistAtCrossing,
-                                TrajectoryState finalState,
-                                double maxHeight, double flightTime) {
+                double closestApproach, boolean descendingAtClosest,
+                double entryAngleDegrees, double horizontalDistAtCrossing,
+                TrajectoryState finalState,
+                double maxHeight, double flightTime) {
             this.trajectory = trajectory;
             this.hitTarget = hitTarget;
             this.closestApproach = closestApproach;
@@ -98,21 +104,21 @@ public class ProjectileMotion {
             this.flightTime = flightTime;
         }
     }
-    
+
     /**
      * Creates projectile motion calculator with default air resistance.
      */
     public ProjectileMotion() {
         this(new AirResistance(), PhysicsConstants.DEFAULT_TIME_STEP);
     }
-    
+
     /**
      * Creates projectile motion calculator with specified air resistance model.
      */
     public ProjectileMotion(AirResistance airResistance) {
         this(airResistance, PhysicsConstants.DEFAULT_TIME_STEP);
     }
-    
+
     /**
      * Creates projectile motion calculator with full customization.
      */
@@ -120,10 +126,10 @@ public class ProjectileMotion {
         this.airResistance = airResistance;
         this.timeStep = timeStep;
     }
-    
+
     /**
      * Simulates a projectile trajectory from initial conditions.
-     * 
+     *
      * @param gamePiece The game piece being shot
      * @param x0 Initial X position (m)
      * @param y0 Initial Y position (m)
@@ -143,24 +149,24 @@ public class ProjectileMotion {
             double velocity, double pitchAngle, double yawAngle,
             double spinRpm,
             double targetX, double targetY, double targetZ, double targetRadius) {
-        
+
         double horizontalVelocity = velocity * Math.cos(pitchAngle);
         double vx = horizontalVelocity * Math.cos(yawAngle);
         double vy = horizontalVelocity * Math.sin(yawAngle);
         double vz = velocity * Math.sin(pitchAngle);
         TrajectoryState state = new TrajectoryState(x0, y0, z0, vx, vy, vz, 0);
-        
+
         // Backspin axis is perpendicular to launch yaw
         double spinAxisX = -Math.sin(yawAngle);
         double spinAxisY = Math.cos(yawAngle);
         double spinAxisZ = 0;
-        
-        int maxPoints = (int)(PhysicsConstants.MAX_FLIGHT_TIME / SolverConstants.getTrajectorySampleIntervalSeconds()) + 1;
+
+        int maxPoints = (int) (PhysicsConstants.MAX_FLIGHT_TIME / SolverConstants.getTrajectorySampleIntervalSeconds()) + 1;
         TrajectoryState[] trajectory = new TrajectoryState[maxPoints];
         int pointCount = 0;
-        int sampleInterval = (int)(SolverConstants.getTrajectorySampleIntervalSeconds() / timeStep);
+        int sampleInterval = (int) (SolverConstants.getTrajectorySampleIntervalSeconds() / timeStep);
         int stepCount = 0;
-        
+
         double maxHeight = z0;
         double closestApproach = Double.MAX_VALUE;
         boolean hitTarget = false;
@@ -169,7 +175,7 @@ public class ProjectileMotion {
         TrajectoryState closestState = null;
         double entryAngleDeg = -1;  // Descent angle at rim crossing, -1 if never crosses
         double hDistAtCrossing = -1; // Horizontal distance from target at rim crossing
-        
+
         while (state.time < PhysicsConstants.MAX_FLIGHT_TIME && state.z >= 0) {
             if (stepCount % sampleInterval == 0 && pointCount < maxPoints) {
                 trajectory[pointCount++] = state.copy();
@@ -177,23 +183,23 @@ public class ProjectileMotion {
             if (state.z > maxHeight) {
                 maxHeight = state.z;
             }
-            
+
             // Detect when ball starts descending (past apex)
             if (state.z < prevZ && !pastApex) {
                 pastApex = true;
             }
-            
+
             double dx = state.x - targetX;
             double dy = state.y - targetY;
             double dz = state.z - targetZ;
             double distToTarget = Math.sqrt(dx * dx + dy * dy + dz * dz);
             double horizontalDistToTarget = Math.sqrt(dx * dx + dy * dy);
-            
+
             if (distToTarget < closestApproach) {
                 closestApproach = distToTarget;
                 closestState = state.copy();
             }
-            
+
             // Detect rim-plane crossing (ball descends through z = targetZ)
             if (pastApex && prevZ >= targetZ && state.z <= targetZ && targetZ > 0) {
                 // Compute entry angle (steepness of descent from horizontal)
@@ -201,7 +207,7 @@ public class ProjectileMotion {
                 double vSpeed = Math.abs(state.vz); // vz is negative when descending
                 entryAngleDeg = Math.toDegrees(Math.atan2(vSpeed, hSpeed));
                 hDistAtCrossing = horizontalDistToTarget;
-                
+
                 // Only count as a hit if entry is steep enough AND within target opening
                 if (entryAngleDeg >= SolverConstants.getMinEntryAngleDegrees()
                         && horizontalDistToTarget <= targetRadius) {
@@ -209,15 +215,15 @@ public class ProjectileMotion {
                 }
                 break; // Stop at rim crossing
             }
-            
+
             prevZ = state.z;
             state = integrateRK4(gamePiece, state, timeStep, spinRpm, spinAxisX, spinAxisY, spinAxisZ);
             stepCount++;
         }
-        
+
         TrajectoryState[] trimmedTrajectory = new TrajectoryState[pointCount];
         System.arraycopy(trajectory, 0, trimmedTrajectory, 0, pointCount);
-        
+
         // Fallback: if the ball never crossed the rim plane but got very close
         // while descending, still count it (e.g. ball lands just short of rim height)
         boolean descending = closestState != null && closestState.vz < 0;
@@ -233,9 +239,9 @@ public class ProjectileMotion {
                 hitTarget = true;
             }
         }
-        
+
         return new TrajectoryResult(trimmedTrajectory, hitTarget, closestApproach,
-            descending, entryAngleDeg, hDistAtCrossing, state, maxHeight, state.time);
+                descending, entryAngleDeg, hDistAtCrossing, state, maxHeight, state.time);
     }
 
     /**
@@ -247,11 +253,11 @@ public class ProjectileMotion {
             double targetX, double targetY, double targetZ, double targetRadius) {
         return simulate(gamePiece, x0, y0, z0, velocity, pitchAngle, yawAngle, 0, targetX, targetY, targetZ, targetRadius);
     }
-    
+
     /**
      * Calculates the required launch angle for a given distance and velocity.
      * Uses the high-arc solution (larger of two possible angles).
-     * 
+     *
      * @param distance Horizontal distance to target (m)
      * @param heightDiff Target height minus launch height (m)
      * @param velocity Launch velocity (m/s)
@@ -261,20 +267,20 @@ public class ProjectileMotion {
         double g = PhysicsConstants.GRAVITY;
         double v2 = velocity * velocity;
         double v4 = v2 * v2;
-        
+
         double discriminant = v4 - g * (g * distance * distance + 2 * heightDiff * v2);
-        
+
         if (discriminant < 0) {
-            return Double.NaN; 
+            return Double.NaN;
         }
-        
+
         double sqrtDisc = Math.sqrt(discriminant);
-        
+
         // High arc solution
         double tanThetaHigh = (v2 + sqrtDisc) / (g * distance);
         return Math.atan(tanThetaHigh);
     }
-    
+
     /**
      * Calculates the low-arc launch angle.
      */
@@ -282,38 +288,37 @@ public class ProjectileMotion {
         double g = PhysicsConstants.GRAVITY;
         double v2 = velocity * velocity;
         double v4 = v2 * v2;
-        
+
         double discriminant = v4 - g * (g * distance * distance + 2 * heightDiff * v2);
-        
+
         if (discriminant < 0) {
             return Double.NaN;
         }
-        
+
         double sqrtDisc = Math.sqrt(discriminant);
-        
+
         // Low arc solution
         double tanThetaLow = (v2 - sqrtDisc) / (g * distance);
         return Math.atan(tanThetaLow);
     }
-    
+
     /**
      * Calculates minimum velocity required to reach a target.
-     * 
+     *
      * @param distance Horizontal distance (m)
      * @param heightDiff Height difference (m)
      * @return Minimum required velocity (m/s)
      */
     public double calculateMinimumVelocity(double distance, double heightDiff) {
         double g = PhysicsConstants.GRAVITY;
-        
+
         // Minimum velocity occurs at 45 degrees for level ground
         // For elevated targets: v_min = sqrt(g * (h + sqrt(h^2 + d^2)))
         // where h = heightDiff, d = distance/
         // - Some dude from StackOverflow (????) idk
-        
         return Math.sqrt(g * (heightDiff + Math.sqrt(heightDiff * heightDiff + distance * distance)));
     }
-    
+
     /**
      * Calculates time of flight for ideal projectile motion.
      */
@@ -324,77 +329,77 @@ public class ProjectileMotion {
         }
         return distance / horizontalVelocity;
     }
-    
+
     /**
      * Calculates maximum height achieved in flight.
      */
     public double calculateMaxHeight(double launchHeight, double launchAngle, double velocity) {
         double vz = velocity * Math.sin(launchAngle);
         double g = PhysicsConstants.GRAVITY;
-        
+
         // Max height = h0 + vz^2 / (2g)
         return launchHeight + (vz * vz) / (2 * g);
     }
-    
+
     /**
      * Performs RK4 integration step for accurate trajectory simulation.
      */
-    private TrajectoryState integrateRK4(GamePiece gamePiece, TrajectoryState state, double dt, 
-                                         double spinRpm, double sax, double say, double saz) {
+    private TrajectoryState integrateRK4(GamePiece gamePiece, TrajectoryState state, double dt,
+            double spinRpm, double sax, double say, double saz) {
         // k1
         double[] a1 = calculateAcceleration(gamePiece, state.vx, state.vy, state.vz, spinRpm, sax, say, saz);
-        
+
         // k2
         double vx2 = state.vx + 0.5 * dt * a1[0];
         double vy2 = state.vy + 0.5 * dt * a1[1];
         double vz2 = state.vz + 0.5 * dt * a1[2];
         double[] a2 = calculateAcceleration(gamePiece, vx2, vy2, vz2, spinRpm, sax, say, saz);
-        
+
         // k3
         double vx3 = state.vx + 0.5 * dt * a2[0];
         double vy3 = state.vy + 0.5 * dt * a2[1];
         double vz3 = state.vz + 0.5 * dt * a2[2];
         double[] a3 = calculateAcceleration(gamePiece, vx3, vy3, vz3, spinRpm, sax, say, saz);
-        
+
         // k4
         double vx4 = state.vx + dt * a3[0];
         double vy4 = state.vy + dt * a3[1];
         double vz4 = state.vz + dt * a3[2];
         double[] a4 = calculateAcceleration(gamePiece, vx4, vy4, vz4, spinRpm, sax, say, saz);
-        
+
         // Weighted average
-        double ax = (a1[0] + 2*a2[0] + 2*a3[0] + a4[0]) / 6.0;
-        double ay = (a1[1] + 2*a2[1] + 2*a3[1] + a4[1]) / 6.0;
-        double az = (a1[2] + 2*a2[2] + 2*a3[2] + a4[2]) / 6.0;
-        
+        double ax = (a1[0] + 2 * a2[0] + 2 * a3[0] + a4[0]) / 6.0;
+        double ay = (a1[1] + 2 * a2[1] + 2 * a3[1] + a4[1]) / 6.0;
+        double az = (a1[2] + 2 * a2[2] + 2 * a3[2] + a4[2]) / 6.0;
+
         // Update velocity
         double newVx = state.vx + dt * ax;
         double newVy = state.vy + dt * ay;
         double newVz = state.vz + dt * az;
-        
+
         // Update position (average velocity method)
         double avgVx = (state.vx + newVx) / 2.0;
         double avgVy = (state.vy + newVy) / 2.0;
         double avgVz = (state.vz + newVz) / 2.0;
-        
+
         double newX = state.x + dt * avgVx;
         double newY = state.y + dt * avgVy;
         double newZ = state.z + dt * avgVz;
-        
+
         return new TrajectoryState(newX, newY, newZ, newVx, newVy, newVz, state.time + dt);
     }
-    
+
     /**
      * Calculates acceleration from gravity, drag, and Magnus effect.
      */
     private double[] calculateAcceleration(GamePiece gamePiece, double vx, double vy, double vz,
-                                           double spinRpm, double sax, double say, double saz) {
+            double spinRpm, double sax, double say, double saz) {
         double[] dragAccel = airResistance.calculateDragAcceleration(gamePiece, vx, vy, vz);
-        
+
         double ax = dragAccel[0];
         double ay = dragAccel[1];
         double az = dragAccel[2] - PhysicsConstants.GRAVITY;
-        
+
         if (spinRpm != 0) {
             double[] magnusForce = airResistance.calculateMagnusForce(gamePiece, vx, vy, vz, spinRpm, sax, say, saz);
             double mass = gamePiece.getMassKg();
@@ -402,14 +407,14 @@ public class ProjectileMotion {
             ay += magnusForce[1] / mass;
             az += magnusForce[2] / mass;
         }
-        
-        return new double[]{ ax, ay, az };
+
+        return new double[]{ax, ay, az};
     }
-    
+
     /**
      * Iteratively solves for the launch angle needed to hit a target,
      * accounting for air resistance and magnus effect.
-     * 
+     *
      * @param gamePiece The game piece
      * @param x0 Launch X position (m)
      * @param y0 Launch Y position (m)
@@ -427,16 +432,16 @@ public class ProjectileMotion {
             double targetX, double targetY, double targetZ,
             double targetRadius,
             boolean preferHighArc, double spinRpm) {
-        
+
         double horizontalDistance = Math.sqrt(
-            Math.pow(targetX - x0, 2) + Math.pow(targetY - y0, 2));
+                Math.pow(targetX - x0, 2) + Math.pow(targetY - y0, 2));
         double heightDiff = targetZ - z0;
         double yawAngle = Math.atan2(targetY - y0, targetX - x0);
-        
-        double angle = preferHighArc ? 
-            calculateHighArcAngle(horizontalDistance, heightDiff, velocity) :
-            calculateLowArcAngle(horizontalDistance, heightDiff, velocity);
-        
+
+        double angle = preferHighArc
+                ? calculateHighArcAngle(horizontalDistance, heightDiff, velocity)
+                : calculateLowArcAngle(horizontalDistance, heightDiff, velocity);
+
         // If analytical solution fails, try a broader search
         // The analytical solution doesn't account for air resistance and spin
         // which can allow shots that seem impossible in vacuum physics
@@ -444,25 +449,25 @@ public class ProjectileMotion {
             // Try a sweep to find any viable angle
             double bestAngle = Double.NaN;
             double bestApproach = Double.MAX_VALUE;
-            
+
             double sweepMin = MIN_ANGLE_BOUND;
             double sweepMax = Math.PI / 2 - HIGH_ARC_MAX_OFFSET;
             double sweepStep = ANGLE_SWEEP_STEP;
-            
+
             for (double testAngle = sweepMin; testAngle < sweepMax; testAngle += sweepStep) {
-                TrajectoryResult result = simulate(gamePiece, x0, y0, z0, 
-                    velocity, testAngle, yawAngle, spinRpm, targetX, targetY, targetZ, targetRadius);
-                
+                TrajectoryResult result = simulate(gamePiece, x0, y0, z0,
+                        velocity, testAngle, yawAngle, spinRpm, targetX, targetY, targetZ, targetRadius);
+
                 if (result.hitTarget) {
                     return testAngle;
                 }
-                
+
                 if (result.closestApproach < bestApproach) {
                     bestApproach = result.closestApproach;
                     bestAngle = testAngle;
                 }
             }
-            
+
             // If we found something reasonably close, use it
             if (bestApproach <= targetRadius * SolverConstants.getHoopToleranceMultiplier()) {
                 angle = bestAngle;
@@ -470,14 +475,14 @@ public class ProjectileMotion {
                 return Double.NaN;
             }
         }
-        
+
         if (!airResistance.isEnabled()) {
             return angle;
         }
-        
+
         double angleLow = MIN_ANGLE_BOUND;
         double angleHigh = Math.PI / 2 - MAX_ANGLE_OFFSET;
-        
+
         if (preferHighArc) {
             angleLow = angle * HIGH_ARC_LOW_BOUND_MULT;
             angleHigh = Math.PI / 2 - HIGH_ARC_MAX_OFFSET;
@@ -485,45 +490,47 @@ public class ProjectileMotion {
             angleLow = LOW_ARC_MIN_BOUND;
             angleHigh = angle * LOW_ARC_HIGH_BOUND_MULT;
         }
-        
+
         for (int i = 0; i < PhysicsConstants.MAX_ITERATIONS * 2; i++) {
             angle = (angleLow + angleHigh) / 2.0;
-            
-            TrajectoryResult result = simulate(gamePiece, x0, y0, z0, 
-                velocity, angle, yawAngle, spinRpm, targetX, targetY, targetZ, targetRadius);
-            
+
+            TrajectoryResult result = simulate(gamePiece, x0, y0, z0,
+                    velocity, angle, yawAngle, spinRpm, targetX, targetY, targetZ, targetRadius);
+
             if (result.hitTarget) {
                 return angle;
             }
 
             double minHorizDist = Double.MAX_VALUE;
             TrajectoryState closestState = null;
-            
+
             for (TrajectoryState state : result.trajectory) {
-                if (state == null) break;
+                if (state == null) {
+                    break;
+                }
                 double horizDist = Math.sqrt(
-                    Math.pow(state.x - targetX, 2) + Math.pow(state.y - targetY, 2));
+                        Math.pow(state.x - targetX, 2) + Math.pow(state.y - targetY, 2));
                 if (horizDist < minHorizDist) {
                     minHorizDist = horizDist;
                     closestState = state;
                 }
             }
-            
+
             if (closestState == null) {
                 break;
             }
-            
+
             if (closestState.z > targetZ) {
                 angleHigh = angle;
             } else {
                 angleLow = angle;
             }
-            
+
             if (angleHigh - angleLow < ANGLE_CONVERGENCE) {
-                break; 
+                break;
             }
         }
-        
+
         return angle;
     }
 
@@ -533,11 +540,12 @@ public class ProjectileMotion {
             boolean preferHighArc) {
         return solveForAngle(gamePiece, x0, y0, z0, velocity, targetX, targetY, targetZ, 0.05, preferHighArc, 0);
     }
-    
+
     /**
      * Result of evaluating a single angle candidate.
      */
     public static class AngleEvaluation {
+
         public final double pitchRadians;
         public final double velocity;
         public final TrajectoryResult trajectory;
@@ -545,7 +553,7 @@ public class ProjectileMotion {
         public final double closestApproach;
         public final double timeOfFlight;
         public final double maxHeight;
-        
+
         public AngleEvaluation(double pitchRadians, double velocity, TrajectoryResult trajectory) {
             this.pitchRadians = pitchRadians;
             this.velocity = velocity;
@@ -555,16 +563,17 @@ public class ProjectileMotion {
             this.timeOfFlight = trajectory.flightTime;
             this.maxHeight = trajectory.maxHeight;
         }
-        
+
         public double getPitchDegrees() {
             return Math.toDegrees(pitchRadians);
         }
     }
-    
+
     /**
      * Finds all valid launch angles that can potentially hit the target.
-     * Iterates through angle range in O(n) time where n = (maxAngle - minAngle) / stepSize.
-     * 
+     * Iterates through angle range in O(n) time where n = (maxAngle - minAngle)
+     * / stepSize.
+     *
      * @param gamePiece The game piece being shot
      * @param x0 Launch X position (m)
      * @param y0 Launch Y position (m)
@@ -585,37 +594,37 @@ public class ProjectileMotion {
             double targetX, double targetY, double targetZ,
             double targetRadius, double spinRpm,
             double minAngleDegrees, double maxAngleDegrees, double angleStepDegrees) {
-        
+
         double yawAngle = Math.atan2(targetY - y0, targetX - x0);
-        
-        int numSteps = (int)Math.ceil((maxAngleDegrees - minAngleDegrees) / angleStepDegrees) + 1;
+
+        int numSteps = (int) Math.ceil((maxAngleDegrees - minAngleDegrees) / angleStepDegrees) + 1;
         AngleEvaluation[] results = new AngleEvaluation[numSteps];
         int count = 0;
-        
+
         for (double angleDeg = minAngleDegrees; angleDeg <= maxAngleDegrees && count < numSteps; angleDeg += angleStepDegrees) {
             double angleRad = Math.toRadians(angleDeg);
-            
+
             TrajectoryResult trajResult = simulate(gamePiece, x0, y0, z0,
-                velocity, angleRad, yawAngle, spinRpm,
-                targetX, targetY, targetZ, targetRadius);
-            
+                    velocity, angleRad, yawAngle, spinRpm,
+                    targetX, targetY, targetZ, targetRadius);
+
             results[count++] = new AngleEvaluation(angleRad, velocity, trajResult);
         }
-        
+
         // Trim array to actual size
         if (count < results.length) {
             AngleEvaluation[] trimmed = new AngleEvaluation[count];
             System.arraycopy(results, 0, trimmed, 0, count);
             return trimmed;
         }
-        
+
         return results;
     }
-    
+
     /**
-     * Calculates the required velocity to hit a target at a given angle.
-     * Uses analytical solution for ideal projectile motion.
-     * 
+     * Calculates the required velocity to hit a target at a given angle. Uses
+     * analytical solution for ideal projectile motion.
+     *
      * @param distance Horizontal distance to target (m)
      * @param heightDiff Height difference (target - launch) (m)
      * @param pitchRadians Launch angle in radians
@@ -626,28 +635,24 @@ public class ProjectileMotion {
         double sinTheta = Math.sin(pitchRadians);
         double cosTheta = Math.cos(pitchRadians);
         double tanTheta = sinTheta / cosTheta;
-        
-        // From projectile equations:
-        
+
         // heightDiff = distance * tan(theta) - g * distance^2 / (2 * v^2 * cos^2(theta))
-        // Solving for v:
         // v^2 = g * distance^2 / (2 * cos^2(theta) * (distance * tan(theta) - heightDiff))
-        
         double denominator = 2 * cosTheta * cosTheta * (distance * tanTheta - heightDiff);
-        
+
         if (denominator <= 0) {
-            return Double.NaN; // Angle too low or target unreachable at this angle
+            return Double.NaN;
         }
-        
+
         double v2 = g * distance * distance / denominator;
         return Math.sqrt(v2);
     }
-    
+
     /**
-     * Finds all valid angles with their required velocities.
-     * For each angle, calculates the minimum velocity needed to reach target.
-     * This is O(n) where n = (maxAngle - minAngle) / stepSize.
-     * 
+     * Finds all valid angles with their required velocities. For each angle,
+     * calculates the minimum velocity needed to reach target. This is O(n)
+     * where n = (maxAngle - minAngle) / stepSize.
+     *
      * @param gamePiece The game piece being shot
      * @param x0 Launch X position (m)
      * @param y0 Launch Y position (m)
@@ -670,26 +675,23 @@ public class ProjectileMotion {
             double targetRadius, double spinRpm,
             double minAngleDegrees, double maxAngleDegrees, double angleStepDegrees,
             double minVelocity, double maxVelocity) {
-        
+
         double horizontalDistance = Math.sqrt(
-            Math.pow(targetX - x0, 2) + Math.pow(targetY - y0, 2));
+                Math.pow(targetX - x0, 2) + Math.pow(targetY - y0, 2));
         double heightDiff = targetZ - z0;
         double yawAngle = Math.atan2(targetY - y0, targetX - x0);
-        
-        int numSteps = (int)Math.ceil((maxAngleDegrees - minAngleDegrees) / angleStepDegrees) + 1;
+
+        int numSteps = (int) Math.ceil((maxAngleDegrees - minAngleDegrees) / angleStepDegrees) + 1;
         AngleEvaluation[] tempResults = new AngleEvaluation[numSteps];
         int validCount = 0;
-        
+
         for (double angleDeg = minAngleDegrees; angleDeg <= maxAngleDegrees; angleDeg += angleStepDegrees) {
             double angleRad = Math.toRadians(angleDeg);
-            
-            // Calculate ideal required velocity for this angle
             double idealVelocity = calculateRequiredVelocity(horizontalDistance, heightDiff, angleRad);
-            
             if (Double.isNaN(idealVelocity) || idealVelocity < minVelocity || idealVelocity > maxVelocity) {
-                continue; // Skip invalid angles
+                continue;
             }
-            
+
             double velocity = idealVelocity;
             if (airResistance.isEnabled()) {
                 // Change !?
@@ -698,24 +700,23 @@ public class ProjectileMotion {
                     velocity = maxVelocity;
                 }
             }
-            
-            // Simulate to verify
+
             TrajectoryResult trajResult = simulate(gamePiece, x0, y0, z0,
-                velocity, angleRad, yawAngle, spinRpm,
-                targetX, targetY, targetZ, targetRadius);
-            
+                    velocity, angleRad, yawAngle, spinRpm,
+                    targetX, targetY, targetZ, targetRadius);
+
             tempResults[validCount++] = new AngleEvaluation(angleRad, velocity, trajResult);
         }
-        
+
         AngleEvaluation[] results = new AngleEvaluation[validCount];
         System.arraycopy(tempResults, 0, results, 0, validCount);
         return results;
     }
-    
+
     public AirResistance getAirResistance() {
         return airResistance;
     }
-    
+
     public double getTimeStep() {
         return timeStep;
     }

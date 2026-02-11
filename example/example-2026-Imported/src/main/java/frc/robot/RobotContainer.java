@@ -95,7 +95,7 @@ public class RobotContainer {
         if (alliance.isPresent() && alliance.get() == DriverStation.Alliance.Red) {
             m_shooter.setTarget(12.0, 4.0, goalZ);
         } else {
-            m_shooter.setTarget(4.0, 4.0, goalZ);
+            m_shooter.setTarget(5.0, 4.0, goalZ);
         }
     }
 

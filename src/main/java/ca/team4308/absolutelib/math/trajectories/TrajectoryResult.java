@@ -18,9 +18,9 @@ public class TrajectoryResult {
 
     /**
      * Returns a list of Pose3d objects representing the flight path for
-     * visualization. This uses the simulated trajectory from the solver.
-     * The trajectory naturally terminates when the ball lands at the target (on descent).
-     * Returns an empty list if no valid solution exists.
+     * visualization. This uses the simulated trajectory from the solver. The
+     * trajectory naturally terminates when the ball lands at the target (on
+     * descent). Returns an empty list if no valid solution exists.
      */
     public List<Pose3d> getFlightPath() {
         // Only provide a path if the solution is successful and input is available
@@ -41,12 +41,14 @@ public class TrajectoryResult {
                     input.getShooterYaw(),
                     0, // spinRpm (not tracked in result)
                     input.getTargetX(), input.getTargetY(), input.getTargetZ(),
-                    0  // targetRadius=0 to prevent early termination
+                    0 // targetRadius=0 to prevent early termination
             );
-            
+
             int validCount = 0;
             for (int i = 0; i < simResult.trajectory.length; i++) {
-                if (simResult.trajectory[i] == null) break;
+                if (simResult.trajectory[i] == null) {
+                    break;
+                }
                 validCount++;
             }
 
@@ -59,7 +61,9 @@ public class TrajectoryResult {
             double closestDist2 = Double.MAX_VALUE;
             for (int i = 0; i < validCount; i++) {
                 ca.team4308.absolutelib.math.trajectories.physics.ProjectileMotion.TrajectoryState s = simResult.trajectory[i];
-                if (s == null) break;
+                if (s == null) {
+                    break;
+                }
                 double dx = s.x - tX;
                 double dy = s.y - tY;
                 double dz = s.z - tZ;
@@ -76,7 +80,9 @@ public class TrajectoryResult {
             List<Pose3d> path = new ArrayList<>();
             for (int i = 0; i < endIndex; i++) {
                 ca.team4308.absolutelib.math.trajectories.physics.ProjectileMotion.TrajectoryState state = simResult.trajectory[i];
-                if (state == null) break;
+                if (state == null) {
+                    break;
+                }
                 Translation3d translation = new Translation3d(state.x, state.y, state.z);
                 Rotation3d rotation = new Rotation3d(
                         0.0,
@@ -360,8 +366,10 @@ public class TrajectoryResult {
     }
 
     /**
-     * Returns debug information from the solver run, or null if debug mode was not enabled.
-     * Contains rejection reasons for every tested angle and all candidate trajectory paths.
+     * Returns debug information from the solver run, or null if debug mode was
+     * not enabled. Contains rejection reasons for every tested angle and all
+     * candidate trajectory paths.
+     *
      * @see TrajectorySolver#setDebugEnabled(boolean)
      */
     public SolveDebugInfo getDebugInfo() {
@@ -382,39 +390,15 @@ public class TrajectoryResult {
         }
 
         StringBuilder sb = new StringBuilder();
-        sb.append("=== TRAJECTORY SOLUTION ===\n");
+        sb.append("TRAJECTORY SOLUTION\n");
         sb.append(String.format("Status: %s (%.0f%% confidence)\n", status, confidenceScore));
-        sb.append("\n--- SHOT PARAMETERS ---\n");
+        sb.append("\n SHOT PARAMETERS \n");
         sb.append(String.format("Pitch Angle: %.2f° (%.4f rad)\n", getPitchAngleDegrees(), pitchAngleRadians));
         sb.append(String.format("Yaw Adjustment: %.2f°\n", getYawAdjustmentDegrees()));
         sb.append(String.format("Required Velocity: %.2f m/s (%.1f fps)\n", requiredVelocityMps, getRequiredVelocityFps()));
         sb.append(String.format("Time of Flight: %.3f seconds\n", timeOfFlightSeconds));
         sb.append(String.format("Max Height: %.2f m (%.1f ft)\n", maxHeightMeters, getMaxHeightFeet()));
         sb.append(String.format("Margin of Error: %.3f m (%.1f in)\n", marginOfErrorMeters, marginOfErrorMeters / 0.0254));
-
-        if (recommendedFlywheel != null) {
-            sb.append("\n--- FLYWHEEL RECOMMENDATION ---\n");
-            sb.append(String.format("Configuration: %s\n", recommendedFlywheel.getName()));
-            sb.append(String.format("Wheel Diameter: %.1f inches\n", getRecommendedWheelDiameterInches()));
-            sb.append(String.format("Durometer: %dA\n", getRecommendedDurometer()));
-            sb.append(String.format("Arrangement: %s\n", recommendedFlywheel.getArrangement()));
-            sb.append(String.format("Motor: %s\n", recommendedFlywheel.getMotor().getName()));
-            if (flywheelSimulation != null) {
-                sb.append(String.format("RPM: %.0f (%.1f%% power)\n",
-                        recommendedRpm, flywheelSimulation.motorPowerPercent * 100));
-                sb.append(String.format("Efficiency: %.1f%%\n", flywheelSimulation.energyTransferEfficiency * 100));
-                sb.append(String.format("Spin-up Time: %.2f seconds\n", flywheelSimulation.spinUpTimeSeconds));
-            } else {
-                sb.append(String.format("RPM: %.0f\n", recommendedRpm));
-            }
-        }
-
-        if (discreteSolution != null) {
-            sb.append("\n--- DISCRETE SOLUTION ---\n");
-            sb.append(String.format("Discrete RPM: %.0f (tick: %d)\n", discreteSolution.rpmValue, discreteSolution.rpmTicks));
-            sb.append(String.format("Discrete Angle: %.2f° (tick: %d)\n", discreteSolution.pitchAngleDegrees, discreteSolution.angleTicks));
-            sb.append(String.format("Score: %.2f\n", discreteSolution.score));
-        }
 
         return sb.toString();
     }

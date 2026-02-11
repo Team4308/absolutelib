@@ -5,35 +5,32 @@ import ca.team4308.absolutelib.math.trajectories.TrajectoryResult;
 import ca.team4308.absolutelib.math.trajectories.TrajectorySolver;
 
 /**
- * Hybrid shooter system that combines a lookup table, physics solver, RPM
- * feedback, and movement compensation into a single easy-to-use API.
- * 
- * <h2>Design Goals</h2>
+ * High-level manager for the robot's shooting subsystem.
+ * <p>
+ * <b>Responsibilities:</b>
  * <ul>
- *   <li>Reliable in matches — lookup table as primary source</li>
- *   <li>Easy to tune on the practice field — just add table entries</li>
- *   <li>Safe if math or sensors fail — safety validator + fallback</li>
- *   <li>Stable under battery sag and wear — RPM feedback correction</li>
- *   <li>Fast to compute, low memory — small fixed arrays, simple math</li>
+ * <li><b>Strategy Selection:</b> Decides whether to use the Lookup Table (fast,
+ * reliable) or the {@link TrajectorySolver} (flexible, physics-based).</li>
+ * <li><b>Safety:</b> Prevents unsafe shots using {@link SafetyValidator}.</li>
+ * <li><b>Hardware Integration:</b> Manages RPM correction and movement
+ * compensation.</li>
  * </ul>
- * 
+ * <p>
+ * <b>Difference from TrajectorySolver:</b>
+ * <br> {@link TrajectorySolver} is the <i>Calculator</i> that performs pure
+ * physics math to find the necessary angle/velocity. {@code ShooterSystem} is
+ * the <i>Manager</i> that uses that calculation to control the robot.
+ * <p>
  * <h3>Usage</h3>
  * <pre>{@code
- * ShooterConfig config = ShooterConfig.defaults2026();
- * ShotLookupTable table = new ShotLookupTable()
- *     .addEntry(1.5, 75.0, 2000)
- *     .addEntry(3.0, 60.0, 3200)
- *     .addEntry(5.0, 50.0, 4200);
- * TrajectorySolver solver = TrajectorySolver.forGame2026();
- * 
  * ShooterSystem system = new ShooterSystem(config, table, solver);
  * system.setMode(ShotMode.LOOKUP_WITH_SOLVER_FALLBACK);
- * 
- * // In periodic():
- * ShotParameters shot = system.calculate(distanceM, measuredRpm, vx, vy, yawRad);
+ *
+ * // In periodic:
+ * ShotParameters shot = system.calculate(dist, rpm, vx, vy, yaw);
  * if (shot.valid) {
- *     pivot.setAngle(shot.pitchDegrees);
- *     flywheel.setRPM(shot.rpm);
+ *     pivot.setPosition(shot.pitchDegrees);
+ *     flywheel.setVelocity(shot.rpm);
  * }
  * }</pre>
  */
@@ -59,14 +56,16 @@ public final class ShooterSystem {
     private String lastSourceDescription = "none";
     private TrajectoryResult lastTrajectoryResult;
 
-    private ShotInput.Builder solverInputTemplate = null;
+    private ShotInput solverInput = null;
 
     /**
      * Creates a new shooter system.
-     * 
-     * @param config      shooter configuration
-     * @param lookupTable pre-populated lookup table (can be empty for solver-only mode)
-     * @param solver      trajectory solver instance (can be null for lookup-only mode)
+     *
+     * @param config shooter configuration
+     * @param lookupTable pre-populated lookup table (can be empty for
+     * solver-only mode)
+     * @param solver trajectory solver instance (can be null for lookup-only
+     * mode)
      */
     public ShooterSystem(ShooterConfig config, ShotLookupTable lookupTable, TrajectorySolver solver) {
         this.config = config;
@@ -87,56 +86,56 @@ public final class ShooterSystem {
         this.mode = ShotMode.LOOKUP_ONLY;
     }
 
-    /** Sets the operating mode. */
     public void setMode(ShotMode mode) {
         this.mode = mode;
     }
 
-    /** Returns the current operating mode. */
     public ShotMode getMode() {
         return mode;
     }
 
-    /** Sets the blend factor for {@link ShotMode#BLENDED} mode (0 = all lookup, 1 = all solver). */
     public void setBlendFactor(double factor) {
         this.blendFactor = Math.max(0, Math.min(1, factor));
     }
 
-    /** Sets manual override values for {@link ShotMode#MANUAL} mode. */
     public void setManualOverride(double pitchDegrees, double rpm) {
         this.manualPitchDegrees = pitchDegrees;
         this.manualRpm = rpm;
     }
 
-    /** Sets the fallback safe shot used when all calculations fail. */
     public void setFallbackShot(double pitchDegrees, double rpm) {
         this.fallbackShot = new ShotParameters(pitchDegrees, rpm,
                 config.rpmToVelocity(rpm), 0, ShotParameters.Source.FALLBACK);
     }
 
     /**
-     * Sets a template for solver inputs. This provides the solver with
-     * shooter/target positions and other parameters. Must be set for solver modes.
+     * Updates the input parameters for the solver.
+     * <p>
+     * Must be called periodically to provide the solver with the latest
+     * robot/target state.
+     *
+     * @param input the populated shot input
      */
-    public void setSolverInputTemplate(ShotInput.Builder template) {
-        this.solverInputTemplate = template;
+    public void setSolverInput(ShotInput input) {
+        this.solverInput = input;
     }
 
     /**
      * Calculates shot parameters for the given conditions.
-     * 
-     * <p>This is the main entry point. Call once per loop iteration.</p>
-     * 
-     * @param distanceMeters   horizontal distance to target
-     * @param measuredRpm      current flywheel RPM from sensors (0 if not available)
-     * @param robotVxMps       field-relative X velocity (0 if stationary)
-     * @param robotVyMps       field-relative Y velocity (0 if stationary)
-     * @param yawToTargetRad   yaw angle from robot to target in radians
+     *
+     * <p>
+     * This is the main entry point. Call once per loop iteration.</p>
+     *
+     * @param distanceMeters horizontal distance to target
+     * @param measuredRpm current flywheel RPM from sensors (0 if not available)
+     * @param robotVxMps field-relative X velocity (0 if stationary)
+     * @param robotVyMps field-relative Y velocity (0 if stationary)
+     * @param yawToTargetRad yaw angle from robot to target in radians
      * @return validated shot parameters ready for use
      */
     public ShotParameters calculate(double distanceMeters, double measuredRpm,
-                                    double robotVxMps, double robotVyMps,
-                                    double yawToTargetRad) {
+            double robotVxMps, double robotVyMps,
+            double yawToTargetRad) {
         SafetyValidator.ValidationResult distCheck = safetyValidator.validateDistance(distanceMeters);
         if (!distCheck.safe) {
             lastResult = fallbackShot;
@@ -244,22 +243,23 @@ public final class ShooterSystem {
 
     /**
      * Full pre-fire readiness check. Call this before actually shooting.
-     * 
+     *
      * @param measuredRpm current flywheel RPM
      * @return true if all safety checks pass and flywheel is at speed
      */
     public boolean isReadyToFire(double measuredRpm) {
-        if (!lastResult.valid) return false;
+        if (!lastResult.valid) {
+            return false;
+        }
         return safetyValidator.validateReadyToFire(lastResult, measuredRpm).safe;
     }
 
     private ShotParameters solveWithSolver(double distanceMeters, double yawToTargetRad) {
-        if (solver == null || solverInputTemplate == null) {
+        if (solver == null || solverInput == null) {
             return ShotParameters.invalid("Solver not configured");
         }
         try {
-            ShotInput input = solverInputTemplate.build();
-            TrajectoryResult result = solver.solve(input);
+            TrajectoryResult result = solver.solve(solverInput);
             lastTrajectoryResult = result;
             if (result.isSuccess()) {
                 double pitch = result.getPitchAngleDegrees();
@@ -293,29 +293,46 @@ public final class ShooterSystem {
         return ShotParameters.invalid("Both lookup and solver failed");
     }
 
-    /** Returns the last calculated shot parameters. */
-    public ShotParameters getLastResult() { return lastResult; }
+    public ShotParameters getLastResult() {
+        return lastResult;
+    }
 
-    /** Returns a human-readable description of the last source used. */
-    public String getLastSourceDescription() { return lastSourceDescription; }
+    public String getLastSourceDescription() {
+        return lastSourceDescription;
+    }
 
-    /** Returns the last safety validation result. */
-    public SafetyValidator.ValidationResult getLastValidation() { return lastValidation; }
+    public SafetyValidator.ValidationResult getLastValidation() {
+        return lastValidation;
+    }
 
-    /** Returns the underlying config. */
-    public ShooterConfig getConfig() { return config; }
+    public ShooterConfig getConfig() {
+        return config;
+    }
 
-    /** Returns the lookup table for adding entries at runtime. */
-    public ShotLookupTable getLookupTable() { return lookupTable; }
+    public ShotLookupTable getLookupTable() {
+        return lookupTable;
+    }
 
-    /** Returns the RPM corrector for direct access. */
-    public RPMCorrector getRpmCorrector() { return rpmCorrector; }
+    /**
+     * Returns the RPM corrector for direct access.
+     */
+    public RPMCorrector getRpmCorrector() {
+        return rpmCorrector;
+    }
 
-    /** Returns the movement compensator for direct access. */
-    public MovementCompensator getMovementCompensator() { return movementCompensator; }
+    /**
+     * Returns the movement compensator for direct access.
+     */
+    public MovementCompensator getMovementCompensator() {
+        return movementCompensator;
+    }
 
-    /** Returns the safety validator for direct access. */
-    public SafetyValidator getSafetyValidator() { return safetyValidator; }
+    /**
+     * Returns the safety validator for direct access.
+     */
+    public SafetyValidator getSafetyValidator() {
+        return safetyValidator;
+    }
 
     /**
      * Returns the last trajectory result from the solver, or null if the solver
@@ -323,10 +340,16 @@ public final class ShooterSystem {
      *
      * @return the last trajectory result, or null
      */
-    public TrajectoryResult getLastTrajectoryResult() { return lastTrajectoryResult; }
+    public TrajectoryResult getLastTrajectoryResult() {
+        return lastTrajectoryResult;
+    }
 
-    /** Returns the underlying trajectory solver, or null if not configured. */
-    public TrajectorySolver getSolver() { return solver; }
+    /**
+     * Returns the underlying trajectory solver, or null if not configured.
+     */
+    public TrajectorySolver getSolver() {
+        return solver;
+    }
 
     private static double lerp(double a, double b, double t) {
         return a + (b - a) * t;

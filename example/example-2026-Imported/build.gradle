@@ -3,7 +3,6 @@ plugins {
     id "edu.wpi.first.GradleRIO" version "2026.2.1"
 }
 
-// Add mavenLocal first so it finds the locally published absolutelib
 repositories {
     mavenLocal()
 }

@@ -24,7 +24,6 @@ import frc.robot.subsystems.Util.FuelSim;
 import java.util.List;
 import java.util.function.Supplier;
 
-
 public class ExampleShooter extends AbsoluteSubsystem {
 
     private final MotorWrapper flywheelLeader;
@@ -43,7 +42,7 @@ public class ExampleShooter extends AbsoluteSubsystem {
 
     private double shooterHeightMeters = 0.5;
     private Translation2d shooterOffset = new Translation2d(0.1, 0.1);
-    private Translation3d targetPosition = new Translation3d(6.0, 0.0, 2.1);
+    private Translation3d targetPosition = new Translation3d(4.0, 0.0, 2.1);
     private boolean trackingEnabled = true;
 
     public ExampleShooter() {
@@ -53,8 +52,8 @@ public class ExampleShooter extends AbsoluteSubsystem {
 
         ShooterConfig config = ShooterConfig.builder()
                 .pitchLimits(47.5, 82.5)
-                .rpmLimits(500, 6000)
-                .rpmToVelocityFactor(0.00532) 
+                .rpmLimits(0, 6000) // Kraken xt60 max rpm
+                .rpmToVelocityFactor(0.00532)
                 .distanceLimits(0.5, 12.0)
                 .rpmFeedbackThreshold(50.0)
                 .rpmAbortThreshold(500.0)
@@ -63,9 +62,9 @@ public class ExampleShooter extends AbsoluteSubsystem {
                 .movingIterations(5)
                 .safetyMaxExitVelocity(30.0)
                 .build();
-
+        // All these values are made up your must tune them irl for best results
         ShotLookupTable table = new ShotLookupTable()
-                .addEntry(1.0, 78.0, 1000)   
+                .addEntry(1.0, 78.0, 1000)
                 .addEntry(1.5, 75.0, 1100)
                 .addEntry(2.0, 72.0, 1300)
                 .addEntry(2.5, 68.0, 1500)
@@ -87,36 +86,69 @@ public class ExampleShooter extends AbsoluteSubsystem {
                 .maxPitchDegrees(82.5)
                 .build();
         solver = new TrajectorySolver(gamePiece, solverConfig);
-        
-        // CONSTRAINT or SWEEP
-        solver.setSolveMode(TrajectorySolver.SolveMode.CONSTRAINT);
+        // Sweep looks for the best angle by testing many candidates, good for long distances and tight tolerances. Iterative is faster but less thorough, good for close targets and quick updates.
+        solver.setSolveMode(TrajectorySolver.SolveMode.SWEEP);
 
+        // Shooter system with both solver and lookup table, falls back to table if no valid solution from solver
         shooterSystem = new ShooterSystem(config, table, solver);
-        shooterSystem.setMode(ShotMode.SOLVER_ONLY);
+        shooterSystem.setMode(ShotMode.SOLVER_WITH_LOOKUP_FALLBACK);
         shooterSystem.setFallbackShot(60.0, 3000);
 
         solver.setDebugEnabled(true);
     }
 
-    public void setPoseSupplier(Supplier<Pose2d> supplier) { this.poseSupplier = supplier; }
-    public void setChassisSpeedsSupplier(Supplier<ChassisSpeeds> supplier) { this.chassisSpeedsSupplier = supplier; }
-    public void setCurrentRpmSupplier(Supplier<Double> supplier) { this.currentRpmSupplier = supplier; }
-    public void setShooterHeight(double meters) { this.shooterHeightMeters = meters; }
-    public void setShooterOffset(Translation2d offset) { this.shooterOffset = offset; }
-    public void setTarget(double x, double y, double z) { this.targetPosition = new Translation3d(x, y, z); }
-    public void setTrackingEnabled(boolean enabled) { this.trackingEnabled = enabled; }
-    public boolean isTrackingEnabled() { return trackingEnabled; }
-    public void setPitchLimits(double min, double max) { }
+    public void setPoseSupplier(Supplier<Pose2d> supplier) {
+        this.poseSupplier = supplier;
+    }
 
-    /** Change the shot mode at runtime (e.g. from dashboard or button). */
-    public void setMode(ShotMode mode) { shooterSystem.setMode(mode); }
-    public ShotMode getMode() { return shooterSystem.getMode(); }
+    public void setChassisSpeedsSupplier(Supplier<ChassisSpeeds> supplier) {
+        this.chassisSpeedsSupplier = supplier;
+    }
 
-    /** Set manual override values for MANUAL mode. */
+    public void setCurrentRpmSupplier(Supplier<Double> supplier) {
+        this.currentRpmSupplier = supplier;
+    }
+
+    public void setShooterHeight(double meters) {
+        this.shooterHeightMeters = meters;
+    }
+
+    public void setShooterOffset(Translation2d offset) {
+        this.shooterOffset = offset;
+    }
+
+    public void setTarget(double x, double y, double z) {
+        this.targetPosition = new Translation3d(x, y, z);
+    }
+
+    public void setTrackingEnabled(boolean enabled) {
+        this.trackingEnabled = enabled;
+    }
+
+    public boolean isTrackingEnabled() {
+        return trackingEnabled;
+    }
+
+    public void setPitchLimits(double min, double max) {
+    }
+
+    /**
+     * Change the shot mode at runtime (e.g. from dashboard or button).
+     */
+    public void setMode(ShotMode mode) {
+        shooterSystem.setMode(mode);
+    }
+
+    public ShotMode getMode() {
+        return shooterSystem.getMode();
+    }
+
+    /**
+     * Set manual override values for MANUAL mode.
+     */
     public void setManualOverride(double pitchDegrees, double rpm) {
         shooterSystem.setManualOverride(pitchDegrees, rpm);
     }
-
 
     @Override
     public void periodic() {
@@ -147,7 +179,7 @@ public class ExampleShooter extends AbsoluteSubsystem {
 
         Pose3d goalPose = new Pose3d(targetPosition, new Rotation3d());
         Logger.recordOutput("ExampleShooter/GoalPose3d", goalPose);
-        Logger.recordOutput("ExampleShooter/GoalPose3dArray", new Pose3d[] { goalPose });
+        Logger.recordOutput("ExampleShooter/GoalPose3dArray", new Pose3d[]{goalPose});
 
         Pose3d shooterYawPose = new Pose3d(new Translation3d(0, 0, 0), new Rotation3d(0, 0, Math.toRadians(targetYawDegrees)));
         Logger.recordOutput("ExampleShooter/ShooterYawPose3d", shooterYawPose);
@@ -164,7 +196,9 @@ public class ExampleShooter extends AbsoluteSubsystem {
 
     private void logTrajectoryDebug() {
         TrajectoryResult trajResult = shooterSystem.getLastTrajectoryResult();
-        if (trajResult == null) return;
+        if (trajResult == null) {
+            return;
+        }
 
         recordOutput("Trajectory/Status", trajResult.getStatus().name());
         recordOutput("Trajectory/StatusMessage", trajResult.getStatusMessage());
@@ -202,7 +236,7 @@ public class ExampleShooter extends AbsoluteSubsystem {
 
         SolveDebugInfo debug = trajResult.getDebugInfo();
         if (debug != null) {
-            recordOutput("Debug/Enabled", true);
+            recordOutput("Debug/Enabled", false);
             recordOutput("Debug/TotalTested", debug.getTotalTested());
             recordOutput("Debug/Accepted", debug.getAcceptedCount());
             recordOutput("Debug/TotalRejected", debug.getTotalRejected());
@@ -264,7 +298,7 @@ public class ExampleShooter extends AbsoluteSubsystem {
 
         double dx = targetPosition.getX() - shooterX;
         double dy = targetPosition.getY() - shooterY;
-        double yawRad = Math.atan2(dy, dx);
+        double yawRad = Math.atan2(dy, dx); // Finds the yaw angle from the given xy cords, returns in radians
         lastDistanceMeters = Math.hypot(dx, dy);
         targetYawDegrees = Math.toDegrees(yawRad);
 
@@ -277,14 +311,15 @@ public class ExampleShooter extends AbsoluteSubsystem {
 
         double measuredRpm = currentRpmSupplier != null ? currentRpmSupplier.get() : 0;
 
-        shooterSystem.setSolverInputTemplate(
-            ShotInput.builder()
-                .shooterPositionMeters(shooterX, shooterY, shooterHeightMeters)
-                .shooterYawRadians(yawRad)
-                .targetPositionMeters(targetPosition.getX(), targetPosition.getY(), targetPosition.getZ())
-                .targetRadiusMeters(0.45)
-                .includeAirResistance(true)
-                .robotVelocity(vx, vy)
+        shooterSystem.setSolverInput(
+                ShotInput.builder()
+                        .shooterPositionMeters(shooterX, shooterY, shooterHeightMeters)
+                        .shooterYawRadians(yawRad)
+                        .targetPositionMeters(targetPosition.getX(), targetPosition.getY(), targetPosition.getZ())
+                        .targetRadiusMeters(0.45)
+                        .includeAirResistance(true)
+                        .robotVelocity(vx, vy)
+                        .build()
         );
 
         long startTime = System.nanoTime();
@@ -302,7 +337,7 @@ public class ExampleShooter extends AbsoluteSubsystem {
      * Manual shot calculation (e.g. for autonomous preset positions).
      */
     public void calculateShot(double shooterX, double shooterY, double shooterZ,
-                              double targetX, double targetY, double targetZ) {
+            double targetX, double targetY, double targetZ) {
         double dx = targetX - shooterX;
         double dy = targetY - shooterY;
         lastDistanceMeters = Math.hypot(dx, dy);
@@ -310,8 +345,9 @@ public class ExampleShooter extends AbsoluteSubsystem {
         currentShot = shooterSystem.calculate(lastDistanceMeters);
     }
 
-
-    /** Spin up the flywheel to the current target RPM. */
+    /**
+     * Spin up the flywheel to the current target RPM.
+     */
     public Command spinUp() {
         return run(() -> {
             if (currentShot.valid && currentShot.rpm > 0) {
@@ -320,7 +356,9 @@ public class ExampleShooter extends AbsoluteSubsystem {
         });
     }
 
-    /** Stop the flywheel. */
+    /**
+     * Stop the flywheel.
+     */
     public Command stopCommand() {
         return runOnce(() -> {
             currentShot = ShotParameters.invalid("Stopped");
@@ -328,7 +366,9 @@ public class ExampleShooter extends AbsoluteSubsystem {
         });
     }
 
-    /** Switch to the next shot mode (cycles through modes). */
+    /**
+     * Switch to the next shot mode (cycles through modes).
+     */
     public Command cycleModeCommand() {
         return runOnce(() -> {
             ShotMode[] modes = ShotMode.values();
@@ -338,14 +378,17 @@ public class ExampleShooter extends AbsoluteSubsystem {
         });
     }
 
-    /** Shoot a ball in simulation (FuelSim). */
+    /**
+     * Shoot a ball in simulation (FuelSim).
+     */
     public Command shootBallSimCommand() {
         return runOnce(this::shootBallSim);
     }
 
-
     private void shootBallSim() {
-        if (poseSupplier == null) return;
+        if (poseSupplier == null) {
+            return;
+        }
 
         Pose2d robotPose = poseSupplier.get();
         ChassisSpeeds speeds = chassisSpeedsSupplier != null ? chassisSpeedsSupplier.get() : new ChassisSpeeds();
@@ -377,19 +420,37 @@ public class ExampleShooter extends AbsoluteSubsystem {
         System.out.printf("Shot! %.1fm/s @ %.1f° pitch, %.1f° yaw [%s]%n", launchSpeed, trajResult.getPitchAngleDegrees(), targetYawDegrees, currentShot.source);
     }
 
-    public double getTargetRpm()          { return currentShot.rpm; }
-    public double getTargetPitchDegrees() { return currentShot.pitchDegrees; }
-    public double getTargetYawDegrees()   { return targetYawDegrees; }
-    public boolean hasValidShot()         { return currentShot.valid; }
-    public ShotParameters getCurrentShot(){ return currentShot; }
-    public ShooterSystem getShooterSystem() { return shooterSystem; }
+    public double getTargetRpm() {
+        return currentShot.rpm;
+    }
 
-    /** Check if the flywheel is at speed and the shot is safe. */
+    public double getTargetPitchDegrees() {
+        return currentShot.pitchDegrees;
+    }
+
+    public double getTargetYawDegrees() {
+        return targetYawDegrees;
+    }
+
+    public boolean hasValidShot() {
+        return currentShot.valid;
+    }
+
+    public ShotParameters getCurrentShot() {
+        return currentShot;
+    }
+
+    public ShooterSystem getShooterSystem() {
+        return shooterSystem;
+    }
+
+    /**
+     * Check if the flywheel is at speed and the shot is safe.
+     */
     public boolean isReadyToFire() {
         double rpm = currentRpmSupplier != null ? currentRpmSupplier.get() : 0;
         return shooterSystem.isReadyToFire(rpm);
     }
-
 
     @Override
     public Sendable log() {

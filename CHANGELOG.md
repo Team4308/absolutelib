@@ -1,4 +1,11 @@
-# Changelog for  AbsoluteLib V2
+# Changelog for AbsoluteLib v2
+
+
+## 1.5.2 — Overhaul
+
+- Trajectory solver: the trajectory system will no longer receive breaking major updates; future changes will preserve backwards compatibility.
+- Javadoc updates: rewrote many Javadoc comments for clarity.
+- Sweep improvements: the `SWEEP` mode now favors lower angles by default for improved results.
 
 
 ## 1.5.1
