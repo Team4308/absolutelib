@@ -182,10 +182,10 @@ public class ProjectileMotion {
                 closestState = state.copy();
             }
             
-            // For basket/funnel goals, only count a direct radius hit if the ball
-            // is descending — an ascending ball passing through the opening will
-            // fly out the top and not score.
-            if (distToTarget <= targetRadius && pastApex) {
+            // For basket/funnel goals: the ball must be descending, above the rim,
+            // and horizontally over the opening. A ball passing through a 3D sphere
+            // while ascending or from the side won't actually score.
+            if (pastApex && state.z >= targetZ && horizontalDistToTarget <= targetRadius) {
                 hitTarget = true;
             }
             
