@@ -68,7 +68,7 @@ public class ProjectileMotion {
         public final TrajectoryState[] trajectory;
         public final boolean hitTarget;
         public final double closestApproach;
-        /** Whether the ball was descending (vz < 0) at the point of closest approach. */
+        /** Whether the ball was descending (vz &lt; 0) at the point of closest approach. */
         public final boolean descendingAtClosest;
         public final TrajectoryState finalState;
         public final double maxHeight;
@@ -182,7 +182,10 @@ public class ProjectileMotion {
                 closestState = state.copy();
             }
             
-            if (distToTarget <= targetRadius) {
+            // For basket/funnel goals, only count a direct radius hit if the ball
+            // is descending — an ascending ball passing through the opening will
+            // fly out the top and not score.
+            if (distToTarget <= targetRadius && pastApex) {
                 hitTarget = true;
             }
             
