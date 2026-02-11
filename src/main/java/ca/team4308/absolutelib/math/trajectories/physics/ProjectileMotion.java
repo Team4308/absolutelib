@@ -76,13 +76,19 @@ public class ProjectileMotion {
          * straight down, 0° is perfectly flat. -1 if the ball never crosses.
          */
         public final double entryAngleDegrees;
+        /**
+         * Horizontal distance from the target center when the ball crosses the
+         * rim plane (z = targetZ) while descending. -1 if the ball never
+         * crosses the rim plane.
+         */
+        public final double horizontalDistAtCrossing;
         public final TrajectoryState finalState;
         public final double maxHeight;
         public final double flightTime;
         
         public TrajectoryResult(TrajectoryState[] trajectory, boolean hitTarget,
                                 double closestApproach, boolean descendingAtClosest,
-                                double entryAngleDegrees,
+                                double entryAngleDegrees, double horizontalDistAtCrossing,
                                 TrajectoryState finalState,
                                 double maxHeight, double flightTime) {
             this.trajectory = trajectory;
@@ -90,6 +96,7 @@ public class ProjectileMotion {
             this.closestApproach = closestApproach;
             this.descendingAtClosest = descendingAtClosest;
             this.entryAngleDegrees = entryAngleDegrees;
+            this.horizontalDistAtCrossing = horizontalDistAtCrossing;
             this.finalState = finalState;
             this.maxHeight = maxHeight;
             this.flightTime = flightTime;
@@ -165,6 +172,7 @@ public class ProjectileMotion {
         double prevZ = z0;
         TrajectoryState closestState = null;
         double entryAngleDeg = -1;  // Descent angle at rim crossing, -1 if never crosses
+        double hDistAtCrossing = -1; // Horizontal distance from target at rim crossing
         
         while (state.time < PhysicsConstants.MAX_FLIGHT_TIME && state.z >= 0) {
             if (stepCount % sampleInterval == 0 && pointCount < maxPoints) {
@@ -191,22 +199,23 @@ public class ProjectileMotion {
             }
             
             // ── Rim-plane crossing detection ──
-            // The ball scores when it crosses z = targetZ while DESCENDING and
-            // is horizontally within the opening radius. This models a real
-            // basket/funnel: the ball must arc above the rim and come DOWN into it.
-            if (pastApex && prevZ >= targetZ && state.z <= targetZ
-                    && horizontalDistToTarget <= targetRadius * SolverConstants.getBasketDescentToleranceMultiplier()) {
+            // ALWAYS detect when the ball descends through z = targetZ.
+            // This stops the simulation at the rim plane so the solver and
+            // path visualizer get a trajectory that ends at the target height.
+            // The hit/miss decision is separate from the crossing detection.
+            if (pastApex && prevZ >= targetZ && state.z <= targetZ && targetZ > 0) {
                 // Compute entry angle (steepness of descent from horizontal)
                 double hSpeed = Math.sqrt(state.vx * state.vx + state.vy * state.vy);
                 double vSpeed = Math.abs(state.vz); // vz is negative when descending
                 entryAngleDeg = Math.toDegrees(Math.atan2(vSpeed, hSpeed));
+                hDistAtCrossing = horizontalDistToTarget;
                 
-                // Only count as a hit if entry is steep enough
+                // Only count as a hit if entry is steep enough AND within target opening
                 if (entryAngleDeg >= SolverConstants.getMinEntryAngleDegrees()
                         && horizontalDistToTarget <= targetRadius) {
                     hitTarget = true;
                 }
-                break; // Stop at rim crossing regardless
+                break; // Always stop at rim crossing — trajectory ends at target height
             }
             
             prevZ = state.z;
@@ -218,7 +227,7 @@ public class ProjectileMotion {
         System.arraycopy(trajectory, 0, trimmedTrajectory, 0, pointCount);
         
         // Fallback: if the ball never crossed the rim plane but got very close
-        // while descending, still count it (e.g. ball lands just short)
+        // while descending, still count it (e.g. ball lands just short of rim height)
         boolean descending = closestState != null && closestState.vz < 0;
         if (!hitTarget && descending
                 && closestApproach <= targetRadius * SolverConstants.getHoopToleranceMultiplier()) {
@@ -234,7 +243,7 @@ public class ProjectileMotion {
         }
         
         return new TrajectoryResult(trimmedTrajectory, hitTarget, closestApproach,
-            descending, entryAngleDeg, state, maxHeight, state.time);
+            descending, entryAngleDeg, hDistAtCrossing, state, maxHeight, state.time);
     }
 
     /**

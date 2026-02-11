@@ -326,6 +326,51 @@ public class TrajectorySolver {
         return 1.0 + t * (fullDragComp - 1.0);
     }
 
+    /** Maximum number of binary-search iterations for velocity refinement. */
+    private static final int VELOCITY_REFINE_ITERATIONS = 8;
+
+    /**
+     * Binary-searches for the velocity that makes the ball cross the rim plane
+     * (z = targetZ) while horizontally within the target opening.
+     *
+     * <p>The initial analytical velocity (vacuum + drag comp) often overshoots in
+     * practice. This method refines the velocity so the rim crossing occurs at the
+     * correct horizontal position.</p>
+     *
+     * @return A simulation result where {@code hitTarget} is true, or {@code null}
+     *         if no velocity in the search range produces a hit.
+     */
+    private ProjectileMotion.TrajectoryResult refineVelocityForHit(
+            GamePiece gp,
+            double shooterX, double shooterY, double shooterZ,
+            double pitchRad, double yawRad, double spinRpm,
+            double targetX, double targetY, double targetZ, double targetRadius,
+            double initialVelocity) {
+
+        double vLow = initialVelocity * 0.50;
+        double vHigh = initialVelocity * 1.05;
+
+        ProjectileMotion.TrajectoryResult bestHit = null;
+
+        for (int i = 0; i < VELOCITY_REFINE_ITERATIONS; i++) {
+            double vMid = (vLow + vHigh) / 2.0;
+            ProjectileMotion.TrajectoryResult result = projectileMotion.simulate(
+                    gp, shooterX, shooterY, shooterZ,
+                    vMid, pitchRad, yawRad, spinRpm,
+                    targetX, targetY, targetZ, targetRadius);
+
+            if (result.hitTarget) {
+                bestHit = result;
+                vHigh = vMid;
+            } else if (result.entryAngleDegrees >= 0) {
+                vHigh = vMid;
+            } else {
+                vLow = vMid;
+            }
+        }
+        return bestHit;
+    }
+
     /**
      * Checks if a trajectory collides with any obstacle, respecting grace distance
      * and the opening exemption for descending balls.
@@ -561,9 +606,6 @@ public class TrajectorySolver {
         double effectiveMinPitch = input.getMinPitchDegrees();
         double effectiveMaxPitch = input.getMaxPitchDegrees();
         
-        // Only force high arc if the remaining range is wide enough to be useful.
-        // If hardware limits (e.g. max 37.5°) would leave < MIN_FORCED_ARC_RANGE_DEG,
-        // skip the force and let collision detection handle obstacle avoidance.
         if (pathCrossesObstacle) {
             double forcedMin = SolverConstants.getForceHighArcMinPitchDegrees();
             if (effectiveMaxPitch - forcedMin >= MIN_FORCED_ARC_RANGE_DEG) {
@@ -574,11 +616,7 @@ public class TrajectorySolver {
         // Drag compensation factor for this distance
         double dragComp = calculateDragCompensation(distance);
 
-        // Generate a flywheel config at a representative velocity.
-        // With per-pitch velocity, we need the flywheel to cover the velocity
-        // range across all valid pitch angles. The highest pitch (effectiveMaxPitch)
-        // needs the LOWEST velocity, and lower pitches need progressively higher.
-        // Use the velocity at effectiveMaxPitch as a baseline, then check higher.
+
         double minVelocity = projectileMotion.calculateMinimumVelocity(distance, heightDiff);
         boolean isCloseRange = distance < SolverConstants.getCloseRangeThresholdMeters();
         double velocityBuffer = isCloseRange
@@ -586,9 +624,7 @@ public class TrajectorySolver {
             : SolverConstants.getVelocityBufferMultiplier() * dragComp;
         double representativeVelocity = minVelocity * velocityBuffer;
         
-        // Check what velocity the max pitch angle actually needs (most favorable/lowest)
-        // This ensures the flywheel is generated for a velocity that covers at least
-        // the best-case angle. Per-pitch checks will handle achievability per angle.
+    
         double maxPitchV = calculateRequiredVelocityForPitch(distance, heightDiff, 
                 Math.toRadians(effectiveMaxPitch));
         if (!Double.isNaN(maxPitchV) && maxPitchV > 0) {
@@ -619,9 +655,7 @@ public class TrajectorySolver {
             genResult = flywheelGenerator.evaluatePresets(representativeVelocity);
         }
         
-        // If the boosted representative velocity is unachievable, fall back to
-        // the base physics minimum velocity. The per-pitch flywheel check will 
-        // independently verify each angle's velocity achievability.
+
         double baseVelocity = minVelocity * velocityBuffer;
         if (genResult.achievableCount == 0 && representativeVelocity > baseVelocity) {
             genResult = flywheelGenerator.generateAndEvaluate(baseVelocity);
@@ -643,16 +677,13 @@ public class TrajectorySolver {
         
         cachedFlywheel = flywheel;
         
-        // Build a simulator for per-pitch velocity checks
         FlywheelSimulator flywheelSimForPitch = new FlywheelSimulator(flywheel, gamePiece);
         
         double bestPitchAngle = Double.NaN;
         ProjectileMotion.TrajectoryResult bestTrajSim = null;
         double bestScore = Double.NEGATIVE_INFINITY;
         FlywheelSimulator.SimulationResult bestFlywheelSim = null;
-        
-        // Fallback: track best candidate that passes everything EXCEPT minArcHeight.
-        // Used when hardware pitch limits prevent achieving sufficient arc height.
+
         double bestRelaxedScore = Double.NEGATIVE_INFINITY;
         double bestRelaxedPitchAngle = Double.NaN;
         ProjectileMotion.TrajectoryResult bestRelaxedTrajSim = null;
@@ -662,8 +693,7 @@ public class TrajectorySolver {
         
         double angleStep = input.getAngleStepDegrees();
         
-        // Use integer counting to avoid floating-point drift.
-        // Accumulated += 0.1 over 300 iterations can skip the final angle.
+
         int numSteps = (int) Math.round((effectiveMaxPitch - effectiveMinPitch) / angleStep);
         
         for (int stepIdx = 0; stepIdx <= numSteps; stepIdx++) {
@@ -684,25 +714,19 @@ public class TrajectorySolver {
             double iterHeightDiff = input.getTargetZ() - input.getShooterZ();
             double requiredYaw = Math.atan2(dy, dx);
             
-            // Calculate the exact velocity needed for THIS pitch to hit the target
             double vacuumV = calculateRequiredVelocityForPitch(iterDistance, iterHeightDiff, pitchRad);
             if (Double.isNaN(vacuumV) || vacuumV <= 0) {
-                // This pitch angle physically can't reach the target
                 if (debugInfo != null) debugInfo.recordRejected(pitchDeg, SolveDebugInfo.RejectionReason.ARC_TOO_LOW,
                         Double.MAX_VALUE, 0, 0, false, new ProjectileMotion.TrajectoryState[0]);
                 continue;
             }
             
-            // Apply drag compensation — scale by cos(pitch) since steep angles
-            // have less horizontal travel and thus less drag effect on accuracy.
-            // At pitch=0: full dragComp. At pitch=90°: no drag compensation.
+
             double pitchDragComp = 1.0 + (dragComp - 1.0) * Math.cos(pitchRad);
             double targetV = vacuumV * pitchDragComp;
             
-            // Check if flywheel can achieve this velocity
             FlywheelSimulator.SimulationResult pitchFlywheelSim = flywheelSimForPitch.simulateForVelocity(targetV);
             if (!pitchFlywheelSim.isAchievable) {
-                // Flywheel can't produce this velocity — skip
                 if (debugInfo != null) debugInfo.recordRejected(pitchDeg, SolveDebugInfo.RejectionReason.ARC_TOO_LOW,
                         Double.MAX_VALUE, 0, 0, false, new ProjectileMotion.TrajectoryState[0]);
                 continue;
@@ -718,6 +742,29 @@ public class TrajectorySolver {
                 iterTargetX, iterTargetY, input.getTargetZ(),
                 input.getTargetRadius()
             );
+            
+
+            if (!trajSim.hitTarget && trajSim.maxHeight > input.getTargetZ()) {
+                ProjectileMotion.TrajectoryResult refined = refineVelocityForHit(
+                        gamePiece,
+                        input.getShooterX(), input.getShooterY(), input.getShooterZ(),
+                        pitchRad, requiredYaw, pitchFlywheelSim.ballSpinRpm,
+                        iterTargetX, iterTargetY, input.getTargetZ(),
+                        input.getTargetRadius(), actualVelocity);
+                if (refined != null) {
+                    trajSim = refined;
+                    if (refined.trajectory.length > 0) {
+                        ProjectileMotion.TrajectoryState s0 = refined.trajectory[0];
+                        actualVelocity = Math.sqrt(s0.vx * s0.vx + s0.vy * s0.vy + s0.vz * s0.vz);
+                    }
+                    pitchFlywheelSim = flywheelSimForPitch.simulateForVelocity(actualVelocity);
+                    if (!pitchFlywheelSim.isAchievable) {
+                        if (debugInfo != null) debugInfo.recordRejected(pitchDeg, SolveDebugInfo.RejectionReason.ARC_TOO_LOW,
+                                trajSim.closestApproach, trajSim.maxHeight, trajSim.flightTime, trajSim.hitTarget, trajSim.trajectory);
+                        continue;
+                    }
+                }
+            }
             
             if (trajSim.flightTime > 0) {
                 estimatedTof = trajSim.flightTime;
@@ -750,9 +797,7 @@ public class TrajectorySolver {
             }
 
             double hoopTolerance = input.getTargetRadius() * config.getHoopToleranceMultiplier();
-            // Ball must be descending at closest approach for a hoop tolerance hit —
-            // a ball at its apex flying horizontally past is not going into the basket.
-            // Also require minimum entry angle for steep-enough descent.
+
             boolean hitsTarget = trajSim.hitTarget
                     || (trajSim.descendingAtClosest && trajSim.closestApproach <= hoopTolerance
                         && trajSim.entryAngleDegrees >= SolverConstants.getMinEntryAngleDegrees());
