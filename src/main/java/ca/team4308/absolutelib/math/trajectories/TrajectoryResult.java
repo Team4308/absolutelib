@@ -50,8 +50,31 @@ public class TrajectoryResult {
                 validCount++;
             }
 
-            List<Pose3d> path = new ArrayList<>();
+            // Find the point of closest 3D approach to the target so the path
+            // ends near the target instead of continuing to the ground.
+            double tX = input.getTargetX();
+            double tY = input.getTargetY();
+            double tZ = input.getTargetZ();
+            int closestIndex = 0;
+            double closestDist2 = Double.MAX_VALUE;
             for (int i = 0; i < validCount; i++) {
+                ca.team4308.absolutelib.math.trajectories.physics.ProjectileMotion.TrajectoryState s = simResult.trajectory[i];
+                if (s == null) break;
+                double dx = s.x - tX;
+                double dy = s.y - tY;
+                double dz = s.z - tZ;
+                double d2 = dx * dx + dy * dy + dz * dz;
+                if (d2 < closestDist2) {
+                    closestDist2 = d2;
+                    closestIndex = i;
+                }
+            }
+            // Include a couple points past closest approach so the path visually
+            // reaches the target area, but not the entire descent to the ground.
+            int endIndex = Math.min(closestIndex + 2, validCount);
+
+            List<Pose3d> path = new ArrayList<>();
+            for (int i = 0; i < endIndex; i++) {
                 ca.team4308.absolutelib.math.trajectories.physics.ProjectileMotion.TrajectoryState state = simResult.trajectory[i];
                 if (state == null) break;
                 Translation3d translation = new Translation3d(state.x, state.y, state.z);

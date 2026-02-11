@@ -78,13 +78,13 @@ public class ExampleShooter extends AbsoluteSubsystem {
                 .addEntry(8.0, 48.0, 3300);
 
         GamePiece gamePiece = GamePieces.REBUILT_2026_BALL;
-        SolverConstants.setHoopToleranceMultiplier(1);
-        SolverConstants.setBasketDescentToleranceMultiplier(1);
+        SolverConstants.setHoopToleranceMultiplier(1.5);
+        SolverConstants.setBasketDescentToleranceMultiplier(1.5);
         SolverConstants.setMinTargetDistanceMeters(0.05);
         SolverConstants.setVelocityBufferMultiplier(1.2);
         TrajectorySolver.SolverConfig solverConfig = TrajectorySolver.SolverConfig.defaults()
                 .toBuilder()
-                .hoopToleranceMultiplier(1)
+                .hoopToleranceMultiplier(1.5)
                 .minPitchDegrees(47.5)
                 .maxPitchDegrees(82.5)
                 .build();

@@ -25,9 +25,9 @@ public final class SolverConstants {
     /**
      * Multiplier for target radius when determining if a trajectory "hits" the target.
      * Higher values are more lenient for hoop/basket-style targets.
-     * Default: 5.0 (ball within 5x target radius counts as hit)
+     * Default: 1.5 (ball within 1.5x target radius counts as hit)
      */
-    private static double hoopToleranceMultiplier = 5.0;
+    private static double hoopToleranceMultiplier = 1.5;
     
     /**
      * Minimum horizontal distance to target (meters).
@@ -39,9 +39,9 @@ public final class SolverConstants {
     /**
      * Multiplier for target radius used in basket descent detection.
      * When ball descends and is within (targetRadius * this) horizontally, it's a hit.
-     * Default: 5.0
+     * Default: 1.5
      */
-    private static double basketDescentToleranceMultiplier = 5.0;
+    private static double basketDescentToleranceMultiplier = 1.5;
 
     // ==================== Velocity ====================
 

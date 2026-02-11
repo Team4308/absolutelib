@@ -145,7 +145,7 @@ public class TrajectorySolver {
             private double crtAngleResolution = 0.1;
             private int crtControlLoopMs = 20;
             private int crtEncoderTicks = 4096;
-            private double hoopToleranceMultiplier = 5.0; 
+            private double hoopToleranceMultiplier = 1.5; 
             
             public Builder minPitchDegrees(double val) { this.minPitchDegrees = val; return this; }
             public Builder maxPitchDegrees(double val) { this.maxPitchDegrees = val; return this; }
@@ -377,8 +377,8 @@ public class TrajectorySolver {
      * without descending close enough to the target height.
      * At the point of closest horizontal approach to the target, the ball's
      * altitude must be within one target radius above the target center height.
-     * However, if the ball is actively descending (vz &lt; 0) at that point,
-     * it is heading toward the target and is not a flyover.
+     * A ball is only exempt from the flyover check if it is actively descending
+     * AND horizontally close enough to the target to plausibly enter the opening.
      */
     private static boolean isFlyover(ProjectileMotion.TrajectoryState[] trajectory,
             double targetX, double targetY, double targetZ, double targetRadius) {
@@ -399,7 +399,12 @@ public class TrajectorySolver {
             }
         }
 
-        if (vzAtBestHoriz < 0) return false;
+        double bestHorizDist = Math.sqrt(bestHorizDist2);
+
+        // Only exempt descending balls that are horizontally close to the target
+        if (vzAtBestHoriz < 0 && bestHorizDist <= targetRadius * SolverConstants.getHoopToleranceMultiplier()) {
+            return false;
+        }
 
         return heightAtBestHoriz > targetZ;
     }
