@@ -1,7 +1,59 @@
 # Changelog for  AbsoluteLib V2
 
 
-# 1.3.6
+## 1.5.1
+
+### Dual-Mode Solver — Constraint + Improved Sweep
+- **Both solver strategies now available** via `TrajectorySolver.SolveMode` enum:
+  - **`CONSTRAINT`** (default): Two-constraint algebraic solver. Computes exact (pitch, velocity) from target geometry + rim clearance. Fastest and most deterministic.
+  - **`SWEEP`**: Improved angle sweep. Tests every pitch from min→max at 0.5° steps, calculates the exact velocity needed per angle, simulates with full RK4 physics, refines with binary-search velocity correction, and picks the angle with the **smallest miss distance**. No scoring, no weights — pure accuracy selection.
+- **`CONSTRAINT` mode automatically falls back to `SWEEP`** if the constraint solver fails (e.g., no valid clearance found within +3.0m). The sweep acts as a robust fallback.
+- **`SWEEP` mode does NOT fall back** — it runs the sweep only.
+
+### New API
+- **`solver.setSolveMode(TrajectorySolver.SolveMode.CONSTRAINT)`** — switch between modes at runtime
+- **`solver.getSolveMode()`** — query current mode
+- Both modes share the same validation pipeline: collision, clearance, arc height, hit detection, flyover, entry angle, and velocity refinement.
+
+## 1.5.0
+
+### Constraint-Based Solver 
+- **Replaced the angle sweep with a two-constraint algebraic solver**. Instead of testing 70+ pitch angles and picking the best, the solver now computes the **single exact (pitch, velocity) pair** from two physical constraints:
+  1. Ball passes through target center at `(distance, heightDiff)`
+  2. Ball clears the rim edge at `(distance − radius, heightDiff + clearance)`
+- This eliminates scoring, searching, and miss-distance comparison entirely. One deterministic solution per solve — no ambiguity.
+- **Full physics verification**: The vacuum analytical solution is then simulated with RK4 (air drag, Magnus spin, game piece properties) and refined with 8-iteration binary-search velocity correction. Same physics fidelity, dramatically simpler selection.
+- **Obstacle avoidance via clearance escalation**: If the analytical trajectory collides with an obstacle or fails clearance checks, the solver increases `rimClearance` in 0.25m steps (up to +3.0m) until the arc is high enough to clear. No sweep fallback needed.
+- **Moving target refinement**: For moving robots, the solver iterates twice with actual time-of-flight to refine the lead prediction — same concept as TurretCalculator's `iterativeMovingShotFromFunnelClearance`.
+- **`solveForCurrentRpm()` also updated**: Uses the high-arc angle formula `θ = atan((v² + √(v⁴ − g(gd² + 2hv²))) / (gd))` instead of sweeping. Direct analytical solution for fixed-velocity scenarios.
+
+### New Configuration
+- **`SolverConstants.rimClearanceMeters`** (default 0.15m): Height above the target rim the ball must achieve at the rim edge. Controls arc steepness — larger = steeper entry, smaller = flatter. One ball radius (~0.075m) is the physical minimum.
+- **`computeConstraintSolution(d, h, r, c)`**: New static method exposing the two-constraint parabolic solver. Returns `[pitchRadians, velocityMps]` for any geometry.
+
+## 1.4.1
+
+### Scoring Removed — Pure Accuracy Selection
+- **Removed all scoring**: The solver no longer scores candidates. Instead, it filters valid trajectories (collision-free, on-target, correct entry angle, no flyover) and picks the one **closest to dead center** by miss distance. No points, no weights, no tuning — just the most accurate shot.
+- **Selection by miss distance**: Among all valid candidates, the solver selects the trajectory with the smallest horizontal distance from the target center at the rim-crossing plane. A hit 2cm off-center always beats a hit 5cm off-center, regardless of entry angle, height, or flight time.
+- **`ScoringWeights` deprecated**: The class and `setScoringWeights()`/`getScoringWeights()` are `@Deprecated`. The solver ignores them entirely.
+- **`scoreCandidate()` removed**: The internal scoring method is gone. No replacement — selection is a simple `missDistance < bestMissDistance` comparison.
+
+### Debug Info Updated
+- `SolveDebugInfo` now tracks **miss distance** (meters from center) instead of score points.
+- New `getBestMissDistance()` and `CandidateInfo.getMissDistance()` methods.
+- `getBestScore()` and `getScore()` are `@Deprecated` (return miss distance for compatibility).
+- Debug tables and summaries show `miss=X.XXXXm` instead of `score=X.X`.
+
+### Tighter Hit Detection
+- **Default tolerance multipliers reduced to 1.0** (`hoopToleranceMultiplier`, `basketDescentToleranceMultiplier`). The ball must land within the actual target radius — no more inflated acceptance zones.
+- **Rim-plane crossing always detected**: Simulation stops when the ball descends through targetZ regardless of horizontal distance.
+- **Velocity binary-search refinement**: 8-iteration binary search finds the lowest valid velocity for the steepest possible entry angle.
+
+### Other
+- Updated `ExampleShooter`: removed all weight configuration, tightened target radius to 0.45m, debug output uses miss distance instead of score.
+
+# 1.3.6 - 1.3.9
 - Scoring update
 - Re-made the Website
 

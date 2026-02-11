@@ -42,7 +42,8 @@ package ca.team4308.absolutelib.math.trajectories;
  * }</pre>
  *
  * @see TrajectorySolver#setScoringWeights(ScoringWeights)
- */
+ * @deprecated Since 1.4.1 — the solver now uses a deterministic accuracy-first\n * scoring system. This class is retained for API compatibility only.\n */
+@Deprecated
 public final class ScoringWeights {
 
     private final double accuracyWeight;

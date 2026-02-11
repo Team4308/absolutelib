@@ -11,49 +11,24 @@ import ca.team4308.absolutelib.math.trajectories.physics.AirResistance;
 import ca.team4308.absolutelib.math.trajectories.physics.ProjectileMotion;
 
 /**
- * Main trajectory solver API for FRC turret shooting.
- * 
- * Integrates all trajectory subsystems:
- * - Projectile motion physics
- * - Flywheel simulation and generation
- * - Chinese Remainder Theorem for discrete solutions
- * 
- * <h2>New Multi-Candidate API (Recommended)</h2>
- * <pre>
- * TrajectorySolver solver = TrajectorySolver.forGame2026();
- * 
- * ShotInput input = ShotInput.builder()
- *     .shooterPositionMeters(1.0, 2.0, 0.5)
- *     .targetPositionMeters(5.0, 5.0, 2.5)
- *     .shotPreference(ShotInput.ShotPreference.FASTEST)
- *     .build();
- * 
- * // Get all possible shots sorted by confidence
- * ShotCandidateList candidates = solver.findAllCandidates(input);
- * 
- * // Or just get the best pitch angle
- * double bestPitch = solver.solveBestPitchDegrees(input);
- * </pre>
- * 
- * <h2>Legacy API (Still Supported)</h2>
- * <pre>
- * ShotInput input = ShotInput.builder()
- *     .shooterPositionMeters(1.0, 2.0, 0.5)
- *     .shooterYawDegrees(45)
- *     .targetPositionMeters(5.0, 5.0, 2.5)
- *     .preferHighArc(true)
- *     .build();
- * 
- * TrajectoryResult result = solver.solve(input);
- * 
- * if (result.isSuccess()) {
- *     System.out.println("Pitch: " + result.getPitchAngleDegrees());
- *     System.out.println("RPM: " + result.getRecommendedRpm());
- * }
- * </pre>
+ * Trajectory solver for FRC shooting. Handles projectile physics,
+ * flywheel selection, and CRT discrete solutions.
+ *
+ * @see #solve(ShotInput)
+ * @see #findAllCandidates(ShotInput)
+ * @see #solveBestPitchDegrees(ShotInput)
  */
 @SuppressWarnings("deprecation")
 public class TrajectorySolver {
+
+    /** Strategy for finding a trajectory. */
+
+    public enum SolveMode {
+        /** Two-constraint algebraic solver (default). */
+        CONSTRAINT,
+        /** Full pitch-range sweep with miss-distance selection. */
+        SWEEP
+    }
     
     /**
      * Configuration for the solver.
@@ -74,11 +49,7 @@ public class TrajectorySolver {
         private final int crtControlLoopMs;
         private final int crtEncoderTicks;
         
-        /**
-         * Multiplier for target radius when checking if trajectory "hits" the target.
-         * Default is 5.0 to account for large hoops/baskets - the ball just needs to
-         * pass through, not hit a precise point.
-         */
+        /** Multiplier for target radius when checking hits. */
         private final double hoopToleranceMultiplier;
         
         private SolverConfig(Builder builder) {
@@ -145,7 +116,7 @@ public class TrajectorySolver {
             private double crtAngleResolution = 0.1;
             private int crtControlLoopMs = 20;
             private int crtEncoderTicks = 4096;
-            private double hoopToleranceMultiplier = 1.5; 
+            private double hoopToleranceMultiplier = 1.0; 
             
             public Builder minPitchDegrees(double val) { this.minPitchDegrees = val; return this; }
             public Builder maxPitchDegrees(double val) { this.maxPitchDegrees = val; return this; }
@@ -194,17 +165,23 @@ public class TrajectorySolver {
     
     private FlywheelConfig cachedFlywheel;
     private boolean debugEnabled = false;
+    private SolveMode solveMode = SolveMode.CONSTRAINT;
+
+    /** Sets the solve strategy. */
+    public void setSolveMode(SolveMode mode) {
+        this.solveMode = (mode != null) ? mode : SolveMode.CONSTRAINT;
+    }
+
+    /** Returns the current solve strategy. */
+    public SolveMode getSolveMode() {
+        return solveMode;
+    }
+
+    /** @deprecated Scoring weights are no longer used. Kept for API compat. */
+    @Deprecated
     private ScoringWeights scoringWeights = ScoringWeights.defaults();
 
-    /**
-     * Enables or disables debug mode. When enabled, the solver records every
-     * tested angle, its rejection reason, score, and full trajectory path
-     * into a {@link SolveDebugInfo} attached to the result.
-     *
-     * <p>This adds overhead (stores all trajectory arrays) — disable for competition.</p>
-     *
-     * @param enabled true to enable debug recording
-     */
+    /** Enables or disables debug recording. Adds overhead; disable for competition. */
     public void setDebugEnabled(boolean enabled) {
         this.debugEnabled = enabled;
     }
@@ -214,24 +191,22 @@ public class TrajectorySolver {
         return debugEnabled;
     }
 
-    /**
-     * Sets the scoring weights used to rank candidate trajectories.
-     * Use this to control how the solver picks the "best" trajectory.
-     *
-     * @param weights the scoring weights (not null)
-     * @see ScoringWeights
-     */
+    /** @deprecated Scoring weights are no longer used. */
+    @Deprecated
     public void setScoringWeights(ScoringWeights weights) {
         if (weights == null) throw new IllegalArgumentException("weights must not be null");
         this.scoringWeights = weights;
     }
 
-    /** Returns the current scoring weights. */
+    /**
+     * @deprecated Scoring weights are no longer used by the solver.
+     */
+    @Deprecated
     public ScoringWeights getScoringWeights() {
         return scoringWeights;
     }
 
-    // ===== Internal scoring constants (not user-tunable) =====
+
     private static final double ACCURACY_SCORE_MAX = 100.0;
     private static final double ACCURACY_SCORE_HIT_MIN = 50.0;
     private static final double ACCURACY_HIT_MULTIPLIER = 50.0;
@@ -266,32 +241,16 @@ public class TrajectorySolver {
 
     private static final double MIN_TOF_RANGE = 0.001;
 
-    /**
-     * Minimum pitch range (degrees) after applying forceHighArcMinPitch. 
-     * If the forced minimum would leave less than this range, the force is skipped
-     * so the solver can search the full hardware pitch range and let collision 
-     * detection handle obstacle avoidance naturally.
-     */
+    /** Min pitch range (deg) after forcing high arc. If too narrow, skip the force. */
     private static final double MIN_FORCED_ARC_RANGE_DEG = 15.0;
 
-    /**
-     * Long-range distance at which full drag compensation is applied (meters).
-     * Below this, drag compensation is linearly interpolated from 1.0 (no comp)
-     * at the close-range threshold to full at this distance.
-     */
+    /** Distance (m) at which full drag compensation kicks in. Linearly interpolated below this. */
     private static final double DRAG_COMP_FULL_RANGE_METERS = 8.0;
 
     /**
-     * Calculates the required launch velocity (in vacuum) for a projectile to 
-     * hit a target at a given pitch angle, horizontal distance, and height difference.
-     * 
-     * Uses the standard projectile equation:
-     * $v = \sqrt{\frac{g \cdot d^2}{2 \cos^2\theta \cdot (d \tan\theta - h)}}$
-     * 
-     * @param distance Horizontal distance to target (meters)
-     * @param heightDiff Height difference targetZ - shooterZ (meters) 
-     * @param pitchRad Launch angle in radians
-     * @return Required velocity in m/s, or NaN if angle cannot reach target
+     * Vacuum launch velocity for a given pitch, distance, and height difference.
+     *
+     * @return velocity in m/s, or NaN if the angle can't reach
      */
     static double calculateRequiredVelocityForPitch(double distance, double heightDiff, double pitchRad) {
         double cosTheta = Math.cos(pitchRad);
@@ -303,13 +262,45 @@ public class TrajectorySolver {
     }
 
     /**
-     * Calculates distance-scaled drag compensation.
-     * At the close-range threshold, drag compensation is 1.0 (none).
-     * It linearly ramps up to the full dragCompensationMultiplier at DRAG_COMP_FULL_RANGE_METERS.
-     * Beyond that distance, the full multiplier is used.
-     * 
-     * @param distance Horizontal distance to target in meters
-     * @return Effective drag compensation multiplier (>= 1.0)
+     * Two-constraint parabolic solver. Models trajectory as y = ax^2 + bx,
+     * enforces (1) ball hits target center and (2) ball clears rim edge.
+     * Solves for a and b, then derives pitch and velocity.
+     *
+     * @param d horizontal distance to target (m)
+     * @param h height difference (m)
+     * @param r target opening radius (m)
+     * @param c rim clearance height (m)
+     * @return {pitchRadians, velocityMps} or null
+     */
+    static double[] computeConstraintSolution(double d, double h, double r, double c) {
+        // Avoid degenerate geometry (target closer than its own radius)
+        if (d <= r || r <= 0 || d < 0.3) return null;
+
+        double g = ca.team4308.absolutelib.math.trajectories.physics.PhysicsConstants.GRAVITY;
+
+        // a = -(h*r + c*d) / (d*r*(d - r))
+        double denom = d * r * (d - r);
+        if (Math.abs(denom) < 1e-10) return null;
+
+        double a = -(h * r + c * d) / denom;
+
+        // b = (h - a*d^2) / d
+        double b = (h - a * d * d) / d;
+
+        double theta = Math.atan(b);
+        if (theta <= 0) return null; // Must launch upward
+
+        // v0 = sqrt(-g / (2*a*cos^2(theta)))
+        double cosTheta = Math.cos(theta);
+        double v0Sq = -g / (2.0 * a * cosTheta * cosTheta);
+        if (v0Sq <= 0) return null;
+
+        return new double[]{ theta, Math.sqrt(v0Sq) };
+    }
+
+    /**
+     * Distance-scaled drag compensation. Linearly ramps from 1.0 at close
+     * range to full dragCompensationMultiplier at long range.
      */
     static double calculateDragCompensation(double distance) {
         double closeRange = SolverConstants.getCloseRangeThresholdMeters();
@@ -330,15 +321,10 @@ public class TrajectorySolver {
     private static final int VELOCITY_REFINE_ITERATIONS = 8;
 
     /**
-     * Binary-searches for the velocity that makes the ball cross the rim plane
-     * (z = targetZ) while horizontally within the target opening.
+     * Binary-searches velocity to land the ball through the rim plane
+     * within the target opening. Corrects for drag overshoot.
      *
-     * <p>The initial analytical velocity (vacuum + drag comp) often overshoots in
-     * practice. This method refines the velocity so the rim crossing occurs at the
-     * correct horizontal position.</p>
-     *
-     * @return A simulation result where {@code hitTarget} is true, or {@code null}
-     *         if no velocity in the search range produces a hit.
+     * @return a hit result, or null if nothing in range works
      */
     private ProjectileMotion.TrajectoryResult refineVelocityForHit(
             GamePiece gp,
@@ -418,12 +404,8 @@ public class TrajectorySolver {
     }
     
     /**
-     * Checks if a trajectory is a flyover — the ball passes above the target
-     * without descending close enough to the target height.
-     * At the point of closest horizontal approach to the target, the ball's
-     * altitude must be within one target radius above the target center height.
-     * A ball is only exempt from the flyover check if it is actively descending
-     * AND horizontally close enough to the target to plausibly enter the opening.
+     * Checks if the ball flies over the target without descending into it.
+     * Exempt if the ball is descending and horizontally close enough to enter.
      */
     private static boolean isFlyover(ProjectileMotion.TrajectoryState[] trajectory,
             double targetX, double targetY, double targetZ, double targetRadius) {
@@ -480,6 +462,431 @@ public class TrajectorySolver {
         return false;
     }
     
+    /**
+     * Constraint-based core: solves the two-constraint system, validates with
+     * RK4 + velocity refinement. Returns {pitch, targetX, targetY, tof} or null.
+     */
+    private double[] solveConstraintCore(
+            ShotInput input, FlywheelSimulator flywheelSimForPitch, GamePiece gp,
+            double effectiveTargetX, double effectiveTargetY, double estimatedTof,
+            double distance, double heightDiff, double dragComp,
+            double effectiveMinPitch, double effectiveMaxPitch,
+            double requiredClearance, boolean moving, SolveDebugInfo debugInfo) {
+
+        double rimClearance = SolverConstants.getRimClearanceMeters();
+        double currentClearance = rimClearance;
+
+        double bestPitch = Double.NaN;
+        ProjectileMotion.TrajectoryResult bestTraj = null;
+        FlywheelSimulator.SimulationResult bestFw = null;
+        double itX = effectiveTargetX, itY = effectiveTargetY;
+
+        while (currentClearance <= rimClearance + 3.0) {
+            double iterTargetX = itX;
+            double iterTargetY = itY;
+
+            if (moving && bestTraj != null && bestTraj.flightTime > 0) {
+                iterTargetX = input.getTargetX() - input.getRobotVx() * estimatedTof;
+                iterTargetY = input.getTargetY() - input.getRobotVy() * estimatedTof;
+            }
+
+            double dx = iterTargetX - input.getShooterX();
+            double dy = iterTargetY - input.getShooterY();
+            double iterDistance = Math.sqrt(dx * dx + dy * dy);
+            double requiredYaw = Math.atan2(dy, dx);
+
+            double[] csol = computeConstraintSolution(
+                    iterDistance, heightDiff, input.getTargetRadius(), currentClearance);
+            if (csol == null) {
+                if (debugInfo != null) debugInfo.recordRejected(0,
+                        SolveDebugInfo.RejectionReason.MISSED_TARGET,
+                        Double.MAX_VALUE, 0, 0, false, new ProjectileMotion.TrajectoryState[0]);
+                currentClearance += 0.25;
+                continue;
+            }
+
+            double pitchRad = csol[0];
+            double vacuumV = csol[1];
+
+            if (pitchRad < Math.toRadians(effectiveMinPitch)) {
+                pitchRad = Math.toRadians(effectiveMinPitch);
+                vacuumV = calculateRequiredVelocityForPitch(iterDistance, heightDiff, pitchRad);
+                if (Double.isNaN(vacuumV) || vacuumV <= 0) { currentClearance += 0.25; continue; }
+            } else if (pitchRad > Math.toRadians(effectiveMaxPitch)) {
+                pitchRad = Math.toRadians(effectiveMaxPitch);
+                vacuumV = calculateRequiredVelocityForPitch(iterDistance, heightDiff, pitchRad);
+                if (Double.isNaN(vacuumV) || vacuumV <= 0) { currentClearance += 0.25; continue; }
+            }
+
+            double pitchDeg = Math.toDegrees(pitchRad);
+            double pitchDragComp = 1.0 + (dragComp - 1.0) * Math.cos(pitchRad);
+            double targetV = vacuumV * pitchDragComp;
+
+            FlywheelSimulator.SimulationResult pitchFw =
+                    flywheelSimForPitch.simulateForVelocity(targetV);
+            if (!pitchFw.isAchievable) {
+                if (debugInfo != null) debugInfo.recordRejected(pitchDeg,
+                        SolveDebugInfo.RejectionReason.ARC_TOO_LOW,
+                        Double.MAX_VALUE, 0, 0, false, new ProjectileMotion.TrajectoryState[0]);
+                currentClearance += 0.25;
+                continue;
+            }
+
+            double actualVelocity = pitchFw.exitVelocityMps;
+
+            ProjectileMotion.TrajectoryResult trajSim = projectileMotion.simulate(
+                    gp,
+                    input.getShooterX(), input.getShooterY(), input.getShooterZ(),
+                    actualVelocity, pitchRad, requiredYaw,
+                    pitchFw.ballSpinRpm,
+                    iterTargetX, iterTargetY, input.getTargetZ(),
+                    input.getTargetRadius()
+            );
+
+            if (!trajSim.hitTarget && trajSim.maxHeight > input.getTargetZ()) {
+                ProjectileMotion.TrajectoryResult refined = refineVelocityForHit(
+                        gp,
+                        input.getShooterX(), input.getShooterY(), input.getShooterZ(),
+                        pitchRad, requiredYaw, pitchFw.ballSpinRpm,
+                        iterTargetX, iterTargetY, input.getTargetZ(),
+                        input.getTargetRadius(), actualVelocity);
+                if (refined != null) {
+                    trajSim = refined;
+                    if (refined.trajectory.length > 0) {
+                        ProjectileMotion.TrajectoryState s0 = refined.trajectory[0];
+                        actualVelocity = Math.sqrt(s0.vx * s0.vx + s0.vy * s0.vy + s0.vz * s0.vz);
+                    }
+                    pitchFw = flywheelSimForPitch.simulateForVelocity(actualVelocity);
+                    if (!pitchFw.isAchievable) { currentClearance += 0.25; continue; }
+                }
+            }
+
+            if (trajSim.flightTime > 0) estimatedTof = trajSim.flightTime;
+
+            if (trajectoryCollides(trajSim, input, input.getShooterX(), input.getShooterY())) {
+                if (debugInfo != null) debugInfo.recordRejected(pitchDeg, SolveDebugInfo.RejectionReason.COLLISION,
+                        trajSim.closestApproach, trajSim.maxHeight, trajSim.flightTime, trajSim.hitTarget, trajSim.trajectory);
+                currentClearance += 0.25;
+                continue;
+            }
+            if (requiredClearance > 0 && trajSim.maxHeight < requiredClearance) {
+                if (debugInfo != null) debugInfo.recordRejected(pitchDeg, SolveDebugInfo.RejectionReason.CLEARANCE_TOO_LOW,
+                        trajSim.closestApproach, trajSim.maxHeight, trajSim.flightTime, trajSim.hitTarget, trajSim.trajectory);
+                currentClearance += 0.25;
+                continue;
+            }
+
+            double minArcHeight = input.getMinArcHeightMeters();
+            if (minArcHeight > 0 && trajSim.maxHeight < input.getTargetZ() + minArcHeight) {
+                if (debugInfo != null) debugInfo.recordRejected(pitchDeg, SolveDebugInfo.RejectionReason.ARC_TOO_LOW,
+                        trajSim.closestApproach, trajSim.maxHeight, trajSim.flightTime, trajSim.hitTarget, trajSim.trajectory);
+                currentClearance += 0.25;
+                continue;
+            }
+
+            double hoopTolerance = input.getTargetRadius() * config.getHoopToleranceMultiplier();
+            boolean hitsTarget = trajSim.hitTarget
+                    || (trajSim.descendingAtClosest && trajSim.closestApproach <= hoopTolerance
+                        && trajSim.entryAngleDegrees >= SolverConstants.getMinEntryAngleDegrees());
+            if (!hitsTarget) {
+                if (debugInfo != null) debugInfo.recordRejected(pitchDeg, SolveDebugInfo.RejectionReason.MISSED_TARGET,
+                        trajSim.closestApproach, trajSim.maxHeight, trajSim.flightTime, trajSim.hitTarget, trajSim.trajectory);
+                currentClearance += 0.25;
+                continue;
+            }
+            if (isFlyover(trajSim.trajectory, iterTargetX, iterTargetY,
+                    input.getTargetZ(), input.getTargetRadius())) {
+                if (debugInfo != null) debugInfo.recordRejected(pitchDeg, SolveDebugInfo.RejectionReason.FLYOVER,
+                        trajSim.closestApproach, trajSim.maxHeight, trajSim.flightTime, trajSim.hitTarget, trajSim.trajectory);
+                currentClearance += 0.25;
+                continue;
+            }
+
+            bestPitch = pitchRad;
+            bestTraj = trajSim;
+            bestFw = pitchFw;
+            itX = iterTargetX;
+            itY = iterTargetY;
+
+            double missDistance = (trajSim.horizontalDistAtCrossing >= 0)
+                    ? trajSim.horizontalDistAtCrossing : trajSim.closestApproach;
+            if (debugInfo != null) debugInfo.recordAccepted(pitchDeg, missDistance,
+                    trajSim.closestApproach, trajSim.maxHeight, trajSim.flightTime,
+                    trajSim.hitTarget, trajSim.trajectory);
+            break;
+        }
+
+        if (Double.isNaN(bestPitch) || bestTraj == null) return null;
+
+            // Refine lead with actual TOF
+        if (moving && bestTraj.flightTime > 0) {
+            for (int refine = 0; refine < 2; refine++) {
+                double refTargetX = input.getTargetX() - input.getRobotVx() * estimatedTof;
+                double refTargetY = input.getTargetY() - input.getRobotVy() * estimatedTof;
+                double rdx = refTargetX - input.getShooterX();
+                double rdy = refTargetY - input.getShooterY();
+                double refDist = Math.sqrt(rdx * rdx + rdy * rdy);
+                double refYaw = Math.atan2(rdy, rdx);
+
+                double[] refSol = computeConstraintSolution(
+                        refDist, heightDiff, input.getTargetRadius(), currentClearance);
+                if (refSol == null) break;
+
+                double refPitch = Math.max(Math.toRadians(effectiveMinPitch),
+                        Math.min(Math.toRadians(effectiveMaxPitch), refSol[0]));
+                double refVacuumV;
+                if (Math.abs(refPitch - refSol[0]) > 1e-6) {
+                    refVacuumV = calculateRequiredVelocityForPitch(refDist, heightDiff, refPitch);
+                    if (Double.isNaN(refVacuumV) || refVacuumV <= 0) break;
+                } else {
+                    refVacuumV = refSol[1];
+                }
+
+                double refDragComp = 1.0 + (dragComp - 1.0) * Math.cos(refPitch);
+                FlywheelSimulator.SimulationResult refFw =
+                        flywheelSimForPitch.simulateForVelocity(refVacuumV * refDragComp);
+                if (!refFw.isAchievable) break;
+
+                ProjectileMotion.TrajectoryResult refTraj = projectileMotion.simulate(
+                        gp,
+                        input.getShooterX(), input.getShooterY(), input.getShooterZ(),
+                        refFw.exitVelocityMps, refPitch, refYaw, refFw.ballSpinRpm,
+                        refTargetX, refTargetY, input.getTargetZ(), input.getTargetRadius()
+                );
+
+                if (!refTraj.hitTarget && refTraj.maxHeight > input.getTargetZ()) {
+                    ProjectileMotion.TrajectoryResult refined = refineVelocityForHit(
+                            gp,
+                            input.getShooterX(), input.getShooterY(), input.getShooterZ(),
+                            refPitch, refYaw, refFw.ballSpinRpm,
+                            refTargetX, refTargetY, input.getTargetZ(),
+                            input.getTargetRadius(), refFw.exitVelocityMps);
+                    if (refined != null) {
+                        refTraj = refined;
+                        double rv = refFw.exitVelocityMps;
+                        if (refined.trajectory.length > 0) {
+                            ProjectileMotion.TrajectoryState s0 = refined.trajectory[0];
+                            rv = Math.sqrt(s0.vx * s0.vx + s0.vy * s0.vy + s0.vz * s0.vz);
+                        }
+                        refFw = flywheelSimForPitch.simulateForVelocity(rv);
+                        if (!refFw.isAchievable) break;
+                    }
+                }
+
+                if (refTraj.flightTime > 0) estimatedTof = refTraj.flightTime;
+                bestPitch = refPitch;
+                itX = refTargetX;
+                itY = refTargetY;
+            }
+        }
+
+        return new double[]{bestPitch, itX, itY, estimatedTof};
+    }
+
+    /**
+     * Sweep core: tests every pitch at 0.5 deg steps, picks smallest miss distance.
+     * Returns {pitch, targetX, targetY, tof} or null.
+     */
+    private double[] solveSweepCore(
+            ShotInput input, FlywheelSimulator flywheelSimForPitch, GamePiece gp,
+            double effectiveTargetX, double effectiveTargetY, double estimatedTof,
+            double distance, double heightDiff, double dragComp,
+            double effectiveMinPitch, double effectiveMaxPitch,
+            double requiredClearance, boolean moving, SolveDebugInfo debugInfo) {
+
+        double bestPitch = Double.NaN;
+        double bestMissDistance = Double.MAX_VALUE;
+        double itX = effectiveTargetX, itY = effectiveTargetY;
+
+        double sweepStep = 0.5; // degrees
+
+        for (double pitchDeg = effectiveMinPitch; pitchDeg <= effectiveMaxPitch; pitchDeg += sweepStep) {
+            double pitchRad = Math.toRadians(pitchDeg);
+
+            double iterTargetX = effectiveTargetX;
+            double iterTargetY = effectiveTargetY;
+
+            if (moving && estimatedTof > 0) {
+                iterTargetX = input.getTargetX() - input.getRobotVx() * estimatedTof;
+                iterTargetY = input.getTargetY() - input.getRobotVy() * estimatedTof;
+            }
+
+            double dx = iterTargetX - input.getShooterX();
+            double dy = iterTargetY - input.getShooterY();
+            double iterDistance = Math.sqrt(dx * dx + dy * dy);
+            double requiredYaw = Math.atan2(dy, dx);
+
+            // Velocity for this pitch
+            double vacuumV = calculateRequiredVelocityForPitch(iterDistance, heightDiff, pitchRad);
+            if (Double.isNaN(vacuumV) || vacuumV <= 0) {
+                if (debugInfo != null) debugInfo.recordRejected(pitchDeg,
+                        SolveDebugInfo.RejectionReason.ARC_TOO_LOW,
+                        Double.MAX_VALUE, 0, 0, false, new ProjectileMotion.TrajectoryState[0]);
+                continue;
+            }
+
+            // Drag comp
+            double pitchDragComp = 1.0 + (dragComp - 1.0) * Math.cos(pitchRad);
+            double targetV = vacuumV * pitchDragComp;
+
+            // Flywheel check
+            FlywheelSimulator.SimulationResult pitchFw =
+                    flywheelSimForPitch.simulateForVelocity(targetV);
+            if (!pitchFw.isAchievable) {
+                if (debugInfo != null) debugInfo.recordRejected(pitchDeg,
+                        SolveDebugInfo.RejectionReason.ARC_TOO_LOW,
+                        Double.MAX_VALUE, 0, 0, false, new ProjectileMotion.TrajectoryState[0]);
+                continue;
+            }
+
+            double actualVelocity = pitchFw.exitVelocityMps;
+
+            // Simulate
+            ProjectileMotion.TrajectoryResult trajSim = projectileMotion.simulate(
+                    gp,
+                    input.getShooterX(), input.getShooterY(), input.getShooterZ(),
+                    actualVelocity, pitchRad, requiredYaw,
+                    pitchFw.ballSpinRpm,
+                    iterTargetX, iterTargetY, input.getTargetZ(),
+                    input.getTargetRadius()
+            );
+
+            // Velocity refinement
+            if (!trajSim.hitTarget && trajSim.maxHeight > input.getTargetZ()) {
+                ProjectileMotion.TrajectoryResult refined = refineVelocityForHit(
+                        gp,
+                        input.getShooterX(), input.getShooterY(), input.getShooterZ(),
+                        pitchRad, requiredYaw, pitchFw.ballSpinRpm,
+                        iterTargetX, iterTargetY, input.getTargetZ(),
+                        input.getTargetRadius(), actualVelocity);
+                if (refined != null) {
+                    trajSim = refined;
+                    if (refined.trajectory.length > 0) {
+                        ProjectileMotion.TrajectoryState s0 = refined.trajectory[0];
+                        actualVelocity = Math.sqrt(s0.vx * s0.vx + s0.vy * s0.vy + s0.vz * s0.vz);
+                    }
+                    pitchFw = flywheelSimForPitch.simulateForVelocity(actualVelocity);
+                    if (!pitchFw.isAchievable) continue;
+                }
+            }
+
+            if (trajectoryCollides(trajSim, input, input.getShooterX(), input.getShooterY())) {
+                if (debugInfo != null) debugInfo.recordRejected(pitchDeg, SolveDebugInfo.RejectionReason.COLLISION,
+                        trajSim.closestApproach, trajSim.maxHeight, trajSim.flightTime, trajSim.hitTarget, trajSim.trajectory);
+                continue;
+            }
+
+            // Clearance
+            if (requiredClearance > 0 && trajSim.maxHeight < requiredClearance) {
+                if (debugInfo != null) debugInfo.recordRejected(pitchDeg, SolveDebugInfo.RejectionReason.CLEARANCE_TOO_LOW,
+                        trajSim.closestApproach, trajSim.maxHeight, trajSim.flightTime, trajSim.hitTarget, trajSim.trajectory);
+                continue;
+            }
+
+            // Arc height
+            double minArcHeight = input.getMinArcHeightMeters();
+            if (minArcHeight > 0 && trajSim.maxHeight < input.getTargetZ() + minArcHeight) {
+                if (debugInfo != null) debugInfo.recordRejected(pitchDeg, SolveDebugInfo.RejectionReason.ARC_TOO_LOW,
+                        trajSim.closestApproach, trajSim.maxHeight, trajSim.flightTime, trajSim.hitTarget, trajSim.trajectory);
+                continue;
+            }
+
+            // Hit check
+            double hoopTolerance = input.getTargetRadius() * config.getHoopToleranceMultiplier();
+            boolean hitsTarget = trajSim.hitTarget
+                    || (trajSim.descendingAtClosest && trajSim.closestApproach <= hoopTolerance
+                        && trajSim.entryAngleDegrees >= SolverConstants.getMinEntryAngleDegrees());
+            if (!hitsTarget) {
+                if (debugInfo != null) debugInfo.recordRejected(pitchDeg, SolveDebugInfo.RejectionReason.MISSED_TARGET,
+                        trajSim.closestApproach, trajSim.maxHeight, trajSim.flightTime, trajSim.hitTarget, trajSim.trajectory);
+                continue;
+            }
+
+            // Flyover
+            if (isFlyover(trajSim.trajectory, iterTargetX, iterTargetY,
+                    input.getTargetZ(), input.getTargetRadius())) {
+                if (debugInfo != null) debugInfo.recordRejected(pitchDeg, SolveDebugInfo.RejectionReason.FLYOVER,
+                        trajSim.closestApproach, trajSim.maxHeight, trajSim.flightTime, trajSim.hitTarget, trajSim.trajectory);
+                continue;
+            }
+
+            // Pick the closest valid candidate
+            double missDistance = (trajSim.horizontalDistAtCrossing >= 0)
+                    ? trajSim.horizontalDistAtCrossing : trajSim.closestApproach;
+
+            if (missDistance < bestMissDistance) {
+                bestMissDistance = missDistance;
+                bestPitch = pitchRad;
+                itX = iterTargetX;
+                itY = iterTargetY;
+                if (trajSim.flightTime > 0) estimatedTof = trajSim.flightTime;
+
+                if (debugInfo != null) debugInfo.recordAccepted(pitchDeg, missDistance,
+                        trajSim.closestApproach, trajSim.maxHeight, trajSim.flightTime,
+                        trajSim.hitTarget, trajSim.trajectory);
+            } else {
+                if (debugInfo != null) debugInfo.recordRejected(pitchDeg,
+                        SolveDebugInfo.RejectionReason.MISSED_TARGET,
+                        trajSim.closestApproach, trajSim.maxHeight, trajSim.flightTime,
+                        trajSim.hitTarget, trajSim.trajectory);
+            }
+        }
+
+        if (Double.isNaN(bestPitch)) return null;
+
+        // Refine lead with actual TOF
+        if (moving && estimatedTof > 0) {
+            for (int refine = 0; refine < 2; refine++) {
+                double refTargetX = input.getTargetX() - input.getRobotVx() * estimatedTof;
+                double refTargetY = input.getTargetY() - input.getRobotVy() * estimatedTof;
+                double rdx = refTargetX - input.getShooterX();
+                double rdy = refTargetY - input.getShooterY();
+                double refDist = Math.sqrt(rdx * rdx + rdy * rdy);
+                double refYaw = Math.atan2(rdy, rdx);
+
+                double refVacuumV = calculateRequiredVelocityForPitch(refDist, heightDiff, bestPitch);
+                if (Double.isNaN(refVacuumV) || refVacuumV <= 0) break;
+
+                double refDragComp = 1.0 + (dragComp - 1.0) * Math.cos(bestPitch);
+                FlywheelSimulator.SimulationResult refFw =
+                        flywheelSimForPitch.simulateForVelocity(refVacuumV * refDragComp);
+                if (!refFw.isAchievable) break;
+
+                ProjectileMotion.TrajectoryResult refTraj = projectileMotion.simulate(
+                        gp,
+                        input.getShooterX(), input.getShooterY(), input.getShooterZ(),
+                        refFw.exitVelocityMps, bestPitch, refYaw, refFw.ballSpinRpm,
+                        refTargetX, refTargetY, input.getTargetZ(), input.getTargetRadius()
+                );
+
+                if (!refTraj.hitTarget && refTraj.maxHeight > input.getTargetZ()) {
+                    ProjectileMotion.TrajectoryResult refined = refineVelocityForHit(
+                            gp,
+                            input.getShooterX(), input.getShooterY(), input.getShooterZ(),
+                            bestPitch, refYaw, refFw.ballSpinRpm,
+                            refTargetX, refTargetY, input.getTargetZ(),
+                            input.getTargetRadius(), refFw.exitVelocityMps);
+                    if (refined != null) {
+                        refTraj = refined;
+                        double rv = refFw.exitVelocityMps;
+                        if (refined.trajectory.length > 0) {
+                            ProjectileMotion.TrajectoryState s0 = refined.trajectory[0];
+                            rv = Math.sqrt(s0.vx * s0.vx + s0.vy * s0.vy + s0.vz * s0.vz);
+                        }
+                        refFw = flywheelSimForPitch.simulateForVelocity(rv);
+                        if (!refFw.isAchievable) break;
+                    }
+                }
+
+                if (refTraj.flightTime > 0) estimatedTof = refTraj.flightTime;
+                itX = refTargetX;
+                itY = refTargetY;
+            }
+        }
+
+        return new double[]{bestPitch, itX, itY, estimatedTof};
+    }
+
     public static Builder builder() {
         return new Builder();
     }
@@ -547,14 +954,10 @@ public class TrajectorySolver {
     }
     
     /**
-     * Solves for the optimal trajectory given shot input.
-     * 
-     * This is the main entry point for the API.
-     * Supports collision-aware solving, arc bias, full pitch range search,
-     * and robust motion compensation.
-     * 
-     * @param input Shot input parameters
-     * @return Trajectory result with recommended settings
+     * Solves for the trajectory. Main entry point.
+     *
+     * @param input shot parameters
+     * @return result with recommended pitch, RPM, etc.
      */
     public TrajectoryResult solve(ShotInput input) {
         if (input == null) {
@@ -681,184 +1084,87 @@ public class TrajectorySolver {
         
         double bestPitchAngle = Double.NaN;
         ProjectileMotion.TrajectoryResult bestTrajSim = null;
-        double bestScore = Double.NEGATIVE_INFINITY;
         FlywheelSimulator.SimulationResult bestFlywheelSim = null;
-
-        double bestRelaxedScore = Double.NEGATIVE_INFINITY;
-        double bestRelaxedPitchAngle = Double.NaN;
-        ProjectileMotion.TrajectoryResult bestRelaxedTrajSim = null;
-        FlywheelSimulator.SimulationResult bestRelaxedFlywheelSim = null;
         
         SolveDebugInfo debugInfo = debugEnabled ? new SolveDebugInfo() : null;
-        
-        double angleStep = input.getAngleStepDegrees();
-        
 
-        int numSteps = (int) Math.round((effectiveMaxPitch - effectiveMinPitch) / angleStep);
-        
-        for (int stepIdx = 0; stepIdx <= numSteps; stepIdx++) {
-            double pitchDeg = Math.min(effectiveMinPitch + stepIdx * angleStep, effectiveMaxPitch);
-            double pitchRad = Math.toRadians(pitchDeg);
-            
-            double iterTargetX = effectiveTargetX;
-            double iterTargetY = effectiveTargetY;
+        // Dispatch to selected solver
+        double[] coreResult;
 
-            if (moving) {
-                iterTargetX = input.getTargetX() - input.getRobotVx() * estimatedTof;
-                iterTargetY = input.getTargetY() - input.getRobotVy() * estimatedTof;
-            }
-            
-            double dx = iterTargetX - input.getShooterX();
-            double dy = iterTargetY - input.getShooterY();
-            double iterDistance = Math.sqrt(dx * dx + dy * dy);
-            double iterHeightDiff = input.getTargetZ() - input.getShooterZ();
-            double requiredYaw = Math.atan2(dy, dx);
-            
-            double vacuumV = calculateRequiredVelocityForPitch(iterDistance, iterHeightDiff, pitchRad);
-            if (Double.isNaN(vacuumV) || vacuumV <= 0) {
-                if (debugInfo != null) debugInfo.recordRejected(pitchDeg, SolveDebugInfo.RejectionReason.ARC_TOO_LOW,
-                        Double.MAX_VALUE, 0, 0, false, new ProjectileMotion.TrajectoryState[0]);
-                continue;
-            }
-            
-
-            double pitchDragComp = 1.0 + (dragComp - 1.0) * Math.cos(pitchRad);
-            double targetV = vacuumV * pitchDragComp;
-            
-            FlywheelSimulator.SimulationResult pitchFlywheelSim = flywheelSimForPitch.simulateForVelocity(targetV);
-            if (!pitchFlywheelSim.isAchievable) {
-                if (debugInfo != null) debugInfo.recordRejected(pitchDeg, SolveDebugInfo.RejectionReason.ARC_TOO_LOW,
-                        Double.MAX_VALUE, 0, 0, false, new ProjectileMotion.TrajectoryState[0]);
-                continue;
-            }
-            
-            double actualVelocity = pitchFlywheelSim.exitVelocityMps;
-            
-            ProjectileMotion.TrajectoryResult trajSim = projectileMotion.simulate(
-                gamePiece,
-                input.getShooterX(), input.getShooterY(), input.getShooterZ(),
-                actualVelocity, pitchRad, requiredYaw,
-                pitchFlywheelSim.ballSpinRpm,
-                iterTargetX, iterTargetY, input.getTargetZ(),
-                input.getTargetRadius()
-            );
-            
-
-            if (!trajSim.hitTarget && trajSim.maxHeight > input.getTargetZ()) {
-                ProjectileMotion.TrajectoryResult refined = refineVelocityForHit(
-                        gamePiece,
-                        input.getShooterX(), input.getShooterY(), input.getShooterZ(),
-                        pitchRad, requiredYaw, pitchFlywheelSim.ballSpinRpm,
-                        iterTargetX, iterTargetY, input.getTargetZ(),
-                        input.getTargetRadius(), actualVelocity);
-                if (refined != null) {
-                    trajSim = refined;
-                    if (refined.trajectory.length > 0) {
-                        ProjectileMotion.TrajectoryState s0 = refined.trajectory[0];
-                        actualVelocity = Math.sqrt(s0.vx * s0.vx + s0.vy * s0.vy + s0.vz * s0.vz);
-                    }
-                    pitchFlywheelSim = flywheelSimForPitch.simulateForVelocity(actualVelocity);
-                    if (!pitchFlywheelSim.isAchievable) {
-                        if (debugInfo != null) debugInfo.recordRejected(pitchDeg, SolveDebugInfo.RejectionReason.ARC_TOO_LOW,
-                                trajSim.closestApproach, trajSim.maxHeight, trajSim.flightTime, trajSim.hitTarget, trajSim.trajectory);
-                        continue;
-                    }
-                }
-            }
-            
-            if (trajSim.flightTime > 0) {
-                estimatedTof = trajSim.flightTime;
-            }
-
-            if (trajectoryCollides(trajSim, input, input.getShooterX(), input.getShooterY())) {
-                if (debugInfo != null) debugInfo.recordRejected(pitchDeg, SolveDebugInfo.RejectionReason.COLLISION,
-                        trajSim.closestApproach, trajSim.maxHeight, trajSim.flightTime, trajSim.hitTarget, trajSim.trajectory);
-                continue;
-            }
-
-            double minArcHeight = input.getMinArcHeightMeters();
-            boolean arcTooLow = false;
-            if (minArcHeight > 0) {
-                double requiredApexHeight = input.getTargetZ() + minArcHeight;
-                if (trajSim.maxHeight < requiredApexHeight) {
-                    arcTooLow = true;
-                }
-            }
-
-            if (requiredClearance > 0 && trajSim.maxHeight < requiredClearance) {
-                if (arcTooLow) {
-                    if (debugInfo != null) debugInfo.recordRejected(pitchDeg, SolveDebugInfo.RejectionReason.ARC_TOO_LOW,
-                            trajSim.closestApproach, trajSim.maxHeight, trajSim.flightTime, trajSim.hitTarget, trajSim.trajectory);
-                } else {
-                    if (debugInfo != null) debugInfo.recordRejected(pitchDeg, SolveDebugInfo.RejectionReason.CLEARANCE_TOO_LOW,
-                            trajSim.closestApproach, trajSim.maxHeight, trajSim.flightTime, trajSim.hitTarget, trajSim.trajectory);
-                }
-                continue;
-            }
-
-            double hoopTolerance = input.getTargetRadius() * config.getHoopToleranceMultiplier();
-
-            boolean hitsTarget = trajSim.hitTarget
-                    || (trajSim.descendingAtClosest && trajSim.closestApproach <= hoopTolerance
-                        && trajSim.entryAngleDegrees >= SolverConstants.getMinEntryAngleDegrees());
-            
-            if (!hitsTarget) {
-                if (arcTooLow) {
-                    if (debugInfo != null) debugInfo.recordRejected(pitchDeg, SolveDebugInfo.RejectionReason.ARC_TOO_LOW,
-                            trajSim.closestApproach, trajSim.maxHeight, trajSim.flightTime, trajSim.hitTarget, trajSim.trajectory);
-                } else {
-                    if (debugInfo != null) debugInfo.recordRejected(pitchDeg, SolveDebugInfo.RejectionReason.MISSED_TARGET,
-                            trajSim.closestApproach, trajSim.maxHeight, trajSim.flightTime, trajSim.hitTarget, trajSim.trajectory);
-                }
-                continue;
-            }
-
-            if (isFlyover(trajSim.trajectory, iterTargetX, iterTargetY,
-                    input.getTargetZ(), input.getTargetRadius())) {
-                if (arcTooLow) {
-                    if (debugInfo != null) debugInfo.recordRejected(pitchDeg, SolveDebugInfo.RejectionReason.ARC_TOO_LOW,
-                            trajSim.closestApproach, trajSim.maxHeight, trajSim.flightTime, trajSim.hitTarget, trajSim.trajectory);
-                } else {
-                    if (debugInfo != null) debugInfo.recordRejected(pitchDeg, SolveDebugInfo.RejectionReason.FLYOVER,
-                            trajSim.closestApproach, trajSim.maxHeight, trajSim.flightTime, trajSim.hitTarget, trajSim.trajectory);
-                }
-                continue;
-            }
-            
-            // Candidate passes collision, clearance, target hit, and flyover checks.
-            // Track for relaxed fallback regardless of arc height.
-            if (arcTooLow) {
-                double score = scoreCandidate(trajSim, pitchDeg, input, requiredClearance);
-                if (score > bestRelaxedScore) {
-                    bestRelaxedScore = score;
-                    bestRelaxedPitchAngle = pitchRad;
-                    bestRelaxedTrajSim = trajSim;
-                    bestRelaxedFlywheelSim = pitchFlywheelSim;
-                }
-                if (debugInfo != null) debugInfo.recordRejected(pitchDeg, SolveDebugInfo.RejectionReason.ARC_TOO_LOW,
-                        trajSim.closestApproach, trajSim.maxHeight, trajSim.flightTime, trajSim.hitTarget, trajSim.trajectory);
-                continue;
-            }
-
-            double score = scoreCandidate(trajSim, pitchDeg, input, requiredClearance);
-            
-            if (debugInfo != null) debugInfo.recordAccepted(pitchDeg, score,
-                    trajSim.closestApproach, trajSim.maxHeight, trajSim.flightTime, trajSim.hitTarget, trajSim.trajectory);
-            
-            if (score > bestScore) {
-                bestScore = score;
-                bestPitchAngle = pitchRad;
-                bestTrajSim = trajSim;
-                bestFlywheelSim = pitchFlywheelSim;
+        if (solveMode == SolveMode.SWEEP) {
+            coreResult = solveSweepCore(input, flywheelSimForPitch, gamePiece,
+                    effectiveTargetX, effectiveTargetY, estimatedTof,
+                    distance, heightDiff, dragComp,
+                    effectiveMinPitch, effectiveMaxPitch,
+                    requiredClearance, moving, debugInfo);
+        } else {
+            // Constraint mode: try constraint first, fall back to sweep
+            coreResult = solveConstraintCore(input, flywheelSimForPitch, gamePiece,
+                    effectiveTargetX, effectiveTargetY, estimatedTof,
+                    distance, heightDiff, dragComp,
+                    effectiveMinPitch, effectiveMaxPitch,
+                    requiredClearance, moving, debugInfo);
+            if (coreResult == null) {
+                // Constraint failed, try sweep
+                coreResult = solveSweepCore(input, flywheelSimForPitch, gamePiece,
+                        effectiveTargetX, effectiveTargetY, estimatedTof,
+                        distance, heightDiff, dragComp,
+                        effectiveMinPitch, effectiveMaxPitch,
+                        requiredClearance, moving, debugInfo);
             }
         }
-        // Never trust lingfeng 
-        // If no candidate passed strict arc height, fall back to relaxed (no arc height).
-        if ((Double.isNaN(bestPitchAngle) || bestTrajSim == null) && bestRelaxedTrajSim != null) {
-            bestPitchAngle = bestRelaxedPitchAngle;
-            bestTrajSim = bestRelaxedTrajSim;
-            bestFlywheelSim = bestRelaxedFlywheelSim;
-            bestScore = bestRelaxedScore;
+
+        if (coreResult != null) {
+            bestPitchAngle = coreResult[0];
+            effectiveTargetX = coreResult[1];
+            effectiveTargetY = coreResult[2];
+            estimatedTof = coreResult[3];
+
+            // Re-simulate the best to get full trajectory + flywheel data
+            double dx2 = effectiveTargetX - input.getShooterX();
+            double dy2 = effectiveTargetY - input.getShooterY();
+            double bestYaw = Math.atan2(dy2, dx2);
+            double bestIterDist = Math.sqrt(dx2 * dx2 + dy2 * dy2);
+
+            double bestVacV = calculateRequiredVelocityForPitch(bestIterDist, heightDiff, bestPitchAngle);
+            if (Double.isNaN(bestVacV) || bestVacV <= 0) {
+                // Fall through to failure
+            } else {
+                double bestDragComp = 1.0 + (dragComp - 1.0) * Math.cos(bestPitchAngle);
+                FlywheelSimulator.SimulationResult fw = flywheelSimForPitch.simulateForVelocity(bestVacV * bestDragComp);
+                if (fw.isAchievable) {
+                    ProjectileMotion.TrajectoryResult traj = projectileMotion.simulate(
+                            gamePiece,
+                            input.getShooterX(), input.getShooterY(), input.getShooterZ(),
+                            fw.exitVelocityMps, bestPitchAngle, bestYaw, fw.ballSpinRpm,
+                            effectiveTargetX, effectiveTargetY, input.getTargetZ(),
+                            input.getTargetRadius());
+
+                    // Velocity refinement
+                    if (!traj.hitTarget && traj.maxHeight > input.getTargetZ()) {
+                        ProjectileMotion.TrajectoryResult refined = refineVelocityForHit(
+                                gamePiece,
+                                input.getShooterX(), input.getShooterY(), input.getShooterZ(),
+                                bestPitchAngle, bestYaw, fw.ballSpinRpm,
+                                effectiveTargetX, effectiveTargetY, input.getTargetZ(),
+                                input.getTargetRadius(), fw.exitVelocityMps);
+                        if (refined != null) {
+                            traj = refined;
+                            double refV = fw.exitVelocityMps;
+                            if (refined.trajectory.length > 0) {
+                                ProjectileMotion.TrajectoryState s0 = refined.trajectory[0];
+                                refV = Math.sqrt(s0.vx * s0.vx + s0.vy * s0.vy + s0.vz * s0.vz);
+                            }
+                            fw = flywheelSimForPitch.simulateForVelocity(refV);
+                        }
+                    }
+
+                    if (fw.isAchievable) {
+                        bestTrajSim = traj;
+                        bestFlywheelSim = fw;
+                    }
+                }
+            }
         }
         
         if (Double.isNaN(bestPitchAngle) || bestTrajSim == null) {
@@ -914,85 +1220,6 @@ public class TrajectorySolver {
         );
         if (debugInfo != null) successResult.setDebugInfo(debugInfo);
         return successResult;
-    }
-    
-    /**
-     * Scores a trajectory candidate based on accuracy, arc height, speed,
-     * stability, and obstacle clearance. Uses the configurable
-     * {@link ScoringWeights} set via {@link #setScoringWeights}.
-     * Higher score = better candidate.
-     *
-     * <p>Scoring components (base points before weight):</p>
-     * <ul>
-     *   <li><b>Accuracy</b> (0-40) — inversely proportional to closest approach</li>
-     *   <li><b>Hit bonus</b> (0 or 15) — ball actually enters target radius</li>
-     *   <li><b>Low arc</b> (0-25) — linearly higher score for lower pitch angles</li>
-     *   <li><b>Speed</b> (0-20) — shorter time-of-flight is better</li>
-     *   <li><b>Stability</b> (0-10) — how close to optimal mechanism angle</li>
-     *   <li><b>Clearance</b> (0-10) — margin above obstacles</li>
-     *   <li><b>Entry angle</b> (0-20) — steeper descent into target scores higher</li>
-     *   <li><b>Arc preference</b> (0-20) — user-specified arc height bias</li>
-     * </ul>
-     */
-    private double scoreCandidate(ProjectileMotion.TrajectoryResult traj, double pitchDeg,
-                                   ShotInput input, double requiredClearance) {
-        ScoringWeights w = this.scoringWeights;
-        double score = 0;
-
-        // Accuracy: base 0-40 pts (inversely proportional to closest approach)
-        double relativeApproach = traj.closestApproach / Math.max(0.01, input.getTargetRadius());
-        score += Math.max(0, 40 - relativeApproach * 20) * w.getAccuracyWeight();
-
-        // Direct hit bonus: 15 pts
-        if (traj.hitTarget) {
-            score += 15 * w.getHitBonusWeight();
-        }
-
-        // Low arc bonus: 0-25 pts — lower pitch = higher score.
-        // Normalized within the input's pitch range so lowest valid angle gets max points.
-        double pitchRange = input.getMaxPitchDegrees() - input.getMinPitchDegrees();
-        if (pitchRange > 0 && w.getLowArcWeight() > 0) {
-            double normalizedPitch = (pitchDeg - input.getMinPitchDegrees()) / pitchRange;
-            normalizedPitch = Math.max(0, Math.min(1, normalizedPitch));
-            score += (1.0 - normalizedPitch) * 25.0 * w.getLowArcWeight();
-        }
-
-        // Speed: base 0-20 pts (shorter TOF = better)
-        score += Math.max(0, 20 - traj.flightTime * 5) * w.getSpeedWeight();
-
-        // Stability: base 0-10 pts (near optimal mechanism angle)
-        double angleDeviation = Math.abs(pitchDeg - w.getOptimalAngleDegrees());
-        score += Math.max(0, 10 - angleDeviation * 0.2) * w.getStabilityWeight();
-
-        // Clearance: base 0-10 pts
-        if (requiredClearance > 0 && traj.maxHeight > requiredClearance) {
-            double clearanceMargin = traj.maxHeight - requiredClearance;
-            score += Math.min(10, clearanceMargin * 10) * w.getClearanceWeight();
-        }
-
-        // Entry angle: base 0-20 pts — steeper descent into target = higher score.
-        // Normalized so that 90° (straight down) gets full marks.
-        if (traj.entryAngleDegrees > 0 && w.getEntryAngleWeight() > 0) {
-            double normalizedAngle = Math.min(1.0, traj.entryAngleDegrees / 90.0);
-            score += normalizedAngle * 20.0 * w.getEntryAngleWeight();
-        }
-
-        // Arc preference from ShotInput (user-specified preferred arc height)
-        double preferredArc = input.getPreferredArcHeightMeters();
-        double biasStrength = input.getArcBiasStrength();
-
-        if (preferredArc > 0 && biasStrength > 0) {
-            double arcDeviation = Math.abs(traj.maxHeight - preferredArc);
-            double arcBonus = Math.max(0, 20 - arcDeviation * 10);
-            score += arcBonus * biasStrength;
-        } else if (input.pathRequiresArc()) {
-            double autoBias = SolverConstants.getDefaultArcBiasStrength();
-            double autoPreferred = requiredClearance + 0.3;
-            double arcDeviation = Math.abs(traj.maxHeight - autoPreferred);
-            score += Math.max(0, 15 - arcDeviation * 8) * autoBias;
-        }
-
-        return score;
     }
     
     /**
@@ -1105,36 +1332,13 @@ public class TrajectorySolver {
     }
     
     /**
-     * Solves for the best pitch angle given the current measured flywheel RPM.
-     * 
-     * <p>Used for RPM feedback during rapid-fire shooting. When shooting many balls
-     * in succession (20-50), the flywheel slows down between shots. Instead of waiting
-     * for the flywheel to spin back up to the ideal RPM, this method finds the best
-     * angle to shoot at the <em>current</em> RPM — treating velocity as a fixed constraint
-     * and optimizing angle only.</p>
-     * 
-     * <p>Typical usage pattern:</p>
-     * <ol>
-     *   <li>First shot: use {@link #solve(ShotInput)} for the ideal RPM + angle</li>
-     *   <li>Subsequent shots: read actual flywheel RPM from encoder, call this method
-     *       to get the best angle at that velocity</li>
-     * </ol>
-     * 
-     * <pre>
-     * TrajectoryResult ideal = solver.solve(input);
-     * // ... shoot, flywheel slows down ...
-     * double currentRpm = flywheelEncoder.getVelocity();
-     * TrajectoryResult adjusted = solver.solveAtCurrentRpm(input, flywheelConfig, currentRpm);
-     * if (adjusted.isSuccess()) {
-     *     setPitch(adjusted.getPitchAngleDegrees());
-     * }
-     * </pre>
-     * 
-     * @param input Shot input parameters (position, target, obstacles, etc.)
-     * @param flywheel The flywheel configuration to simulate with
-     * @param currentRpm The current measured flywheel RPM from encoder feedback
-     * @return Trajectory result with the best angle for the given RPM, or failure if
-     *         the current RPM cannot reach the target at any valid angle
+     * Finds the best pitch at a given flywheel RPM (e.g. for rapid-fire
+     * when the flywheel is slower than ideal).
+     *
+     * @param input shot parameters
+     * @param flywheel flywheel config to simulate
+     * @param currentRpm measured RPM from encoder
+     * @return result at the given RPM, or failure if unreachable
      */
     public TrajectoryResult solveAtCurrentRpm(ShotInput input, FlywheelConfig flywheel, double currentRpm) {
         if (input == null) {
@@ -1205,70 +1409,52 @@ public class TrajectorySolver {
         
         double bestPitchAngle = Double.NaN;
         ProjectileMotion.TrajectoryResult bestTrajSim = null;
-        double bestScore = Double.NEGATIVE_INFINITY;
-        
-        double angleStep = input.getAngleStepDegrees();
-        
-        // Use integer counting to avoid floating-point drift.
-        int numSteps = (int) Math.round((effectiveMaxPitch - effectiveMinPitch) / angleStep);
-        
-        for (int stepIdx = 0; stepIdx <= numSteps; stepIdx++) {
-            double pitchDeg = Math.min(effectiveMinPitch + stepIdx * angleStep, effectiveMaxPitch);
-            double pitchRad = Math.toRadians(pitchDeg);
-            
-            double iterTargetX = effectiveTargetX;
-            double iterTargetY = effectiveTargetY;
 
-            if (moving) {
-                iterTargetX = input.getTargetX() - input.getRobotVx() * estimatedTof;
-                iterTargetY = input.getTargetY() - input.getRobotVy() * estimatedTof;
-            }
+        // High-arc pitch for fixed velocity:
+        //   theta = atan((v^2 + sqrt(v^4 - g(g*d^2 + 2*h*v^2))) / (g*d))
+        double g = ca.team4308.absolutelib.math.trajectories.physics.PhysicsConstants.GRAVITY;
+        double v = actualVelocity;
+        double d = distance;
+        double h = input.getHeightDifferenceMeters();
+        double disc = v * v * v * v - g * (g * d * d + 2.0 * h * v * v);
+        
+        if (disc >= 0) {
+            double pitchRad = Math.atan((v * v + Math.sqrt(disc)) / (g * d));
             
-            double dx = iterTargetX - input.getShooterX();
-            double dy = iterTargetY - input.getShooterY();
+            // Clamp to pitch limits
+            pitchRad = Math.max(Math.toRadians(effectiveMinPitch),
+                    Math.min(Math.toRadians(effectiveMaxPitch), pitchRad));
+            
+            double dx = effectiveTargetX - input.getShooterX();
+            double dy = effectiveTargetY - input.getShooterY();
             double requiredYaw = Math.atan2(dy, dx);
             
             ProjectileMotion.TrajectoryResult trajSim = projectileMotion.simulate(
-                gamePiece,
-                input.getShooterX(), input.getShooterY(), input.getShooterZ(),
-                actualVelocity, pitchRad, requiredYaw,
-                ballSpin,
-                iterTargetX, iterTargetY, input.getTargetZ(),
-                input.getTargetRadius()
+                    gamePiece,
+                    input.getShooterX(), input.getShooterY(), input.getShooterZ(),
+                    actualVelocity, pitchRad, requiredYaw, ballSpin,
+                    effectiveTargetX, effectiveTargetY, input.getTargetZ(),
+                    input.getTargetRadius()
             );
             
-            if (trajSim.flightTime > 0) {
-                estimatedTof = trajSim.flightTime;
-            }
-
-            if (trajectoryCollides(trajSim, input, input.getShooterX(), input.getShooterY())) continue;
-
+            if (trajSim.flightTime > 0) estimatedTof = trajSim.flightTime;
+            
+            // Validate
+            boolean valid = true;
+            if (trajectoryCollides(trajSim, input, input.getShooterX(), input.getShooterY())) valid = false;
+            if (valid && requiredClearance > 0 && trajSim.maxHeight < requiredClearance) valid = false;
             double minArcHeight = input.getMinArcHeightMeters();
-            if (minArcHeight > 0) {
-                double requiredApexHeight = input.getTargetZ() + minArcHeight;
-                if (trajSim.maxHeight < requiredApexHeight) {
-                    continue;
-                }
-            }
-
-            if (requiredClearance > 0 && trajSim.maxHeight < requiredClearance) {
-                continue;
-            }
-
+            if (valid && minArcHeight > 0 && trajSim.maxHeight < input.getTargetZ() + minArcHeight) valid = false;
+            
             double hoopTolerance = input.getTargetRadius() * config.getHoopToleranceMultiplier();
             boolean hitsTarget = trajSim.hitTarget
                     || (trajSim.descendingAtClosest && trajSim.closestApproach <= hoopTolerance
                         && trajSim.entryAngleDegrees >= SolverConstants.getMinEntryAngleDegrees());
+            if (valid && !hitsTarget) valid = false;
+            if (valid && isFlyover(trajSim.trajectory, effectiveTargetX, effectiveTargetY,
+                    input.getTargetZ(), input.getTargetRadius())) valid = false;
             
-            if (!hitsTarget) continue;
-
-            if (isFlyover(trajSim.trajectory, iterTargetX, iterTargetY,
-                    input.getTargetZ(), input.getTargetRadius())) continue;
-
-            double score = scoreCandidate(trajSim, pitchDeg, input, requiredClearance);
-            
-            if (score > bestScore) {
-                bestScore = score;
+            if (valid) {
                 bestPitchAngle = pitchRad;
                 bestTrajSim = trajSim;
             }
@@ -1317,15 +1503,10 @@ public class TrajectorySolver {
     }
     
     /**
-     * Finds all possible shot candidates for the given input.
-     * Returns candidates sorted by confidence (best first).
-     * 
-     * Supports collision-aware filtering, motion compensation, and arc bias scoring.
-     * This is O(n) where n = (maxAngle - minAngle) / angleStep.
-     * Default settings give ~80 iterations max.
-     * 
-     * @param input Shot input parameters with angle/velocity ranges
-     * @return List of shot candidates sorted by confidence
+     * Finds all shot candidates sorted by confidence.
+     *
+     * @param input shot parameters
+     * @return candidates list, possibly empty
      */
     public ShotCandidateList findAllCandidates(ShotInput input) {
         if (input == null) {

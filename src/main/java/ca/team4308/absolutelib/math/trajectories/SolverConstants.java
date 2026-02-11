@@ -1,33 +1,16 @@
 package ca.team4308.absolutelib.math.trajectories;
 
 /**
- * Configurable constants for the trajectory solver system.
- * 
- * All constants can be modified at runtime to tune solver behavior.
- * Call the static setters before creating a TrajectorySolver instance,
- * or use {@link #resetToDefaults()} to restore original values.
- * 
- * <h2>Example Usage</h2>
- * <pre>
- * // Make the solver more tolerant for large hoops
- * SolverConstants.setHoopToleranceMultiplier(8.0);
- * SolverConstants.setMinTargetDistanceMeters(0.05);
- * 
- * // Create solver with modified constants
- * TrajectorySolver solver = TrajectorySolver.forGame2026();
- * </pre>
+ * Tunable constants for the trajectory solver. Call setters before creating
+ * a solver, or use {@link #resetToDefaults()} to restore defaults.
  */
 public final class SolverConstants {
     
     private SolverConstants() {}
 
 
-    /**
-     * Multiplier for target radius when determining if a trajectory "hits" the target.
-     * Higher values are more lenient for hoop/basket-style targets.
-     * Default: 1.5 (ball within 1.5x target radius counts as hit)
-     */
-    private static double hoopToleranceMultiplier = 1.5;
+    /** Hoop tolerance multiplier. Default: 1.0 */
+    private static double hoopToleranceMultiplier = 1.0;
     
     /**
      * Minimum horizontal distance to target (meters).
@@ -39,9 +22,9 @@ public final class SolverConstants {
     /**
      * Multiplier for target radius used in basket descent detection.
      * When ball descends and is within (targetRadius * this) horizontally, it's a hit.
-     * Default: 1.5
+     * Default: 1.0
      */
-    private static double basketDescentToleranceMultiplier = 1.5;
+    private static double basketDescentToleranceMultiplier = 1.0;
 
     // ==================== Velocity ====================
 
@@ -130,10 +113,8 @@ public final class SolverConstants {
 
 
     /**
-     * Velocity scale factor for close-range shots (under threshold distance).
-     * At close range, air resistance has minimal effect so no drag compensation
-     * is applied — only this buffer multiplier.
-     * Default: 1.3 (30% buffer)
+     * Close-range velocity scale factor. No drag comp at close range,
+     * just this buffer. Default: 1.3
      */
     private static double closeRangeVelocityMultiplier = 1.3;
     
@@ -147,29 +128,28 @@ public final class SolverConstants {
     // ==================== Collision ====================
 
     /**
-     * Distance from launch position (meters) within which collision checks are
-     * skipped. This allows the ball to "escape" upward when the shooter is inside
-     * or very close to an obstacle's footprint (e.g., shooting from under the hub).
-     * Default: 0.5m
+     * Grace distance (m) from launch point where collisions are ignored.
+     * Lets the ball escape when shooting near obstacles. Default: 0.5m
      */
     private static double collisionGraceDistanceMeters = 0.5;
 
     /**
-     * Multiplier to compensate for air resistance when estimating minimum velocity.
-     * The analytical minimum velocity formula assumes vacuum; real balls with drag
-     * need significantly more speed. This is multiplied on top of velocityBufferMultiplier.
-     * Default: 1.8 (80% boost for drag)
+     * Drag compensation multiplier for velocity estimates. Vacuum formulas
+     * underestimate needed speed. Default: 1.8
      */
     private static double dragCompensationMultiplier = 1.8;
 
     /**
-     * Minimum entry angle in degrees for a trajectory to count as a hit.
-     * Measured from horizontal — 90° is straight down, 0° is perfectly flat.
-     * Only trajectories where the ball crosses the rim plane at this angle
-     * or steeper are accepted. Steeper entries are more likely to go in.
-     * Default: 30.0° (moderate steepness)
+     * Min entry angle (deg) for a hit. Steeper = more likely to go in.
+     * 90 = straight down, 0 = flat. Default: 30.0
      */
     private static double minEntryAngleDegrees = 30.0;
+
+    /**
+     * Rim clearance (m) the ball must clear above the target rim edge.
+     * Larger = steeper arc, smaller = flatter. Default: 0.15m
+     */
+    private static double rimClearanceMeters = 0.15;
 
     // ==================== Getters ====================
 
@@ -193,6 +173,7 @@ public final class SolverConstants {
     public static double getCollisionGraceDistanceMeters() { return collisionGraceDistanceMeters; }
     public static double getDragCompensationMultiplier() { return dragCompensationMultiplier; }
     public static double getMinEntryAngleDegrees() { return minEntryAngleDegrees; }
+    public static double getRimClearanceMeters() { return rimClearanceMeters; }
 
     // ==================== Setters ====================
 
@@ -216,14 +197,15 @@ public final class SolverConstants {
     public static void setCollisionGraceDistanceMeters(double value) { collisionGraceDistanceMeters = value; }
     public static void setDragCompensationMultiplier(double value) { dragCompensationMultiplier = value; }
     public static void setMinEntryAngleDegrees(double value) { minEntryAngleDegrees = value; }
+    public static void setRimClearanceMeters(double value) { rimClearanceMeters = value; }
     
     /**
      * Resets all constants to their default values.
      */
     public static void resetToDefaults() {
-        hoopToleranceMultiplier = 5.0;
+        hoopToleranceMultiplier = 1.0;
         minTargetDistanceMeters = 0.1;
-        basketDescentToleranceMultiplier = 5.0;
+        basketDescentToleranceMultiplier = 1.0;
         initialVelocityEstimateMps = 15.0;
         velocityBufferMultiplier = 1.3;
         minVelocityRangeMultiplier = 0.9;
@@ -241,5 +223,6 @@ public final class SolverConstants {
         collisionGraceDistanceMeters = 0.5;
         dragCompensationMultiplier = 1.8;
         minEntryAngleDegrees = 30.0;
+        rimClearanceMeters = 0.15;
     }
 }

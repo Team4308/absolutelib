@@ -70,11 +70,7 @@ public class ProjectileMotion {
         public final double closestApproach;
         /** Whether the ball was descending (vz &lt; 0) at the point of closest approach. */
         public final boolean descendingAtClosest;
-        /**
-         * Entry angle in degrees at the point the ball crosses the rim plane
-         * (z = targetZ) while descending. Measured from horizontal — 90° is
-         * straight down, 0° is perfectly flat. -1 if the ball never crosses.
-         */
+        /** Entry angle (deg) at rim-plane crossing. 90 = straight down. -1 if never crosses. */
         public final double entryAngleDegrees;
         /**
          * Horizontal distance from the target center when the ball crosses the
@@ -198,11 +194,7 @@ public class ProjectileMotion {
                 closestState = state.copy();
             }
             
-            // ── Rim-plane crossing detection ──
-            // ALWAYS detect when the ball descends through z = targetZ.
-            // This stops the simulation at the rim plane so the solver and
-            // path visualizer get a trajectory that ends at the target height.
-            // The hit/miss decision is separate from the crossing detection.
+            // Detect rim-plane crossing (ball descends through z = targetZ)
             if (pastApex && prevZ >= targetZ && state.z <= targetZ && targetZ > 0) {
                 // Compute entry angle (steepness of descent from horizontal)
                 double hSpeed = Math.sqrt(state.vx * state.vx + state.vy * state.vy);
@@ -215,7 +207,7 @@ public class ProjectileMotion {
                         && horizontalDistToTarget <= targetRadius) {
                     hitTarget = true;
                 }
-                break; // Always stop at rim crossing — trajectory ends at target height
+                break; // Stop at rim crossing
             }
             
             prevZ = state.z;

@@ -78,31 +78,23 @@ public class ExampleShooter extends AbsoluteSubsystem {
                 .addEntry(8.0, 48.0, 3300);
 
         GamePiece gamePiece = GamePieces.REBUILT_2026_BALL;
-        SolverConstants.setHoopToleranceMultiplier(1);
-        SolverConstants.setBasketDescentToleranceMultiplier(1);
         SolverConstants.setMinTargetDistanceMeters(0.05);
         SolverConstants.setVelocityBufferMultiplier(1.2);
+        SolverConstants.setRimClearanceMeters(0.15);
         TrajectorySolver.SolverConfig solverConfig = TrajectorySolver.SolverConfig.defaults()
                 .toBuilder()
-                .hoopToleranceMultiplier(1.5)
                 .minPitchDegrees(47.5)
                 .maxPitchDegrees(82.5)
                 .build();
         solver = new TrajectorySolver(gamePiece, solverConfig);
+        
+        // CONSTRAINT or SWEEP
+        solver.setSolveMode(TrajectorySolver.SolveMode.CONSTRAINT);
 
         shooterSystem = new ShooterSystem(config, table, solver);
         shooterSystem.setMode(ShotMode.SOLVER_ONLY);
         shooterSystem.setFallbackShot(60.0, 3000);
 
-        solver.setScoringWeights(
-                ScoringWeights.builder()
-                        .lowArcWeight(.10)
-                        .optimalAngleDegrees(50.0)
-                        .accuracyWeight(1.2)
-                        .speedWeight(5.0)
-                        .stabilityWeight(0.3)
-                        .clearanceWeight(0.5)
-                        .build());
         solver.setDebugEnabled(true);
     }
 
@@ -219,24 +211,24 @@ public class ExampleShooter extends AbsoluteSubsystem {
             recordOutput("Debug/RejectedClearance", debug.getRejectedClearanceCount());
             recordOutput("Debug/RejectedMiss", debug.getRejectedMissCount());
             recordOutput("Debug/RejectedFlyover", debug.getRejectedFlyoverCount());
-            recordOutput("Debug/BestScore", debug.getBestScore());
+            recordOutput("Debug/BestMissDistance", debug.getBestMissDistance());
             recordOutput("Debug/BestPitchDeg", debug.getBestPitchDegrees());
             recordOutput("Debug/Summary", debug.getSummary());
             recordOutput("Debug/DetailedTable", debug.getDetailedTable());
 
             List<SolveDebugInfo.CandidateInfo> accepted = debug.getAcceptedCandidates();
             double[] accPitch = new double[accepted.size()];
-            double[] accScore = new double[accepted.size()];
+            double[] accMiss = new double[accepted.size()];
             double[] accTOF = new double[accepted.size()];
             double[] accMaxH = new double[accepted.size()];
             for (int i = 0; i < accepted.size(); i++) {
                 accPitch[i] = accepted.get(i).getPitchDegrees();
-                accScore[i] = accepted.get(i).getScore();
+                accMiss[i] = accepted.get(i).getMissDistance();
                 accTOF[i] = accepted.get(i).getTimeOfFlight();
                 accMaxH[i] = accepted.get(i).getMaxHeight();
             }
             recordOutput("Debug/AcceptedPitches", accPitch);
-            recordOutput("Debug/AcceptedScores", accScore);
+            recordOutput("Debug/AcceptedMissDistance", accMiss);
             recordOutput("Debug/AcceptedTOF", accTOF);
             recordOutput("Debug/AcceptedMaxHeight", accMaxH);
 
@@ -290,7 +282,7 @@ public class ExampleShooter extends AbsoluteSubsystem {
                 .shooterPositionMeters(shooterX, shooterY, shooterHeightMeters)
                 .shooterYawRadians(yawRad)
                 .targetPositionMeters(targetPosition.getX(), targetPosition.getY(), targetPosition.getZ())
-                .targetRadiusMeters(0.53)
+                .targetRadiusMeters(0.45)
                 .includeAirResistance(true)
                 .robotVelocity(vx, vy)
         );
