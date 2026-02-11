@@ -750,7 +750,10 @@ public class TrajectorySolver {
             }
 
             double hoopTolerance = input.getTargetRadius() * config.getHoopToleranceMultiplier();
-            boolean hitsTarget = trajSim.hitTarget || trajSim.closestApproach <= hoopTolerance;
+            // Ball must be descending at closest approach for a hoop tolerance hit —
+            // a ball at its apex flying horizontally past is not going into the basket.
+            boolean hitsTarget = trajSim.hitTarget
+                    || (trajSim.descendingAtClosest && trajSim.closestApproach <= hoopTolerance);
             
             if (!hitsTarget) {
                 if (arcTooLow) {
@@ -1198,7 +1201,8 @@ public class TrajectorySolver {
             }
 
             double hoopTolerance = input.getTargetRadius() * config.getHoopToleranceMultiplier();
-            boolean hitsTarget = trajSim.hitTarget || trajSim.closestApproach <= hoopTolerance;
+            boolean hitsTarget = trajSim.hitTarget
+                    || (trajSim.descendingAtClosest && trajSim.closestApproach <= hoopTolerance);
             
             if (!hitsTarget) continue;
 

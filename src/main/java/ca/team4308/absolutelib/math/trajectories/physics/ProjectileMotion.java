@@ -68,16 +68,20 @@ public class ProjectileMotion {
         public final TrajectoryState[] trajectory;
         public final boolean hitTarget;
         public final double closestApproach;
+        /** Whether the ball was descending (vz < 0) at the point of closest approach. */
+        public final boolean descendingAtClosest;
         public final TrajectoryState finalState;
         public final double maxHeight;
         public final double flightTime;
         
         public TrajectoryResult(TrajectoryState[] trajectory, boolean hitTarget,
-                                double closestApproach, TrajectoryState finalState,
+                                double closestApproach, boolean descendingAtClosest,
+                                TrajectoryState finalState,
                                 double maxHeight, double flightTime) {
             this.trajectory = trajectory;
             this.hitTarget = hitTarget;
             this.closestApproach = closestApproach;
+            this.descendingAtClosest = descendingAtClosest;
             this.finalState = finalState;
             this.maxHeight = maxHeight;
             this.flightTime = flightTime;
@@ -198,15 +202,17 @@ public class ProjectileMotion {
         TrajectoryState[] trimmedTrajectory = new TrajectoryState[pointCount];
         System.arraycopy(trajectory, 0, trimmedTrajectory, 0, pointCount);
         
-        // Final validation: check if the trajectory actually reached close to the target
-        // Use generous tolerance for hoop/basket-style targets - the ball
-        // doesn't need to hit a precise point, it just needs to pass through the opening
-        if (!hitTarget && closestApproach <= targetRadius * SolverConstants.getHoopToleranceMultiplier()) {
-            hitTarget = true; // Close enough counts as a hit for a hoop
+        // Final validation: check if the trajectory actually reached close to the target.
+        // For hoop/basket targets, the ball must be DESCENDING at closest approach —
+        // a ball at its apex flying horizontally past the target is not a valid score.
+        boolean descending = closestState != null && closestState.vz < 0;
+        if (!hitTarget && descending
+                && closestApproach <= targetRadius * SolverConstants.getHoopToleranceMultiplier()) {
+            hitTarget = true; // Descending and close enough counts as a hit for a hoop
         }
         
-        return new TrajectoryResult(trimmedTrajectory, hitTarget, closestApproach, 
-            state, maxHeight, state.time);
+        return new TrajectoryResult(trimmedTrajectory, hitTarget, closestApproach,
+            descending, state, maxHeight, state.time);
     }
 
     /**
