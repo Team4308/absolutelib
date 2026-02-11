@@ -31,6 +31,8 @@ public class TrajectoryResult {
         try {
             ca.team4308.absolutelib.math.trajectories.physics.ProjectileMotion projectileMotion
                     = new ca.team4308.absolutelib.math.trajectories.physics.ProjectileMotion();
+            // Pass targetRadius=0 so the simulation runs the full arc to the ground
+            // instead of terminating early at the basket-descent condition.
             ca.team4308.absolutelib.math.trajectories.physics.ProjectileMotion.TrajectoryResult simResult = projectileMotion.simulate(
                     gamePiece != null ? gamePiece : ca.team4308.absolutelib.math.trajectories.gamepiece.GamePieces.getCurrent(),
                     input.getShooterX(), input.getShooterY(), input.getShooterZ(),
@@ -39,7 +41,7 @@ public class TrajectoryResult {
                     input.getShooterYaw(),
                     0, // spinRpm (not tracked in result)
                     input.getTargetX(), input.getTargetY(), input.getTargetZ(),
-                    input.getTargetRadius()
+                    0  // targetRadius=0 to prevent early termination
             );
             
             int validCount = 0;

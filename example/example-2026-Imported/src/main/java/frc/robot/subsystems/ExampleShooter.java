@@ -43,7 +43,7 @@ public class ExampleShooter extends AbsoluteSubsystem {
 
     private double shooterHeightMeters = 0.5;
     private Translation2d shooterOffset = new Translation2d(0.1, 0.1);
-    private Translation3d targetPosition = new Translation3d(6.0, 4.0, 2.1);
+    private Translation3d targetPosition = new Translation3d(6.0, 0.0, 2.1);
     private boolean trackingEnabled = true;
 
     public ExampleShooter() {
@@ -78,13 +78,13 @@ public class ExampleShooter extends AbsoluteSubsystem {
                 .addEntry(8.0, 48.0, 3300);
 
         GamePiece gamePiece = GamePieces.REBUILT_2026_BALL;
-        SolverConstants.setHoopToleranceMultiplier(2.5);
-        SolverConstants.setBasketDescentToleranceMultiplier(3.0);
+        SolverConstants.setHoopToleranceMultiplier(1);
+        SolverConstants.setBasketDescentToleranceMultiplier(1);
         SolverConstants.setMinTargetDistanceMeters(0.05);
         SolverConstants.setVelocityBufferMultiplier(1.2);
         TrajectorySolver.SolverConfig solverConfig = TrajectorySolver.SolverConfig.defaults()
                 .toBuilder()
-                .hoopToleranceMultiplier(2.5)
+                .hoopToleranceMultiplier(1)
                 .minPitchDegrees(47.5)
                 .maxPitchDegrees(82.5)
                 .build();
@@ -96,7 +96,7 @@ public class ExampleShooter extends AbsoluteSubsystem {
 
         solver.setScoringWeights(
                 ScoringWeights.builder()
-                        .lowArcWeight(5.0)
+                        .lowArcWeight(1.0)
                         .optimalAngleDegrees(50.0)
                         .accuracyWeight(1.2)
                         .speedWeight(5.0)
