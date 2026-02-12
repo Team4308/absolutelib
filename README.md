@@ -1,4 +1,4 @@
-# AbsoluteLib
+# AbsoluteLib V2
 
 AbsoluteLib is an FRC utility library for Team 4308. It provides reusable subsystems + wrappers with a focus on "same code in real + sim".
 
@@ -57,6 +57,7 @@ Before building, install all required libraries:
 
 ### Trajectory System (2026 REBUILT)
 - `TrajectorySolver`: Complete trajectory solving for turret shooters with obstacle avoidance
+- `ShooterSystem`: Integrated state machine for managing shots, tracking, and fallback strategies
 - `FlywheelGenerator`: Automated flywheel configuration generation and optimization
 - `FlywheelSimulator`: Physics-based flywheel and ball exit velocity simulation
 - `ProjectileMotion`: Projectile physics with air resistance, drag, and Magnus effect
@@ -80,23 +81,20 @@ AbsoluteLib simulations follow this pattern:
    - Encoder sim position
    - Motor controller sim state (when supported)
 
-In simulation, you typically call:
-- `simulation.setVoltage(lastAppliedVoltage)` (or equivalent)
-- `simulation.periodic()` (or `simUpdate(dt)` depending on implementation)
-
 ---
 
 ## Subsystem Examples
 
-### MotorWrapper (Standalone)
+### MotorWrapper (Unified API)
 
 ```java
 import ca.team4308.absolutelib.wrapper.MotorWrapper;
-import com.revrobotics.spark.SparkMax;
+import ca.team4308.absolutelib.wrapper.MotorWrapper.MotorType;
 
 public class ShooterIO {
-    private final MotorWrapper leader = new MotorWrapper(MotorWrapper.MotorType.TALONFX, 10);
-    private final MotorWrapper feeder = MotorWrapper.sparkMax(11, SparkMax.MotorType.kBrushless);
+    // Control TalonFX, SparkMax, or TalonSRX with the same API
+    private final MotorWrapper leader = new MotorWrapper(MotorType.TALONFX, 10);
+    private final MotorWrapper feeder = new MotorWrapper(MotorType.SPARKMAX, 11);
 
     public void runVolts(double volts) {
         leader.setVoltage(volts);
@@ -111,7 +109,7 @@ public class ShooterIO {
 
 ---
 
-### Pivot Subsystem
+### Pivot Subsystem (Arm/Wrist)
 
 Single-joint rotational subsystem with PID control and simulation.
 
@@ -126,10 +124,9 @@ public class Wrist extends Pivot {
     public Wrist() {
         super(new Pivot.Config()
             .withLeader(new MotorWrapper(MotorWrapper.MotorType.TALONFX, 15))
-            .withEncoder(EncoderWrapper.canCoder(20, 1.0))
+            .withEncoder(EncoderWrapper.canCoder(20, 1.0)) // 1.0 = ratio derived from gearbox
             .gear(50.0)
             .limits(-90, 90)
-            .tolerance(1.0)
             .pid(0.02, 0.0, 0.0)
             .ff(0.0, 0.15, 0.0, 0.0)
             .enableSimulation(true)
@@ -140,84 +137,20 @@ public class Wrist extends Pivot {
                 .armMass(2.0)
                 .limits(Math.toRadians(-90), Math.toRadians(90))
                 .startAngle(0.0)
-                .gravity(true)
             )
         );
     }
 
-    public void goToStow() { setTargetAngleDeg(0.0); }
-    public void goToScore() { setTargetAngleDeg(45.0); }
-}
-```
-
-In `Pivot.periodic()`, AbsoluteLib:
-- Computes PID+FF voltage
-- Calls `leader.setVoltage(volts)`
-- In SIM: `simulation.setVoltage(lastAppliedVoltage)` then `simulation.periodic()`
-
----
-
-### Elevator Subsystem
-
-Linear elevator with profiled PID control.
-
-```java
-import ca.team4308.absolutelib.subsystems.Elevator;
-import ca.team4308.absolutelib.subsystems.simulation.ElevatorSimulation;
-import ca.team4308.absolutelib.wrapper.MotorWrapper;
-import ca.team4308.absolutelib.wrapper.EncoderWrapper;
-import edu.wpi.first.math.system.plant.DCMotor;
-
-public class ElevatorSubsystem {
-    private final Elevator elevator;
-
-    public ElevatorSubsystem() {
-        MotorWrapper leader = new MotorWrapper(MotorWrapper.MotorType.SPARKMAX, 10);
-        EncoderWrapper encoder = EncoderWrapper.ofMechanismRotations(
-            leader::getPosition,
-            (val) -> leader.asSparkMax().getEncoder().setPosition(val),
-            0.05 // drum diameter meters
-        );
-
-        Elevator.Config config = new Elevator.Config()
-            .withLeader(leader)
-            .withEncoder(encoder)
-            .gear(10.0)
-            .drumRadius(0.02)
-            .limits(0.0, 1.2)
-            .tolerance(0.02)
-            .pid(5.0, 0.0, 0.1)
-            .ff(0.0, 0.5, 0.0, 0.0)
-            .motion(1.0, 2.0);
-
-        // Simulation config
-        ElevatorSimulation.ElevatorSimulationConfig simConfig = 
-            new ElevatorSimulation.ElevatorSimulationConfig();
-        simConfig.leader = DCMotor.getNEO(2);
-        simConfig.gearing = 10.0;
-        simConfig.carriageMassKg = 5.0;
-        simConfig.drumRadiusMeters = 0.02;
-        simConfig.minHeightMeters = 0.0;
-        simConfig.maxHeightMeters = 1.2;
-        simConfig.simulateGravity = true;
-
-        config.withSimulation(simConfig);
-        
-        elevator = new Elevator(config);
-        elevator.initialize();
-    }
-
-    public Command moveToHeight(double meters) {
-        return elevator.setPosition(meters);
-    }
+    public Command goToStow() { return setPosition(0.0); }
+    public Command goToScore() { return setPosition(45.0); }
 }
 ```
 
 ---
 
-### Arm Subsystem (Multi-Joint with IK)
+### Arm Subsystem (Multi-Joint IK)
 
-Multi-DOF arm with inverse kinematics for end-effector positioning.
+Multi-DOF arm with inverse kinematics for Cartesian (x,y) positioning.
 
 ```java
 import ca.team4308.absolutelib.subsystems.Arm;
@@ -225,19 +158,16 @@ import ca.team4308.absolutelib.wrapper.MotorWrapper;
 import ca.team4308.absolutelib.wrapper.EncoderWrapper;
 
 public class ExampleArm {
-    private final Arm arm;
+    private final Arm arm = new Arm();
     private final Arm.Joint shoulder;
-    private final Arm.Joint elbow;
 
     public ExampleArm() {
-        arm = new Arm();
-
-        // Configure shoulder joint
-        MotorWrapper shoulderMotor = new MotorWrapper(MotorWrapper.MotorType.SPARKMAX, 30);
+        // Shoulder setup
+        MotorWrapper shoulderMotor = new MotorWrapper(MotorType.TALONFX, 30);
         EncoderWrapper shoulderEncoder = EncoderWrapper.ofMechanismRotations(
             shoulderMotor::getPosition, 
-            (val) -> shoulderMotor.asSparkMax().getEncoder().setPosition(val),
-            1.0 / Math.PI
+            val -> shoulderMotor.asTalonFX().setPosition(val),
+            1.0 / Math.PI // Conversion factor
         );
 
         Arm.JointConfig shoulderConfig = Arm.JointConfig.builder()
@@ -251,114 +181,53 @@ public class ExampleArm {
         shoulder.setPositionPID(32, 0, 0);
         shoulder.setFeedforwardGains(0.1, 0.1, 0.1, 0.1);
 
-        // Configure elbow joint (similar pattern)
-        // ...
+        // ... Add Elbow joint similarly ...
 
         arm.enableSimulation(true);
         arm.initialize();
     }
 
-    // Move to XY position using Inverse Kinematics
+    // Modern IK control: Move end-effector to (x,y)
     public Command moveToPoint(double x, double y) {
-        return Commands.runOnce(() -> arm.setGoalPose(x, y));
-    }
-
-    // Move joints to specific angles
-    public Command moveToAngles(double shoulderDeg, double elbowDeg) {
-        return Commands.runOnce(() -> 
-            arm.setTargetAngles(Math.toRadians(shoulderDeg), Math.toRadians(elbowDeg)));
+        return runOnce(() -> arm.setGoalPose(x, y));
     }
 }
 ```
 
 ---
 
-### EndEffector Subsystem
+### Vision (PhotonVision + Pose Estimation)
 
-Base class for intakes, claws, and manipulators.
-
-```java
-import ca.team4308.absolutelib.subsystems.EndEffector;
-import ca.team4308.absolutelib.wrapper.MotorWrapper;
-
-public class Intake {
-    private final EndEffector endEffector;
-
-    public Intake() {
-        MotorWrapper motor = new MotorWrapper(MotorWrapper.MotorType.SPARKMAX, 50);
-        
-        EndEffector.Config config = new EndEffector.Config()
-            .withLeader(motor)
-            .inverted(false);
-
-        endEffector = new EndEffector(config);
-        endEffector.initialize();
-    }
-
-    public void intake() { endEffector.start(0.8); }
-    public void outtake() { endEffector.start(-0.6); }
-    public void stop() { endEffector.stop(); }
-}
-```
-
----
-
-### Vision (PhotonVision + Pose Update)
+Seamless simulation-compatible vision integration.
 
 ```java
 import ca.team4308.absolutelib.vision.Vision;
 import edu.wpi.first.apriltag.AprilTagFieldLayout;
 import edu.wpi.first.apriltag.AprilTagFields;
-import edu.wpi.first.math.VecBuilder;
-import edu.wpi.first.math.geometry.Rotation3d;
-import edu.wpi.first.math.geometry.Translation3d;
 
 public class VisionSubsystem {
     private final Vision vision;
 
     public VisionSubsystem(SwerveDrive drive) {
-        AprilTagFieldLayout layout = AprilTagFieldLayout.loadField(AprilTagFields.k2025Reefscape);
-
+        AprilTagFieldLayout layout = AprilTagFieldLayout.loadField(AprilTagFields.k2025ReefscapeAndyMark);
+        
         var frontCam = new Vision.VisionCamera(
             "FrontCam",
             layout,
             new Rotation3d(0, 0, 0),
-            new Translation3d(0.30, 0.0, 0.20),
-            VecBuilder.fill(0.8, 0.8, 2.0),
-            VecBuilder.fill(0.3, 0.3, 1.0)
+            new Translation3d(0.30, 0.0, 0.20), // Camera offset from center
+            VecBuilder.fill(0.8, 0.8, 2.0),    // Single tag trust
+            VecBuilder.fill(0.3, 0.3, 1.0)     // Multi-tag trust
         );
 
         vision = new Vision(drive::getPose, drive.field, layout, frontCam);
     }
 
-    public void periodic(SwerveDrive drive) {
+    // Call in periodic to update odometry
+    public void updatePose(SwerveDrive drive) {
         vision.updatePoseEstimation(drive);
-        vision.updateVisionField();
+        vision.updateVisionField(); // Updates SmartDashboard field
     }
-}
-```
-
----
-
-### LEDs (Patterns)
-
-```java
-import ca.team4308.absolutelib.leds.Patterns;
-import ca.team4308.absolutelib.leds.LEDPattern;
-import edu.wpi.first.wpilibj.util.Color;
-
-public class LedLogic {
-    private LEDPattern pattern = Patterns.idle();
-
-    public void setError() { pattern = Patterns.error(); }
-    public void setSuccess() { pattern = Patterns.success(); }
-    public void setRainbow() { pattern = Patterns.rainbowChase(); }
-    public void setAlliance() { pattern = Patterns.getAlliancePattern(); }
-    public void setProgress(double progress) { 
-        pattern = Patterns.createProgressPattern(Color.kGreen, progress); 
-    }
-
-    public LEDPattern getPattern() { return pattern; }
 }
 ```
 
@@ -366,220 +235,100 @@ public class LedLogic {
 
 ## Trajectory System (2026 REBUILT)
 
-### Quick Start
+The layout for 2026 includes a powerful `ShooterSystem` state machine that integrates the `TrajectorySolver` with lookup tables and real-time physics.
+
+### Shooter System Implementation
 
 ```java
 import ca.team4308.absolutelib.math.trajectories.*;
+import ca.team4308.absolutelib.math.trajectories.shooter.*;
 
-// Create solver for 2026 game
-TrajectorySolver solver = TrajectorySolver.forGame2026();
+public class Shooter {
+    private final ShooterSystem shooterSystem;
+    private final TrajectorySolver solver;
 
-// Define shot parameters
-ShotInput input = ShotInput.builder()
-    .shooterPositionMeters(1.0, 2.0, 0.5)
-    .targetPositionMeters(5.0, 5.0, 2.5)
-    .shotPreference(ShotInput.ShotPreference.FASTEST)
-    .build();
+    public Shooter() {
+        // 1. Configure Solver
+        TrajectorySolver.SolverConfig solverConfig = TrajectorySolver.SolverConfig.defaults()
+            .toBuilder()
+            .minPitchDegrees(47.5)
+            .maxPitchDegrees(82.5)
+            .build();
+            
+        solver = new TrajectorySolver(GamePieces.REBUILT_2026_BALL, solverConfig);
+        // SWEEP mode finds best angle by testing candidates (thorough)
+        // ITERATIVE mode is faster but less robust for complex obstacles
+        solver.setSolveMode(TrajectorySolver.SolveMode.SWEEP);
 
-// Get best shot angle
-double pitchDegrees = solver.solveBestPitchDegrees(input);
-```
+        // 2. Configure Shooter Limits
+        ShooterConfig config = ShooterConfig.builder()
+            .pitchLimits(47.5, 82.5)
+            .rpmLimits(0, 6000)
+            .distanceLimits(0.5, 12.0)
+            .safetyMaxExitVelocity(30.0)
+            .build();
 
-### Multi-Candidate Shot Selection
+        // 3. Define Lookup Table (Fallback)
+        ShotLookupTable table = new ShotLookupTable()
+            .addEntry(1.0, 78.0, 1000)
+            .addEntry(2.0, 72.0, 1300)
+            .addEntry(4.0, 59.0, 2100)
+            .addEntry(6.0, 52.0, 2700);
 
-```java
-// Find all possible shots sorted by confidence
-ShotCandidateList candidates = solver.findAllCandidates(input);
+        // 4. Initialize System
+        shooterSystem = new ShooterSystem(config, table, solver);
+        shooterSystem.setMode(ShotMode.SOLVER_WITH_LOOKUP_FALLBACK);
+    }
+    
+    public void periodic() {
+        // Calculate shot based on current robot state
+        ShotParameters shot = shooterSystem.calculate(
+            distanceMeters, 
+            currentFlywheelRpm, 
+            robotVx, robotVy, 
+            robotYawRadians
+        );
 
-// Get the fastest shot
-Optional<ShotCandidate> fastest = candidates.getFastest();
-if (fastest.isPresent()) {
-    ShotCandidate shot = fastest.get();
-    System.out.println("Pitch: " + shot.getPitchAngleDegrees() + "°");
-    System.out.println("Velocity: " + shot.getRequiredVelocityMps() + " m/s");
-    System.out.println("Time of Flight: " + shot.getTimeOfFlightSeconds() + "s");
+        if (shot.valid) {
+            // Apply shot.pitchDegrees and shot.rpm
+        }
+    }
 }
-
-// Or get shots by preference
-candidates.getMostAccurate();    // Most accurate shot
-candidates.getMostStable();      // Most stable angle
-candidates.getMaxClearance();    // Highest arc for obstacles
-candidates.getBestHighArc();     // Best high-arc shot
-candidates.getBestLowArc();      // Best low-arc shot
 ```
 
-### Obstacle-Aware Solving
+### Obstacle Avoidance
 
-The solver can detect and avoid field obstacles like the 2026 hub. Trajectories that collide with obstacles are automatically rejected, and the solver biases toward higher arcs when the shot path crosses an obstacle.
+The 2026 solver can be configured to avoid field structures (like the Hub).
 
 ```java
-// Define the 2026 hub as an obstacle
+// Define Obstacle
 ObstacleConfig hub = ObstacleConfig.builder()
-    .position(4.03, 4.0)           // Center of hub on field
-    .baseSize(1.19)                // 1.19m x 1.19m footprint
-    .wallHeight(1.83)              // Solid wall height
-    .upperStructureHeight(0.41)    // Polycarbonate above wall
-    .openingDiameter(1.06)         // Basket opening
-    .collisionMargin(0.05)         // Safety margin
+    .position(4.03, 4.0)
+    .baseSize(1.19)
+    .wallHeight(1.83)
     .build();
 
-// Add obstacle to shot input
-ShotInput input = ShotInput.builder()
-    .shooterPositionMeters(1.0, 2.0, 0.5)
-    .targetPositionMeters(4.03, 4.0, 2.1)
-    .addObstacle(hub)
-    .collisionCheckEnabled(true)
-    .build();
-
-// Solver automatically avoids hub collisions
-TrajectoryResult result = solver.solve(input);
-```
-
-The collision system includes:
-- **Grace distance**: Balls near the launch point skip collision checks, so you can shoot from close to (or even inside) an obstacle's footprint
-- **Opening exemption**: Balls descending into the basket opening aren't blocked by the obstacle
-- **Auto arc bias**: When the shot path crosses an obstacle, the solver biases toward higher arcs to clear it
-
-### RPM Feedback Loop
-
-For rapid-fire scenarios where the flywheel hasn't fully spun up between shots, `solveAtCurrentRpm` adjusts the pitch angle to compensate for lower-than-ideal velocity:
-
-```java
-// Solve at the flywheel's current measured RPM instead of the ideal RPM
-double currentRpm = flywheelEncoder.getVelocity(); // Actual measured RPM
-TrajectoryResult adjusted = solver.solveAtCurrentRpm(input, flywheelConfig, currentRpm);
-
-if (adjusted.isSuccess()) {
-    // Use the adjusted pitch — steeper angle compensates for lower velocity
-    double adjustedPitch = adjusted.getPitchAngleDegrees();
-}
-```
-
-### Tuning with SolverConstants
-
-All solver parameters are runtime-configurable via `SolverConstants`. Set them before creating a solver instance:
-
-```java
-// Target detection
-SolverConstants.setHoopToleranceMultiplier(8.0);      // How lenient "hit" detection is
-SolverConstants.setMinTargetDistanceMeters(0.05);      // Minimum shot distance
-SolverConstants.setBasketDescentToleranceMultiplier(6); // Descent detection radius
-
-// Velocity tuning
-SolverConstants.setVelocityBufferMultiplier(1.2);      // Safety margin on velocity
-SolverConstants.setDragCompensationMultiplier(1.8);     // Compensate for air resistance
-SolverConstants.setCloseRangeVelocityMultiplier(1.3);   // Buffer for < 3m shots
-SolverConstants.setCloseRangeThresholdMeters(3.0);      // Close range cutoff
-
-// Collision
-SolverConstants.setCollisionGraceDistanceMeters(0.5);   // Skip checks near launch
-SolverConstants.setObstacleClearanceMarginMeters(0.15);  // Safety above obstacles
-
-// Arc behavior
-SolverConstants.setForceHighArcMinPitchDegrees(35.0);   // Min pitch for obstacle shots
-SolverConstants.setDefaultArcBiasStrength(0.6);          // How strongly to bias high arc
-
-// Create solver with modified constants
-TrajectorySolver solver = TrajectorySolver.forGame2026();
-
-// Reset when done
-SolverConstants.resetToDefaults();
-```
-
-### Legacy API
-
-```java
-TrajectoryResult result = solver.solve(input);
-
-if (result.isSuccess()) {
-    System.out.println("Pitch: " + result.getPitchAngleDegrees() + "°");
-    System.out.println("RPM: " + result.getRecommendedRpm());
-    System.out.println("Flywheel: " + result.getFlywheelConfig().getName());
-    System.out.println("Confidence: " + result.getConfidence() + "%");
-}
-```
-
-### Flywheel Configuration
-
-```java
-import ca.team4308.absolutelib.math.trajectories.flywheel.*;
-import ca.team4308.absolutelib.math.trajectories.gamepiece.*;
-
-GamePiece ball = GamePieces.REBUILT_2026_BALL;
-FlywheelGenerator generator = new FlywheelGenerator(ball);
-
-// Generate and evaluate configurations for target velocity
-FlywheelGenerator.GenerationResult result = generator.generateAndEvaluate(15.0);
-
-// Get best configuration
-FlywheelConfig best = result.bestConfig.config;
-System.out.println("Best: " + best.toString());
-```
-
-### Custom Flywheel Configuration
-
-```java
-FlywheelConfig custom = FlywheelConfig.builder()
-    .name("Custom Shooter")
-    .arrangement(FlywheelConfig.WheelArrangement.DUAL_OVER_UNDER)
-    .wheelDiameterInches(4.0)
-    .wheelWidthInches(2.0)
-    .material(WheelMaterial.GREEN_COMPLIANT)
-    .compressionRatio(0.12)
-    .wheelCount(2)
-    .motor(FRCMotors.KRAKEN_X60)
-    .motorsPerWheel(1)
-    .gearRatio(1.0)
-    .build();
-
-// Simulate at specific RPM
-FlywheelSimulator simulator = new FlywheelSimulator(custom, ball);
-FlywheelSimulator.SimulationResult sim = simulator.simulateAtRpm(5000);
-
-System.out.println("Exit Velocity: " + sim.exitVelocityMps + " m/s");
-System.out.println("Ball Spin: " + sim.ballSpinRpm + " RPM");
-```
-
-### Game Piece Specifications
-
-```java
-// 2026 REBUILT Ball
-GamePiece ball = GamePieces.REBUILT_2026_BALL;
-// Diameter: 5.91 inches
-// Mass: 0.448-0.5 lbs (avg 0.474 lbs)
-// Material: High-density foam
-// Shape: Sphere
-
-// Other supported game pieces
-GamePieces.CRESCENDO_2024_NOTE;           // 2024 Note (Ring)
-GamePieces.RAPID_REACT_2022_CARGO;        // 2022 Cargo
-GamePieces.INFINITE_RECHARGE_POWER_CELL;  // 2020 Power Cell
-GamePieces.DEEP_SPACE_2019_CARGO;         // 2019 Cargo
-
-// Get by year
-GamePiece piece = GamePieces.getByYear(2022);
-```
-
-### Shot Preferences
-
-```java
+// Add to Shot Input
 ShotInput input = ShotInput.builder()
     .shooterPositionMeters(x, y, z)
     .targetPositionMeters(tx, ty, tz)
-    .shotPreference(ShotInput.ShotPreference.FASTEST)      // Minimize time of flight
-    // .shotPreference(ShotInput.ShotPreference.MOST_ACCURATE)  // Best accuracy
-    // .shotPreference(ShotInput.ShotPreference.MOST_STABLE)    // Most stable angle
-    // .shotPreference(ShotInput.ShotPreference.HIGH_CLEARANCE) // Avoid obstacles
-    // .shotPreference(ShotInput.ShotPreference.MIN_VELOCITY)   // Minimum velocity
+    .addObstacle(hub)
+    .collisionCheckEnabled(true)
     .build();
 ```
 
----
+### Tuning & Debugging
 
-## Notes
+All physics constants are runtime-tunable via `SolverConstants`:
 
-- `Pivot.setTargetAngleDeg()` updates the target angle but does not schedule the returned command automatically.
-- **Smart Motion**:
-  - TalonFX (Phoenix6) supports Motion Magic
-  - TalonSRX/VictorSPX (Phoenix5) can use Motion Magic with configuration
-  - Victor SPX and TalonSRX-based motors (CIMs, 775) have not been tested
+```java
+SolverConstants.setVelocityBufferMultiplier(1.2); // 20% extra velocity buffer
+SolverConstants.setDragCompensationMultiplier(1.0); // Air resistance factor
+```
+
+Enable debug logging to see exactly why shots are chosen or rejected:
+
+```java
+solver.setDebugEnabled(true);
+// Logs accepted/rejected candidates, physics calculations, and flight paths
+```

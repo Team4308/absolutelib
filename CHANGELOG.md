@@ -1,6 +1,11 @@
 # Changelog for AbsoluteLib v2
 
 
+## 1.5.3 - Website Redesgin.
+  - Remade the docs
+  - Updated the readme to show the most up to date example code
+
+
 ## 1.5.2 — Overhaul
 
 - Trajectory solver: the trajectory system will no longer receive breaking major updates; future changes will preserve backwards compatibility.
