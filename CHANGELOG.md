@@ -1,5 +1,11 @@
 # Changelog for AbsoluteLib v2
 
+## 2.0.0 - Season Ready!
+  - Patched any bugs found in simulations and is now ready be used for the season!
+  - Removed any warnings 
+  - Fixed the website and build errors
+  - other minor things fixed lowkey good enough!
+
 
 ## 1.5.3 - Website Redesgin.
   - Remade the docs

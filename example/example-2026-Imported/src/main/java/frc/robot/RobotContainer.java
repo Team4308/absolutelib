@@ -3,17 +3,16 @@
 // the WPILib BSD license file in the root directory of this project.
 package frc.robot;
 
-import frc.robot.Constants.OperatorConstants;
 import frc.robot.subsystems.*;
 import frc.robot.subsystems.Util.FuelSim;
 import frc.robot.subsystems.swerve.SwerveSubsystem;
 import swervelib.SwerveInputStream;
-import swervelib.simulation.ironmaple.simulation.SimulatedArena;
 
 import java.io.File;
 
 import com.pathplanner.lib.auto.AutoBuilder;
 
+import ca.team4308.absolutelib.control.XBoxWrapper;
 import edu.wpi.first.math.util.Units;
 import edu.wpi.first.wpilibj.DriverStation;
 import edu.wpi.first.wpilibj.Filesystem;
@@ -23,7 +22,6 @@ import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 import edu.wpi.first.wpilibj.util.Color;
 import edu.wpi.first.wpilibj2.command.Command;
 import edu.wpi.first.wpilibj2.command.Commands;
-import edu.wpi.first.wpilibj2.command.button.CommandXboxController;
 
 public class RobotContainer {
 
@@ -34,7 +32,7 @@ public class RobotContainer {
     private final FuelSim m_FuelSim = FuelSim.getInstance();
     private final SwerveSubsystem drivebase = new SwerveSubsystem(new File(Filesystem.getDeployDirectory(), "swerve"));
 
-    private final CommandXboxController driver = new CommandXboxController(1);
+    private final XBoxWrapper driver = new XBoxWrapper(1);
 
     private final SendableChooser<Command> autoChooser;
 
@@ -67,8 +65,8 @@ public class RobotContainer {
 
     SwerveInputStream driveDirectAngleKeyboard = driveAngularVelocityKeyboard.copy()
             .withControllerHeadingAxis(() -> Math.sin(
-                    driver.getLeftTriggerAxis() * Math.PI) * (Math.PI * 2),
-                    () -> Math.cos(driver.getLeftTriggerAxis() * Math.PI) * (Math.PI * 2))
+                    driver.getLeftTrigger() * Math.PI) * (Math.PI * 2),
+                    () -> Math.cos(driver.getLeftTrigger() * Math.PI) * (Math.PI * 2))
             .headingWhile(true);
 
     public RobotContainer() {
@@ -105,7 +103,7 @@ public class RobotContainer {
         Command driveFieldOrientedAnglularVelocityKeyboard = drivebase.driveFieldOriented(driveAngularVelocityKeyboard);
 
 
-        driver.rightBumper().whileTrue(
+        driver.RB.whileTrue(
                 Commands.run(() -> {
                     if (m_shooter.hasValidShot()) {
                         m_pivot.setAngle(m_shooter.getTargetPitchDegrees()).schedule();
@@ -113,21 +111,21 @@ public class RobotContainer {
                     }
                 }));
 
-        driver.leftBumper().whileTrue(m_shooter.spinUp());
+        driver.LB.whileTrue(m_shooter.spinUp());
 
-        driver.rightTrigger().whileTrue(
+        driver.RightStickButton.whileTrue(
                 Commands.run(() -> {
                     if (m_shooter.hasValidShot()) {
                         m_pivot.setAngle(m_shooter.getTargetPitchDegrees()).schedule();
                     }
                 }).alongWith(m_shooter.spinUp()));
 
-        driver.leftTrigger(0.5).onTrue(
+        driver.LeftStickButton.whileTrue(
                 m_shooter.stopCommand()
                         .andThen(m_pivot.setAngle(0.0))
                         .andThen(Commands.runOnce(() -> m_leds.setIdle())));
 
-        driver.a().onTrue(Commands.runOnce(() -> {
+        driver.A.onTrue(Commands.runOnce(() -> {
             m_shooter.setTrackingEnabled(!m_shooter.isTrackingEnabled());
             if (m_shooter.isTrackingEnabled()) {
                 m_leds.setProgress(0.3, edu.wpi.first.wpilibj.util.Color.kGreen);
@@ -137,22 +135,22 @@ public class RobotContainer {
         }));
 
         // B button: cycle shot mode (LOOKUP_ONLY → SOLVER_ONLY → LOOKUP_WITH_SOLVER_FALLBACK → ...)
-        driver.b().onTrue(m_shooter.cycleModeCommand()
+        driver.B.onTrue(m_shooter.cycleModeCommand()
                 .andThen(Commands.runOnce(() -> 
                         m_leds.setProgress(0.7, edu.wpi.first.wpilibj.util.Color.kCyan))));
 
-        driver.start().onTrue(
+        driver.Start.onTrue(
                 m_shooter.spinUp().withTimeout(3.0)
                         .andThen(Commands.runOnce(() -> m_leds.setSuccess())));
 
-        driver.back().onTrue(
+        driver.Back.onTrue(
                 m_shooter.stopCommand()
                         .andThen(Commands.runOnce(() -> m_leds.setError())));
 
-        driver.povUp().onTrue(m_shooter.shootBallSimCommand()); // Shoot ball in simulation
-        driver.povDown().onTrue(Commands.runOnce(() -> m_leds.setAlliance()));
-        driver.povLeft().onTrue(Commands.runOnce(() -> m_leds.setRainbow()));
-        driver.povRight().onTrue(Commands.runOnce(() -> {
+        driver.povUp.onTrue(m_shooter.shootBallSimCommand()); // Shoot ball in simulation
+        driver.povDown.onTrue(Commands.runOnce(() -> m_leds.setAlliance()));
+        driver.povLeft.onTrue(Commands.runOnce(() -> m_leds.setRainbow()));
+        driver.povRight.onTrue(Commands.runOnce(() -> {
             if (m_shooter.hasValidShot())
                 m_leds.setSuccess();
             else
