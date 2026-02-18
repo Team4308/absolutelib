@@ -38,7 +38,7 @@ public class TrajectoryResult {
                     input.getShooterX(), input.getShooterY(), input.getShooterZ(),
                     requiredVelocityMps,
                     pitchAngleRadians,
-                    input.getShooterYaw(),
+                    input.getShooterYaw() + yawAdjustmentRadians,
                     0, // spinRpm (not tracked in result)
                     input.getTargetX(), input.getTargetY(), input.getTargetZ(),
                     0 // targetRadius=0 to prevent early termination

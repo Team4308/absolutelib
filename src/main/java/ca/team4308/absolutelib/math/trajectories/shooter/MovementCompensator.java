@@ -34,6 +34,10 @@ public final class MovementCompensator {
      * virtual target position, re-estimates TOF, and repeats for the configured
      * number of iterations.</p>
      * 
+     * <p>When the base shot comes from the solver (which already adjusts the
+     * target position for movement), only the yaw lead is computed to avoid
+     * double-compensation of the radial component.</p>
+     * 
      * @param base              base shot parameters (from lookup or solver)
      * @param robotVxMps        field-relative robot velocity X (m/s)
      * @param robotVyMps        field-relative robot velocity Y (m/s)
@@ -51,17 +55,33 @@ public final class MovementCompensator {
             return base;
         }
 
+        double exitVelocity = base.exitVelocityMps;
+        double horizontalSpeed = exitVelocity * Math.cos(Math.toRadians(base.pitchDegrees));
+        if (horizontalSpeed < 0.1) horizontalSpeed = 0.1;
+
+        double tof = base.distanceMeters / horizontalSpeed;
+
+        // --- Yaw lead (always computed) ---
+        // Lateral velocity = component of robot velocity perpendicular to target direction
+        double lateralVelocity = -robotVxMps * Math.sin(yawToTargetRad)
+                                + robotVyMps * Math.cos(yawToTargetRad);
+        // Ball drifts laterally by lateralV * tof; aim opposite to cancel
+        double yawLead = Math.atan2(-lateralVelocity * tof, base.distanceMeters);
+
+        // If the solver already handled movement (adjusting effective target X/Y),
+        // skip the radial RPM/pitch re-compensation to avoid double-adjusting.
+        if (base.source == ShotParameters.Source.SOLVER) {
+            return new ShotParameters(base.pitchDegrees, base.rpm, base.exitVelocityMps,
+                    base.distanceMeters, yawLead, ShotParameters.Source.MOVING_COMPENSATED);
+        }
+
+        // --- Radial compensation (lookup / fallback / manual sources) ---
         double gain = config.getMovingCompensationGain();
         int iterations = config.getMovingIterations();
 
         double radialVelocity = robotVxMps * Math.cos(yawToTargetRad)
                               + robotVyMps * Math.sin(yawToTargetRad);
 
-        double exitVelocity = base.exitVelocityMps;
-        double horizontalSpeed = exitVelocity * Math.cos(Math.toRadians(base.pitchDegrees));
-        if (horizontalSpeed < 0.1) horizontalSpeed = 0.1;
-
-        double tof = base.distanceMeters / horizontalSpeed;
         double effectiveDistance = base.distanceMeters;
 
         for (int i = 0; i < iterations; i++) {
@@ -76,6 +96,9 @@ public final class MovementCompensator {
             tof = newTof;
         }
 
+        // Recompute yaw lead with converged TOF
+        yawLead = Math.atan2(-lateralVelocity * tof, effectiveDistance);
+
         double rpmAdjustment = -radialVelocity * (base.rpm / exitVelocity) * gain;
         double newRpm = base.rpm + rpmAdjustment;
         newRpm = clamp(newRpm, config.getMinRpm(), config.getMaxRpm());
@@ -88,7 +111,7 @@ public final class MovementCompensator {
         double newExitVelocity = config.rpmToVelocity(newRpm);
 
         return new ShotParameters(newPitch, newRpm, newExitVelocity,
-                effectiveDistance, ShotParameters.Source.MOVING_COMPENSATED);
+                effectiveDistance, yawLead, ShotParameters.Source.MOVING_COMPENSATED);
     }
 
     /**
@@ -99,14 +122,26 @@ public final class MovementCompensator {
      * @param robotVyMps     field-relative Y velocity (m/s)
      * @param yawToTargetRad current yaw to target (radians)
      * @param tofSeconds     estimated time of flight (seconds)
+     * @param distanceMeters distance to target (meters)
      * @return yaw lead offset in radians (add to current yaw)
      */
     public double calculateYawLead(double robotVxMps, double robotVyMps,
-                                   double yawToTargetRad, double tofSeconds) {
+                                   double yawToTargetRad, double tofSeconds,
+                                   double distanceMeters) {
         double lateralVelocity = -robotVxMps * Math.sin(yawToTargetRad)
                                 + robotVyMps * Math.cos(yawToTargetRad);
-        return Math.atan2(lateralVelocity * tofSeconds * config.getMovingCompensationGain(),
-                          1.0);
+        // Negate to aim opposite to the inherited lateral drift
+        return Math.atan2(-lateralVelocity * tofSeconds, distanceMeters);
+    }
+
+    /**
+     * @deprecated Use {@link #calculateYawLead(double, double, double, double, double)} instead.
+     */
+    @Deprecated
+    public double calculateYawLead(double robotVxMps, double robotVyMps,
+                                   double yawToTargetRad, double tofSeconds) {
+        // Legacy fallback — assumes 5m distance when not provided
+        return calculateYawLead(robotVxMps, robotVyMps, yawToTargetRad, tofSeconds, 5.0);
     }
 
     private static double clamp(double value, double min, double max) {

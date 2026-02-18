@@ -42,7 +42,8 @@ public class ExampleShooter extends AbsoluteSubsystem {
 
     private double shooterHeightMeters = 0.5;
     private Translation2d shooterOffset = new Translation2d(0.1, 0.1);
-    private Translation3d targetPosition = new Translation3d(4.0, 0.0, 2.1);
+    private Translation3d targetPosition = new Translation3d(0, 0.0, 0); 
+    // Updated in robot container based on alliance and can be changed for testing different target positions
     private boolean trackingEnabled = true;
 
     public ExampleShooter() {
@@ -58,7 +59,7 @@ public class ExampleShooter extends AbsoluteSubsystem {
                 .rpmFeedbackThreshold(50.0)
                 .rpmAbortThreshold(500.0)
                 .pitchCorrectionPerRpmDeficit(0.005)
-                .movingCompensationGain(1.0)
+                .movingCompensationGain(1)
                 .movingIterations(5)
                 .safetyMaxExitVelocity(30.0)
                 .build();
@@ -91,8 +92,8 @@ public class ExampleShooter extends AbsoluteSubsystem {
 
         // Shooter system with both solver and lookup table, falls back to table if no valid solution from solver
         shooterSystem = new ShooterSystem(config, table, solver);
-        shooterSystem.setMode(ShotMode.SOLVER_WITH_LOOKUP_FALLBACK);
-        shooterSystem.setFallbackShot(60.0, 3000);
+        shooterSystem.setMode(ShotMode.SOLVER_ONLY);
+        shooterSystem.setFallbackShot(60.0, 6000);
 
         solver.setDebugEnabled(true);
     }

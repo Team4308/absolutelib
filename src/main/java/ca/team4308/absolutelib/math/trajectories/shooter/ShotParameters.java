@@ -20,6 +20,13 @@ public final class ShotParameters {
     /** Distance to target in meters (for reference). */
     public final double distanceMeters;
 
+    /**
+     * Yaw adjustment in radians that the drivetrain or turret should apply
+     * to compensate for lateral robot movement. Add this to the current
+     * heading-to-target angle. Zero when stationary.
+     */
+    public final double yawAdjustmentRadians;
+
     /** Source that produced these parameters. */
     public final Source source;
 
@@ -49,22 +56,22 @@ public final class ShotParameters {
 
     public ShotParameters(double pitchDegrees, double rpm, double exitVelocityMps,
                           double distanceMeters, Source source) {
-        this.pitchDegrees = pitchDegrees;
-        this.rpm = rpm;
-        this.exitVelocityMps = exitVelocityMps;
-        this.distanceMeters = distanceMeters;
-        this.source = source;
-        this.valid = true;
-        this.invalidReason = "";
+        this(pitchDegrees, rpm, exitVelocityMps, distanceMeters, 0.0, source, true, "");
+    }
+
+    public ShotParameters(double pitchDegrees, double rpm, double exitVelocityMps,
+                          double distanceMeters, double yawAdjustmentRadians, Source source) {
+        this(pitchDegrees, rpm, exitVelocityMps, distanceMeters, yawAdjustmentRadians, source, true, "");
     }
 
     private ShotParameters(double pitchDegrees, double rpm, double exitVelocityMps,
-                           double distanceMeters, Source source,
-                           boolean valid, String invalidReason) {
+                           double distanceMeters, double yawAdjustmentRadians,
+                           Source source, boolean valid, String invalidReason) {
         this.pitchDegrees = pitchDegrees;
         this.rpm = rpm;
         this.exitVelocityMps = exitVelocityMps;
         this.distanceMeters = distanceMeters;
+        this.yawAdjustmentRadians = yawAdjustmentRadians;
         this.source = source;
         this.valid = valid;
         this.invalidReason = invalidReason;
@@ -74,7 +81,7 @@ public final class ShotParameters {
      * Creates an invalid shot with the given reason.
      */
     public static ShotParameters invalid(String reason) {
-        return new ShotParameters(0, 0, 0, 0, Source.FALLBACK, false, reason);
+        return new ShotParameters(0, 0, 0, 0, 0.0, Source.FALLBACK, false, reason);
     }
 
     /**
@@ -82,7 +89,7 @@ public final class ShotParameters {
      */
     public ShotParameters withSource(Source newSource) {
         return new ShotParameters(pitchDegrees, rpm, exitVelocityMps,
-                distanceMeters, newSource, valid, invalidReason);
+                distanceMeters, yawAdjustmentRadians, newSource, valid, invalidReason);
     }
 
     /**
@@ -90,7 +97,7 @@ public final class ShotParameters {
      */
     public ShotParameters withPitchDegrees(double newPitch) {
         return new ShotParameters(newPitch, rpm, exitVelocityMps,
-                distanceMeters, source, valid, invalidReason);
+                distanceMeters, yawAdjustmentRadians, source, valid, invalidReason);
     }
 
     /**
@@ -98,7 +105,22 @@ public final class ShotParameters {
      */
     public ShotParameters withRpm(double newRpm) {
         return new ShotParameters(pitchDegrees, newRpm, exitVelocityMps,
-                distanceMeters, source, valid, invalidReason);
+                distanceMeters, yawAdjustmentRadians, source, valid, invalidReason);
+    }
+
+    /**
+     * Returns a copy with adjusted yaw.
+     */
+    public ShotParameters withYawAdjustmentRadians(double newYaw) {
+        return new ShotParameters(pitchDegrees, rpm, exitVelocityMps,
+                distanceMeters, newYaw, source, valid, invalidReason);
+    }
+
+    /**
+     * Gets the yaw adjustment in degrees.
+     */
+    public double getYawAdjustmentDegrees() {
+        return Math.toDegrees(yawAdjustmentRadians);
     }
 
     /**
@@ -113,7 +135,8 @@ public final class ShotParameters {
         if (!valid) {
             return String.format("INVALID: %s", invalidReason);
         }
-        return String.format("%.1f° %.0fRPM %.1fm/s @ %.2fm [%s]",
-                pitchDegrees, rpm, exitVelocityMps, distanceMeters, source);
+        return String.format("%.1f° %.0fRPM %.1fm/s @ %.2fm yaw=%.1f° [%s]",
+                pitchDegrees, rpm, exitVelocityMps, distanceMeters,
+                getYawAdjustmentDegrees(), source);
     }
 }

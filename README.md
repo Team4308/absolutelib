@@ -19,7 +19,9 @@ AbsoluteLib is an FRC utility library for Team 4308. It provides reusable subsys
    ```
 
 ### Required Vendor Dependencies
+
 Before building, install all required libraries:
+
 - Rev Hardware Client
 - AdvantageKit
 - PathPlannerLib
@@ -37,25 +39,30 @@ Before building, install all required libraries:
 ## What You Get
 
 ### Wrappers
+
 - `MotorWrapper`: TalonFX (Phoenix6), TalonSRX/VictorSPX (Phoenix5), SparkMax (REV) unified API
 - `EncoderWrapper`: Unified encoder access (CANCoder, SparkMax encoder, etc.)
 
 ### Subsystems
+
 - `Arm`: Multi-joint arm with IK support (2+ DOF arms with inverse kinematics)
 - `Pivot`: Single-joint rotational control (PID + FF, optional Smart Motion)
 - `Elevator`: Linear elevator control (PID + FF, optional Smart Motion)
 - `EndEffector`: Base class for intakes, claws, and manipulators
 
 ### Simulation
+
 - `ArmSimulation`: Physics sim for multi-DOF arms
 - `PivotSimulation`: Physics sim via `SingleJointedArmSim`
 - `ElevatorSimulation`: Physics sim via `ElevatorSim`
 
 ### Vision / LEDs
+
 - `Vision`: PhotonVision wrapper + multi-camera support for pose estimation
 - `leds/*`: Addressable LED patterns and simulation helpers
 
 ### Trajectory System (2026 REBUILT)
+
 - `TrajectorySolver`: Complete trajectory solving for turret shooters with obstacle avoidance
 - `ShooterSystem`: Integrated state machine for managing shots, tracking, and fallback strategies
 - `FlywheelGenerator`: Automated flywheel configuration generation and optimization
@@ -66,6 +73,7 @@ Before building, install all required libraries:
 - `GamePieces`: Predefined game pieces including 2026 REBUILT ball
 
 ### Example Code
+
 Under `./example/example-2026-Imported` you can find full robot code for all subsystems + simulation.
 
 ---
@@ -332,3 +340,68 @@ Enable debug logging to see exactly why shots are chosen or rejected:
 solver.setDebugEnabled(true);
 // Logs accepted/rejected candidates, physics calculations, and flight paths
 ```
+
+---
+
+## Updating AbsoluteLib in Your Robot Project
+
+When a new version of AbsoluteLib is released, follow these steps to update:
+
+### Option 1: Automatic (Recommended)
+
+1. WPILib VS Code → `Ctrl+Shift+P`
+2. `WPILib: Manage Vendor Libraries`
+3. `Check for updates (online)`
+4. If AbsoluteLib shows an update, accept it.
+
+This works because the vendor JSON URL points to the latest published version.
+
+### Option 2: Manual Re-install
+
+1. WPILib VS Code → `Ctrl+Shift+P`
+2. `WPILib: Manage Vendor Libraries`
+3. `Install new library (online)`
+4. Paste:
+   ```text
+   https://team4308.github.io/absolutelib/lib/absolutelib.json
+   ```
+5. If prompted to replace the existing version, confirm.
+6. Rebuild your project (`Ctrl+Shift+P` → `WPILib: Build Robot Code`).
+
+### Option 3: Direct JSON Edit
+
+1. Open `vendordeps/absolutelib.json` in your robot project.
+2. Update the `"version"` fields to the new version number.
+3. Update the `javaDependencies[0].version` to match.
+4. Rebuild.
+
+> **Tip:** After updating, always do a clean build (`./gradlew clean build`) to avoid stale cached artifacts.
+
+---
+
+## Releasing a New Version (For Maintainers)
+
+To publish a new release of AbsoluteLib:
+
+```bat
+scripts\release.bat
+```
+
+This single script handles the entire release process:
+
+1. **Safety checks** — verifies you're on `master`, inside the repo, and required files exist
+2. **Version bump** — prompts for a new version and auto-updates `gradle.properties` and `absolutelib.json`
+3. **Backup** — creates a timestamped local backup in `.git-backup-cache/`
+4. **Commit & push master** — stages, commits, and pushes to the `master` branch
+5. **Gradle build** — runs `publishPagesRepo` to generate Maven artifacts and Javadoc
+6. **Site staging** — assembles the full GitHub Pages site (docs + Maven repo + Javadoc + vendor JSON)
+7. **Deploy gh-pages** — force-pushes the built site to the `gh-pages` branch
+
+No other scripts need to be run — `release.bat` replaces the old `publish.bat` and `build-pages-site.bat` scripts.
+
+---
+
+## Updating Libraries and WPILib Versions
+
+1. **WPILib** — Go into the `build.gradle` file and change `wpilibVersion` to the year. You may also have to update `WPILibRepositoriesPlugin` only if they rework vendors.
+2. **Libraries** — Also in the `build.gradle` file, scroll down to the `dependencies` block and update each package as needed.

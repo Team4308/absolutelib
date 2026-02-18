@@ -265,8 +265,9 @@ public final class ShooterSystem {
                 double pitch = result.getPitchAngleDegrees();
                 double rpm = result.getRecommendedRpm();
                 double vel = result.getRequiredVelocityMps();
+                double yawAdj = result.getYawAdjustmentRadians();
                 return new ShotParameters(pitch, rpm, vel, distanceMeters,
-                        ShotParameters.Source.SOLVER);
+                        yawAdj, ShotParameters.Source.SOLVER);
             }
             return ShotParameters.invalid("Solver found no valid trajectory");
         } catch (Exception e) {
