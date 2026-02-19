@@ -534,6 +534,9 @@ public class TrajectorySolver {
     /**
      * Checks if the ball flies over the target without descending into it.
      * Exempt if the ball is descending and horizontally close enough to enter.
+     * Uses a tighter tolerance (60% of target radius) to reject borderline
+     * shots that barely clear the hoop edge but would likely fly over in
+     * practice.
      */
     private static boolean isFlyover(ProjectileMotion.TrajectoryState[] trajectory,
             double targetX, double targetY, double targetZ, double targetRadius) {
@@ -558,9 +561,21 @@ public class TrajectorySolver {
 
         double bestHorizDist = Math.sqrt(bestHorizDist2);
 
-        // Only exempt descending balls that are horizontally close to the target
-        if (vzAtBestHoriz < 0 && bestHorizDist <= targetRadius * SolverConstants.getHoopToleranceMultiplier()) {
-            return false;
+        if (vzAtBestHoriz < 0 && bestHorizDist <= targetRadius * 0.6) {
+            double hSpeed = 0;
+            for (ProjectileMotion.TrajectoryState st : trajectory) {
+                double dx = st.x - targetX;
+                double dy = st.y - targetY;
+                double hd2 = dx * dx + dy * dy;
+                if (Math.abs(hd2 - bestHorizDist2) < 1e-6) {
+                    hSpeed = Math.sqrt(st.vx * st.vx + st.vy * st.vy);
+                    break;
+                }
+            }
+            double entryAngle = Math.toDegrees(Math.atan2(Math.abs(vzAtBestHoriz), Math.max(hSpeed, 1e-6)));
+            if (entryAngle >= SolverConstants.getMinEntryAngleDegrees()) {
+                return false;
+            }
         }
 
         return heightAtBestHoriz > targetZ;

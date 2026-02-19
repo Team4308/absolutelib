@@ -133,7 +133,7 @@ public final class SolverConstants {
      * Min entry angle (deg) for a hit. Steeper = more likely to go in. 90 =
      * straight down, 0 = flat. Default: 30.0
      */
-    private static double minEntryAngleDegrees = 10.0;
+    private static double minEntryAngleDegrees = 30.0;
 
     /**
      * Rim clearance (m) the ball must clear above the target rim edge. Larger =

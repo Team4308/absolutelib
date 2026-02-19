@@ -74,21 +74,31 @@ public class FuelSim {
         }
 
         private void update() {
-            pos = pos.plus(vel.times(PERIOD / subticks));
+            double dt = PERIOD / subticks;
             if (pos.getZ() > FUEL_RADIUS) {
-                vel = vel.plus(GRAVITY.times(PERIOD / subticks));
-                // Air resistance: F_drag = -0.5 * rho * v^2 * Cd * A in direction of velocity
+                Translation3d accel = GRAVITY;
                 double speed = vel.getNorm();
                 if (speed > 0.01) {
                     double dragAccelMag = DRAG_FACTOR * speed * speed;
                     Translation3d dragAccel = vel.div(speed).times(-dragAccelMag);
-                    vel = vel.plus(dragAccel.times(PERIOD / subticks));
+                    accel = accel.plus(dragAccel);
                 }
+                pos = pos.plus(vel.times(dt)).plus(accel.times(0.5 * dt * dt));
+                Translation3d halfVel = vel.plus(accel.times(dt));
+                Translation3d newAccel = GRAVITY;
+                double newSpeed = halfVel.getNorm();
+                if (newSpeed > 0.01) {
+                    double newDragAccelMag = DRAG_FACTOR * newSpeed * newSpeed;
+                    Translation3d newDragAccel = halfVel.div(newSpeed).times(-newDragAccelMag);
+                    newAccel = newAccel.plus(newDragAccel);
+                }
+                vel = vel.plus(accel.plus(newAccel).times(0.5 * dt));
+            } else {
+                pos = pos.plus(vel.times(dt));
             }
             if (Math.abs(vel.getZ()) < 0.05 && pos.getZ() <= FUEL_RADIUS + 0.03) {
                 vel = new Translation3d(vel.getX(), vel.getY(), 0);
-                vel = vel.times(1 - FRICTION * PERIOD / subticks);
-                // pos = new Translation3d(pos.getX(), pos.getY(), FUEL_RADIUS);
+                vel = vel.times(1 - FRICTION * dt);
             }
             handleFieldCollisions();
         }

@@ -21,27 +21,37 @@ public class TrajectoryResult {
      * visualization. This uses the simulated trajectory from the solver. The
      * trajectory naturally terminates when the ball lands at the target (on
      * descent). Returns an empty list if no valid solution exists.
+     * 
+     * <p>When robot velocity is present in the input, the flight path includes
+     * the inherited chassis velocity so the visualization matches what the
+     * simulation (FuelSim) actually does with the ball.</p>
      */
     public List<Pose3d> getFlightPath() {
-        // Only provide a path if the solution is successful and input is available
         if (!isSuccess() || input == null) {
             return List.of();
         }
 
         try {
+            double yaw = input.getShooterYaw() + yawAdjustmentRadians;
+            double hSpeed = requiredVelocityMps * Math.cos(pitchAngleRadians);
+            double launchVx = hSpeed * Math.cos(yaw) + input.getRobotVx();
+            double launchVy = hSpeed * Math.sin(yaw) + input.getRobotVy();
+            double launchVz = requiredVelocityMps * Math.sin(pitchAngleRadians);
+            double totalLaunchSpeed = Math.sqrt(launchVx * launchVx + launchVy * launchVy + launchVz * launchVz);
+            double effectivePitch = Math.atan2(launchVz, Math.sqrt(launchVx * launchVx + launchVy * launchVy));
+            double effectiveYaw = Math.atan2(launchVy, launchVx);
+
             ca.team4308.absolutelib.math.trajectories.physics.ProjectileMotion projectileMotion
                     = new ca.team4308.absolutelib.math.trajectories.physics.ProjectileMotion();
-            // Pass targetRadius=0 so the simulation runs the full arc to the ground
-            // instead of terminating early at the basket-descent condition.
             ca.team4308.absolutelib.math.trajectories.physics.ProjectileMotion.TrajectoryResult simResult = projectileMotion.simulate(
                     gamePiece != null ? gamePiece : ca.team4308.absolutelib.math.trajectories.gamepiece.GamePieces.getCurrent(),
                     input.getShooterX(), input.getShooterY(), input.getShooterZ(),
-                    requiredVelocityMps,
-                    pitchAngleRadians,
-                    input.getShooterYaw() + yawAdjustmentRadians,
-                    0, // spinRpm (not tracked in result)
+                    totalLaunchSpeed,
+                    effectivePitch,
+                    effectiveYaw,
+                    0,
                     input.getTargetX(), input.getTargetY(), input.getTargetZ(),
-                    0 // targetRadius=0 to prevent early termination
+                    0
             );
 
             int validCount = 0;
@@ -52,8 +62,6 @@ public class TrajectoryResult {
                 validCount++;
             }
 
-            // Find the point of closest 3D approach to the target so the path
-            // ends near the target instead of continuing to the ground.
             double tX = input.getTargetX();
             double tY = input.getTargetY();
             double tZ = input.getTargetZ();
@@ -73,8 +81,6 @@ public class TrajectoryResult {
                     closestIndex = i;
                 }
             }
-            // Include a couple points past closest approach so the path visually
-            // reaches the target area, but not the entire descent to the ground.
             int endIndex = Math.min(closestIndex + 2, validCount);
 
             List<Pose3d> path = new ArrayList<>();

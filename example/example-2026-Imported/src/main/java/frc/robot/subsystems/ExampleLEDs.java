@@ -5,6 +5,8 @@ import ca.team4308.absolutelib.wrapper.AbsoluteSubsystem;
 import edu.wpi.first.util.sendable.Sendable;
 import edu.wpi.first.wpilibj.AddressableLED;
 import edu.wpi.first.wpilibj.AddressableLEDBuffer;
+import edu.wpi.first.wpilibj.DriverStation;
+import edu.wpi.first.wpilibj.RobotBase;
 import edu.wpi.first.wpilibj.util.Color;
 
 /**
@@ -16,6 +18,7 @@ public class ExampleLEDs extends AbsoluteSubsystem {
     private final AddressableLED led;
     private final AddressableLEDBuffer buffer;
     private final AddressableLEDBufferView view;
+    private final Simulation ledSim;
 
     private LEDPattern currentPattern;
     private String currentPatternName = "Idle";
@@ -37,6 +40,12 @@ public class ExampleLEDs extends AbsoluteSubsystem {
         // Create view for pattern application
         view = new AddressableLEDBufferView(buffer, 0, LED_LENGTH);
 
+        // Set up simulation
+        ledSim = new Simulation();
+        if (RobotBase.isSimulation()) {
+            ledSim.setUp();
+        }
+
         // Start with idle pattern
         currentPattern = Patterns.idle();
     }
@@ -48,13 +57,18 @@ public class ExampleLEDs extends AbsoluteSubsystem {
             currentPattern.applyTo(view);
         }
         led.setData(buffer);
+
+        // Update simulation display
+        if (RobotBase.isSimulation()) {
+            ledSim.update(buffer, led);
+        }
     }
 
     /**
      * Set idle pattern - gentle breathing effect.
      */
     public void setIdle() {
-        currentPattern = Patterns.idle();
+        currentPattern = Patterns.scrollingIdle(DriverStation.getAlliance().orElse(DriverStation.Alliance.Red) == DriverStation.Alliance.Blue ? Color.kBlue : Color.kRed, 2);
         currentPatternName = "Idle";
     }
 
