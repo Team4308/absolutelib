@@ -51,14 +51,35 @@ public final class ShotParameters {
         /** Fallback / safe preset. */
         FALLBACK,
         /** Manual override from driver. */
-        MANUAL
+        MANUAL,
+        /** Blended result from lookup table and solver. */
+        BLENDED
     }
 
+    /**
+     * Creates shot parameters with no yaw adjustment.
+     *
+     * @param pitchDegrees   launch pitch angle in degrees
+     * @param rpm            flywheel RPM
+     * @param exitVelocityMps ball exit velocity in m/s
+     * @param distanceMeters horizontal distance to target
+     * @param source         calculation source
+     */
     public ShotParameters(double pitchDegrees, double rpm, double exitVelocityMps,
                           double distanceMeters, Source source) {
         this(pitchDegrees, rpm, exitVelocityMps, distanceMeters, 0.0, source, true, "");
     }
 
+    /**
+     * Creates shot parameters with a yaw adjustment.
+     *
+     * @param pitchDegrees          launch pitch angle in degrees
+     * @param rpm                   flywheel RPM
+     * @param exitVelocityMps       ball exit velocity in m/s
+     * @param distanceMeters        horizontal distance to target
+     * @param yawAdjustmentRadians  yaw offset to apply (radians)
+     * @param source                calculation source
+     */
     public ShotParameters(double pitchDegrees, double rpm, double exitVelocityMps,
                           double distanceMeters, double yawAdjustmentRadians, Source source) {
         this(pitchDegrees, rpm, exitVelocityMps, distanceMeters, yawAdjustmentRadians, source, true, "");

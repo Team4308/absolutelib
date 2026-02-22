@@ -7,7 +7,7 @@
  * <ul>
  *   <li><b>Physics Engine</b> - Projectile motion with optional air resistance</li>
  *   <li><b>Flywheel Modeling</b> - Simulation and generation of flywheel configurations</li>
- *   <li><b>CRT Solver</b> - Chinese Remainder Theorem for discrete angle/RPM solutions</li>
+ *   <li><b>CRT Solver</b> - Chinese Remainder Theorem </li>
  *   <li><b>Game Piece Specs</b> - Pre-configured game pieces for FRC seasons</li>
  * </ul>
  * 
@@ -21,7 +21,7 @@
  *     .shooterPositionMeters(1.0, 2.0, 0.5)
  *     .shooterYawDegrees(45)
  *     .targetPositionMeters(5.0, 5.0, 2.5)
- *     .preferHighArc(true)
+ *     .shotPreference(ShotInput.ShotPreference.HIGH_CLEARANCE)
  *     .build();
  * 
  * // Solve for trajectory

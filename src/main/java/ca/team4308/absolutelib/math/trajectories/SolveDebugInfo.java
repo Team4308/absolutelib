@@ -11,29 +11,44 @@ import ca.team4308.absolutelib.math.trajectories.physics.ProjectileMotion;
  *
  * Enable with {@link TrajectorySolver#setDebugEnabled(boolean)}.
  */
+
 public class SolveDebugInfo {
 
     /**
      * Reason a candidate angle was rejected.
      */
+
     public enum RejectionReason {
+
         /** Candidate was accepted (not rejected). */
+
         NONE,
+
         /** Trajectory intersects an obstacle. */
+
         COLLISION,
+
         /** Apex height below the required minimum arc height. */
+
         ARC_TOO_LOW,
+
         /** Apex height below the required obstacle clearance. */
+
         CLEARANCE_TOO_LOW,
+
         /** Ball does not pass close enough to the target. */
+
         MISSED_TARGET,
+
         /** Ball passes above the target without descending into it. */
+
         FLYOVER
     }
 
     /**
      * Information about a single candidate angle tested by the solver.
      */
+
     public static class CandidateInfo {
         private final double pitchDegrees;
         private final RejectionReason rejection;
@@ -44,6 +59,18 @@ public class SolveDebugInfo {
         private final boolean hitTarget;
         private final ProjectileMotion.TrajectoryState[] trajectory;
 
+        /**
+         * Creates a candidate info entry recording the result of evaluating one pitch angle.
+         *
+         * @param pitchDegrees    the launch pitch angle tested
+         * @param rejection       the rejection reason, or {@link RejectionReason#NONE} if accepted
+         * @param missDistance    horizontal miss distance from target center (meters)
+         * @param closestApproach closest approach distance to target (meters)
+         * @param maxHeight       apex height of the trajectory (meters)
+         * @param timeOfFlight    total time of flight (seconds)
+         * @param hitTarget       true if the projectile hit the target
+         * @param trajectory      sampled trajectory states for visualization
+         */
         public CandidateInfo(double pitchDegrees, RejectionReason rejection, double missDistance,
                              double closestApproach, double maxHeight, double timeOfFlight,
                              boolean hitTarget, ProjectileMotion.TrajectoryState[] trajectory) {
@@ -60,10 +87,9 @@ public class SolveDebugInfo {
         public double getPitchDegrees() { return pitchDegrees; }
         public RejectionReason getRejection() { return rejection; }
         public boolean isAccepted() { return rejection == RejectionReason.NONE; }
-        /** @deprecated Use {@link #getMissDistance()} instead. */
-        @Deprecated
-        public double getScore() { return missDistance; }
+
         /** Horizontal distance from target center (meters). 0 = dead center. */
+
         public double getMissDistance() { return missDistance; }
         public double getClosestApproach() { return closestApproach; }
         public double getMaxHeight() { return maxHeight; }
@@ -97,6 +123,7 @@ public class SolveDebugInfo {
     /**
      * Records a candidate that was accepted (passed all filters).
      */
+
     public void recordAccepted(double pitchDeg, double missDistance, double closestApproach,
                                double maxHeight, double tof, boolean hitTarget,
                                ProjectileMotion.TrajectoryState[] trajectory) {
@@ -113,6 +140,7 @@ public class SolveDebugInfo {
     /**
      * Records a candidate that was rejected.
      */
+
     public void recordRejected(double pitchDeg, RejectionReason reason,
                                double closestApproach, double maxHeight, double tof,
                                boolean hitTarget, ProjectileMotion.TrajectoryState[] trajectory) {
@@ -129,10 +157,10 @@ public class SolveDebugInfo {
                 maxHeight, tof, hitTarget, trajectory));
     }
 
-    // ===== Accessors =====
-
     public List<CandidateInfo> getCandidates() { return candidates; }
+
     /** Only candidates that passed all filters. */
+
     public List<CandidateInfo> getAcceptedCandidates() {
         List<CandidateInfo> result = new ArrayList<>();
         for (CandidateInfo c : candidates) {
@@ -140,7 +168,9 @@ public class SolveDebugInfo {
         }
         return result;
     }
+
     /** Only candidates that were rejected. */
+
     public List<CandidateInfo> getRejectedCandidates() {
         List<CandidateInfo> result = new ArrayList<>();
         for (CandidateInfo c : candidates) {
@@ -157,16 +187,16 @@ public class SolveDebugInfo {
     public int getRejectedMissCount() { return rejectedMiss; }
     public int getRejectedFlyoverCount() { return rejectedFlyover; }
     public int getTotalRejected() { return totalTested - accepted; }
-    /** @deprecated Use {@link #getBestMissDistance()} instead. */
-    @Deprecated
-    public double getBestScore() { return bestMissDistance; }
+
     /** Horizontal distance from target center for the best accepted candidate (meters). 0 = dead center. */
+
     public double getBestMissDistance() { return bestMissDistance; }
     public double getBestPitchDegrees() { return bestPitchDegrees; }
 
     /**
      * Returns a human-readable summary of the solve results.
      */
+
     public String getSummary() {
         StringBuilder sb = new StringBuilder();
         sb.append(String.format("Tested %d angles: %d accepted, %d rejected\n",
@@ -184,6 +214,7 @@ public class SolveDebugInfo {
     /**
      * Returns a detailed table of all tested candidates.
      */
+
     public String getDetailedTable() {
         StringBuilder sb = new StringBuilder();
         sb.append("Pitch°   Status              Miss(m)  Closest    TOF      MaxHeight\n");

@@ -25,32 +25,39 @@ import edu.wpi.first.math.util.Units;
  *     .build();
  * </pre>
  */
+
 public class ShotInput {
-    
+
     /**
      * Shot selection preference when multiple candidates are available.
      */
+
     public enum ShotPreference {
+
         /** Automatically select best overall candidate */
+
         AUTO,
+
         /** Prefer fastest time of flight (low arc) */
+
         FASTEST,
+
         /** Prefer highest clearance (high arc) */
+
         HIGH_CLEARANCE,
+
         /** Prefer most stable/consistent shot */
+
         MOST_STABLE,
+
         /** Prefer minimum velocity (easiest on mechanism) */
+
         MIN_VELOCITY,
-        /** Prefer maximum accuracy (closest to target center) */
-        MOST_ACCURATE,
-        /** Legacy: prefer high arc trajectories */
-        @Deprecated
-        PREFER_HIGH_ARC,
-        /** Legacy: prefer low arc trajectories */
-        @Deprecated
-        PREFER_LOW_ARC
+
+        /** Prefer trajectory closest to dead center of target. */
+        MOST_ACCURATE
     }
-    
+
     private final double shooterX;
     private final double shooterY;
     private final double shooterZ;
@@ -82,29 +89,11 @@ public class ShotInput {
     private final boolean collisionCheckEnabled;
     private final double preferredArcHeightMeters;
     private final double arcBiasStrength;
-    
-    /**
-     * Creates a shot input with all parameters (legacy constructor).
-     * @deprecated Use the Builder instead for full control over all parameters.
-     */
-    @Deprecated
-    public ShotInput(double shooterX, double shooterY, double shooterZ,
-                     double shooterYaw,
-                     double targetX, double targetY, double targetZ,
-                     double targetRadius,
-                     double robotVx, double robotVy,
-                     boolean preferHighArc, boolean includeAirResistance) {
-        this(shooterX, shooterY, shooterZ, shooterYaw,
-             targetX, targetY, targetZ, targetRadius,
-             robotVx, robotVy, preferHighArc, includeAirResistance,
-             preferHighArc ? ShotPreference.PREFER_HIGH_ARC : ShotPreference.PREFER_LOW_ARC,
-             50, 0, 90, 5, 50, 1.0, 0.0,
-             Collections.emptyList(), false, 0.0, 0.0);
-    }
-    
+
     /**
      * Full constructor with all new parameters.
      */
+
     private ShotInput(double shooterX, double shooterY, double shooterZ,
                       double shooterYaw,
                       double targetX, double targetY, double targetZ,
@@ -142,10 +131,11 @@ public class ShotInput {
         this.preferredArcHeightMeters = preferredArcHeightMeters;
         this.arcBiasStrength = arcBiasStrength;
     }
-    
+
     /**
      * Builder for fluent construction with unit flexibility.
      */
+
     public static class Builder {
         private double shooterX = 0;
         private double shooterY = 0;
@@ -159,7 +149,7 @@ public class ShotInput {
         private double robotVy = 0;
         private boolean preferHighArc = true;
         private boolean includeAirResistance = true;
-        
+
         private ShotPreference shotPreference = ShotPreference.AUTO;
         private int maxCandidates = 50;
         private double minPitchDegrees = 5;
@@ -173,178 +163,183 @@ public class ShotInput {
         private boolean collisionCheckEnabled = false;
         private double preferredArcHeightMeters = 0.0;
         private double arcBiasStrength = 0.5;
-        
+
         /**
          * Sets shooter position in meters.
          */
+
         public Builder shooterPositionMeters(double x, double y, double z) {
             this.shooterX = x;
             this.shooterY = y;
             this.shooterZ = z;
             return this;
         }
-        
+
         /**
          * Sets shooter position in inches.
          */
+
         public Builder shooterPositionInches(double x, double y, double z) {
             this.shooterX = Units.inchesToMeters(x);
             this.shooterY = Units.inchesToMeters(y);
             this.shooterZ = Units.inchesToMeters(z);
             return this;
         }
-        
+
         /**
          * Sets shooter position in feet.
          */
+
         public Builder shooterPositionFeet(double x, double y, double z) {
             this.shooterX = Units.feetToMeters(x);
             this.shooterY = Units.feetToMeters(y);
             this.shooterZ = Units.feetToMeters(z);
             return this;
         }
-        
+
         /**
          * Sets shooter yaw in radians.
          */
+
         public Builder shooterYawRadians(double yaw) {
             this.shooterYaw = yaw;
             return this;
         }
-        
+
         /**
          * Sets shooter yaw in degrees.
          */
+
         public Builder shooterYawDegrees(double yaw) {
             this.shooterYaw = Math.toRadians(yaw);
             return this;
         }
-        
+
         /**
          * Sets target position in meters.
          */
+
         public Builder targetPositionMeters(double x, double y, double z) {
             this.targetX = x;
             this.targetY = y;
             this.targetZ = z;
             return this;
         }
-        
+
         /**
          * Sets target position in inches.
          */
+
         public Builder targetPositionInches(double x, double y, double z) {
             this.targetX = Units.inchesToMeters(x);
             this.targetY = Units.inchesToMeters(y);
             this.targetZ = Units.inchesToMeters(z);
             return this;
         }
-        
+
         /**
          * Sets target position in feet.
          */
+
         public Builder targetPositionFeet(double x, double y, double z) {
             this.targetX = Units.feetToMeters(x);
             this.targetY = Units.feetToMeters(y);
             this.targetZ = Units.feetToMeters(z);
             return this;
         }
-        
+
         /**
          * Sets target acceptance radius in meters.
          */
+
         public Builder targetRadiusMeters(double radius) {
             this.targetRadius = radius;
             return this;
         }
-        
+
         /**
          * Sets target acceptance radius in inches.
          */
+
         public Builder targetRadiusInches(double radius) {
             this.targetRadius = Units.inchesToMeters(radius);
             return this;
         }
-        
+
         /**
          * Sets robot velocity in meters/sec (field-relative).
          */
+
         public Builder robotVelocity(double vx, double vy) {
             this.robotVx = vx;
             this.robotVy = vy;
             return this;
         }
-        
-        /**
-         * Sets whether to prefer high-arc trajectories.
-         * @deprecated Use {@link #shotPreference(ShotPreference)} instead
-         */
-        @Deprecated
-        public Builder preferHighArc(boolean prefer) {
-            this.preferHighArc = prefer;
-            this.shotPreference = prefer ? ShotPreference.PREFER_HIGH_ARC : ShotPreference.PREFER_LOW_ARC;
-            return this;
-        }
-        
+
         /**
          * Sets whether to include air resistance.
          */
+
         public Builder includeAirResistance(boolean include) {
             this.includeAirResistance = include;
             return this;
         }
-        
+
         /**
          * Sets the shot preference for candidate selection.
          * This replaces the old preferHighArc boolean.
          */
+
         public Builder shotPreference(ShotPreference preference) {
             this.shotPreference = preference;
-            this.preferHighArc = (preference == ShotPreference.PREFER_HIGH_ARC || 
-                                  preference == ShotPreference.HIGH_CLEARANCE);
+            this.preferHighArc = (preference == ShotPreference.HIGH_CLEARANCE);
             return this;
         }
-        
+
         /**
          * Sets the maximum number of candidates to generate.
          * Higher values give more options but take longer.
          * Default: 50
          */
+
         public Builder maxCandidates(int max) {
             this.maxCandidates = Math.max(1, max);
             return this;
         }
-        
+
         /**
          * Sets the pitch angle range in degrees.
          * Default: 5 to 85 degrees
          */
+
         public Builder pitchRangeDegrees(double min, double max) {
             this.minPitchDegrees = Math.max(0.1, min);
             this.maxPitchDegrees = Math.min(89.9, max);
             return this;
         }
-        
+
         /**
          * Sets the velocity range in meters per second.
          * Default: 5 to 50 m/s
          */
+
         public Builder velocityRangeMps(double min, double max) {
             this.minVelocityMps = Math.max(0.1, min);
             this.maxVelocityMps = max;
             return this;
         }
-        
+
         /**
          * Sets the angle step size for candidate generation.
          * Smaller values = more candidates, higher precision.
          * Default: 1.0 degrees (results in ~80 candidates max)
          */
+
         public Builder angleStepDegrees(double step) {
             this.angleStepDegrees = Math.max(0.1, step);
             return this;
         }
-        
+
         /**
          * Sets the minimum arc height above the target.
          * This ensures the ball reaches a certain apex height before descending.
@@ -352,20 +347,22 @@ public class ShotInput {
          * Default: 0.0 (no minimum)
          * @param meters Minimum height above target that the trajectory apex must reach
          */
+
         public Builder minArcHeightMeters(double meters) {
             this.minArcHeightMeters = Math.max(0.0, meters);
             return this;
         }
-        
+
         /**
          * Sets the minimum arc height above the target in feet.
          * @param feet Minimum height above target in feet
          */
+
         public Builder minArcHeightFeet(double feet) {
             this.minArcHeightMeters = Math.max(0.0, Units.feetToMeters(feet));
             return this;
         }
-        
+
         /**
          * Adds a field obstacle for collision-aware trajectory solving.
          * When collision checking is enabled, trajectories that intersect obstacles
@@ -373,17 +370,19 @@ public class ShotInput {
          * 
          * @param obstacle The obstacle configuration
          */
+
         public Builder addObstacle(ObstacleConfig obstacle) {
             if (obstacle != null) {
                 this.obstacles.add(obstacle);
-                this.collisionCheckEnabled = true; // Auto-enable when obstacles are added
+                this.collisionCheckEnabled = true;
             }
             return this;
         }
-        
+
         /**
          * Adds multiple obstacles at once.
          */
+
         public Builder obstacles(List<ObstacleConfig> obstacles) {
             if (obstacles != null) {
                 this.obstacles.addAll(obstacles);
@@ -391,16 +390,17 @@ public class ShotInput {
             }
             return this;
         }
-        
+
         /**
          * Enables or disables collision checking against obstacles.
          * Auto-enabled when obstacles are added, but can be toggled.
          */
+
         public Builder collisionCheckEnabled(boolean enabled) {
             this.collisionCheckEnabled = enabled;
             return this;
         }
-        
+
         /**
          * Sets the preferred arc height (soft bias, not a hard limit).
          * The solver will prefer trajectories with apex heights near this value.
@@ -411,19 +411,21 @@ public class ShotInput {
          * 
          * @param meters Preferred trajectory apex height in meters
          */
+
         public Builder preferredArcHeightMeters(double meters) {
             this.preferredArcHeightMeters = Math.max(0.0, meters);
             return this;
         }
-        
+
         /**
          * Sets the preferred arc height in feet.
          */
+
         public Builder preferredArcHeightFeet(double feet) {
             this.preferredArcHeightMeters = Math.max(0.0, Units.feetToMeters(feet));
             return this;
         }
-        
+
         /**
          * Sets how strongly the solver prefers the preferred arc height.
          * 0.0 = no preference (ignore preferredArcHeight)
@@ -432,29 +434,32 @@ public class ShotInput {
          * 
          * @param strength Bias strength from 0.0 to 1.0
          */
+
         public Builder arcBiasStrength(double strength) {
             this.arcBiasStrength = Math.max(0.0, Math.min(1.0, strength));
             return this;
         }
-        
+
         /**
          * Configures for fast solving with fewer candidates.
          */
+
         public Builder fastMode() {
             this.angleStepDegrees = 2.0;
             this.maxCandidates = 20;
             return this;
         }
-        
+
         /**
          * Configures for high precision with more candidates.
          */
+
         public Builder precisionMode() {
             this.angleStepDegrees = 0.5;
             this.maxCandidates = 100;
             return this;
         }
-        
+
         public ShotInput build() {
             return new ShotInput(
                 shooterX, shooterY, shooterZ,
@@ -472,56 +477,64 @@ public class ShotInput {
             );
         }
     }
-    
+
+    /** Creates a new builder for constructing a shot input. */
     public static Builder builder() {
         return new Builder();
     }
-    
+
+    /**
+     * Calculates horizontal (XY-plane) distance from shooter to target.
+     *
+     * @return horizontal distance in meters
+     */
     public double getHorizontalDistanceMeters() {
         double dx = targetX - shooterX;
         double dy = targetY - shooterY;
         return Math.sqrt(dx * dx + dy * dy);
     }
-    
+
     /**
      * Calculates 3D distance from shooter to target.
      */
+
     public double getTotalDistanceMeters() {
         double dx = targetX - shooterX;
         double dy = targetY - shooterY;
         double dz = targetZ - shooterZ;
         return Math.sqrt(dx * dx + dy * dy + dz * dz);
     }
-    
+
     /**
      * Calculates height difference (target - shooter).
      */
+
     public double getHeightDifferenceMeters() {
         return targetZ - shooterZ;
     }
-    
+
     /**
      * Calculates required yaw to face target.
      */
+
     public double getRequiredYawRadians() {
         return Math.atan2(targetY - shooterY, targetX - shooterX);
     }
-    
+
     /**
      * Calculates yaw adjustment needed from current shooter yaw.
      */
+
     public double getYawAdjustmentRadians() {
         double required = getRequiredYawRadians();
         double adjustment = required - shooterYaw;
-        
-        // Normalize to -PI to PI
+
         while (adjustment > Math.PI) adjustment -= 2 * Math.PI;
         while (adjustment < -Math.PI) adjustment += 2 * Math.PI;
-        
+
         return adjustment;
     }
-    
-    // Getters
+
     public double getShooterX() { return shooterX; }
     public double getShooterY() { return shooterY; }
     public double getShooterZ() { return shooterZ; }
@@ -532,11 +545,8 @@ public class ShotInput {
     public double getTargetRadius() { return targetRadius; }
     public double getRobotVx() { return robotVx; }
     public double getRobotVy() { return robotVy; }
-    /** @deprecated Use {@link #getShotPreference()} instead */
-    @Deprecated
-    public boolean isPreferHighArc() { return preferHighArc; }
     public boolean isIncludeAirResistance() { return includeAirResistance; }
-    
+
     public ShotPreference getShotPreference() { return shotPreference; }
     public int getMaxCandidates() { return maxCandidates; }
     public double getMinPitchDegrees() { return minPitchDegrees; }
@@ -545,16 +555,17 @@ public class ShotInput {
     public double getMaxVelocityMps() { return maxVelocityMps; }
     public double getAngleStepDegrees() { return angleStepDegrees; }
     public double getMinArcHeightMeters() { return minArcHeightMeters; }
-    
+
     public List<ObstacleConfig> getObstacles() { return obstacles; }
     public boolean isCollisionCheckEnabled() { return collisionCheckEnabled; }
     public double getPreferredArcHeightMeters() { return preferredArcHeightMeters; }
     public double getArcBiasStrength() { return arcBiasStrength; }
-    
+
     /**
      * Whether any obstacle's footprint lies between shooter and target.
      * If true, the solver should strongly prefer high-arc solutions.
      */
+
     public boolean pathRequiresArc() {
         if (!collisionCheckEnabled || obstacles.isEmpty()) return false;
         for (ObstacleConfig obstacle : obstacles) {
@@ -564,11 +575,12 @@ public class ShotInput {
         }
         return false;
     }
-    
+
     /**
      * Returns the maximum clearance height needed across all obstacles.
      * The trajectory must arc above this height to avoid all obstacles.
      */
+
     public double getRequiredClearanceHeight() {
         double maxClearance = 0;
         if (!collisionCheckEnabled) return 0;
@@ -579,7 +591,7 @@ public class ShotInput {
         }
         return maxClearance;
     }
-    
+
     @Override
     public String toString() {
         return String.format("Shot from (%.2f, %.2f, %.2f)m yaw=%.1f deg to (%.2f, %.2f, %.2f)m (%.2fm dist, %.2fm high) Robot V=(%.1f, %.1f)",

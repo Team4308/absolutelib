@@ -3,11 +3,18 @@ package frc.robot.subsystems;
 import ca.team4308.absolutelib.math.trajectories.shooter.*;
 import ca.team4308.absolutelib.math.trajectories.*;
 import ca.team4308.absolutelib.math.trajectories.gamepiece.*;
+import ca.team4308.absolutelib.math.trajectories.flywheel.FlywheelConfig;
+import ca.team4308.absolutelib.math.trajectories.flywheel.FlywheelConfig.WheelArrangement;
+import ca.team4308.absolutelib.math.trajectories.flywheel.FlywheelSimulator;
+import ca.team4308.absolutelib.math.trajectories.flywheel.WheelMaterial;
+import ca.team4308.absolutelib.math.trajectories.motor.FRCMotors;
 import ca.team4308.absolutelib.wrapper.AbsoluteSubsystem;
 import ca.team4308.absolutelib.wrapper.MotorWrapper;
 import ca.team4308.absolutelib.wrapper.MotorWrapper.MotorType;
 
 import org.littletonrobotics.junction.Logger;
+
+import com.ctre.phoenix6.hardware.TalonFX;
 
 import edu.wpi.first.math.geometry.Pose2d;
 import edu.wpi.first.math.geometry.Pose3d;
@@ -18,6 +25,8 @@ import edu.wpi.first.math.geometry.Translation3d;
 import edu.wpi.first.math.kinematics.ChassisSpeeds;
 import edu.wpi.first.util.sendable.Sendable;
 import edu.wpi.first.util.sendable.SendableBuilder;
+import edu.wpi.first.wpilibj.DriverStation;
+import edu.wpi.first.wpilibj.RobotBase;
 import edu.wpi.first.wpilibj2.command.Command;
 import frc.robot.subsystems.Util.FuelSim;
 
@@ -26,7 +35,7 @@ import java.util.function.Supplier;
 
 public class ExampleShooter extends AbsoluteSubsystem {
 
-    private final MotorWrapper flywheelLeader;
+    private final TalonFX flywheelLeader;
 
     private final ShooterSystem shooterSystem;
     private final TrajectorySolver solver;
@@ -49,7 +58,7 @@ public class ExampleShooter extends AbsoluteSubsystem {
     public ExampleShooter() {
         super();
 
-        flywheelLeader = new MotorWrapper(MotorType.TALONFX, 40);
+        flywheelLeader = new TalonFX(40);
 
         ShooterConfig config = ShooterConfig.builder()
                 .pitchLimits(47.5, 82.5)
@@ -89,6 +98,20 @@ public class ExampleShooter extends AbsoluteSubsystem {
         solver = new TrajectorySolver(gamePiece, solverConfig);
         // Sweep looks for the best angle by testing many candidates, good for long distances and tight tolerances. Iterative is faster but less thorough, good for close targets and quick updates.
         solver.setSolveMode(TrajectorySolver.SolveMode.SWEEP);
+
+        // Configure the physical flywheel so the solver can simulate ball-wheel interaction
+        // and provide motor power %, spin-up time, current draw, and exit velocity estimates.
+        FlywheelConfig flywheelConfig = FlywheelConfig.builder()
+                .name("Example 2026 Shooter")
+                .arrangement(WheelArrangement.DUAL_OVER_UNDER)
+                .wheelDiameterInches(4.0)
+                .material(WheelMaterial.GREEN_COMPLIANT)
+                .compressionRatio(0.10)
+                .motor(FRCMotors.KRAKEN_X60)
+                .motorsPerWheel(1)
+                .gearRatio(1.0) // Direct drive (1:1)
+                .build();
+        solver.setFlywheel(flywheelConfig);
 
         // Shooter system with both solver and lookup table, falls back to table if no valid solution from solver
         shooterSystem = new ShooterSystem(config, table, solver);
@@ -153,6 +176,8 @@ public class ExampleShooter extends AbsoluteSubsystem {
 
     @Override
     public void periodic() {
+        currentRpmSupplier = () -> RobotBase.isReal() ? flywheelLeader.getVelocity().getValueAsDouble() * 60.0 : currentShot.rpm; 
+
         if (trackingEnabled && poseSupplier != null) {
             updateShot();
         }
@@ -170,7 +195,7 @@ public class ExampleShooter extends AbsoluteSubsystem {
         recordOutput("Mode", shooterSystem.getMode().name());
         recordOutput("SourceDetail", shooterSystem.getLastSourceDescription());
         recordOutput("TrackingEnabled", trackingEnabled);
-
+        
         if (currentRpmSupplier != null) {
             double measured = currentRpmSupplier.get();
             recordOutput("MeasuredRPM", measured);
@@ -214,6 +239,24 @@ public class ExampleShooter extends AbsoluteSubsystem {
             recordOutput("Trajectory/MaxHeight", trajResult.getMaxHeightMeters());
             recordOutput("Trajectory/Margin", trajResult.getMarginOfErrorMeters());
             recordOutput("Trajectory/RPM", trajResult.getRecommendedRpm());
+
+            // Flywheel simulation results (populated when solver has a FlywheelConfig set)
+            FlywheelSimulator.SimulationResult flywheelSim = trajResult.getFlywheelSimulation();
+            if (flywheelSim != null) {
+                recordOutput("Flywheel/ExitVelocityMps", flywheelSim.exitVelocityMps);
+                recordOutput("Flywheel/MotorPowerPercent", flywheelSim.motorPowerPercent);
+                recordOutput("Flywheel/RequiredMotorRpm", flywheelSim.requiredMotorRpm);
+                recordOutput("Flywheel/RequiredWheelRpm", flywheelSim.requiredWheelRpm);
+                recordOutput("Flywheel/SpinUpTimeSeconds", flywheelSim.spinUpTimeSeconds);
+                recordOutput("Flywheel/CurrentDrawAmps", flywheelSim.currentDrawAmps);
+                recordOutput("Flywheel/StoredEnergyJoules", flywheelSim.storedEnergyJoules);
+                recordOutput("Flywheel/BallSpinRpm", flywheelSim.ballSpinRpm);
+                recordOutput("Flywheel/ContactTimeMs", flywheelSim.contactTimeMs);
+                recordOutput("Flywheel/EnergyEfficiency", flywheelSim.energyTransferEfficiency);
+                recordOutput("Flywheel/SlipRatio", flywheelSim.slipRatio);
+                recordOutput("Flywheel/IsAchievable", flywheelSim.isAchievable);
+                recordOutput("Flywheel/LimitingFactor", flywheelSim.limitingFactor);
+            }
 
             List<Pose3d> flightPath = trajResult.getFlightPath();
             if (!flightPath.isEmpty()) {
@@ -363,7 +406,7 @@ public class ExampleShooter extends AbsoluteSubsystem {
     public Command stopCommand() {
         return runOnce(() -> {
             currentShot = ShotParameters.invalid("Stopped");
-            flywheelLeader.stop();
+            flywheelLeader.set(0);
         });
     }
 
@@ -403,7 +446,7 @@ public class ExampleShooter extends AbsoluteSubsystem {
 
         double launchSpeed = trajResult.getRequiredVelocityMps();
         double pitchRad = Math.toRadians(trajResult.getPitchAngleDegrees());
-        double yawRad = Math.toRadians(targetYawDegrees);
+        double yawRad = Math.toRadians(targetYawDegrees) + trajResult.getYawAdjustmentRadians();
 
         Rotation2d rot = robotPose.getRotation();
         double wx = shooterOffset.getX() * rot.getCos() - shooterOffset.getY() * rot.getSin();

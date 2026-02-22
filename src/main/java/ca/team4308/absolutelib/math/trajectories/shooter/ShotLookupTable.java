@@ -1,104 +1,123 @@
 package ca.team4308.absolutelib.math.trajectories.shooter;
 
+import edu.wpi.first.math.interpolation.InterpolatingDoubleTreeMap;
+
 /**
- * A fixed-size, sorted lookup table for shot parameters indexed by distance.
- * 
- * <p>Each entry stores a tested distance, pitch angle, and RPM collected from
- * real robot testing. The table is kept small (8–15 entries) so it uses almost
- * no memory and is fast to search.</p>
- * 
- * <p>When the measured distance falls between two entries the table linearly
- * interpolates between them. When the distance is outside the range the
- * closest entry is returned (clamped).</p>
- * 
- * <h2>Usage</h2>
+ * Distance-indexed lookup table for pre-tuned shot parameters using WPILib's
+ * {@link InterpolatingDoubleTreeMap} for smooth interpolation between entries.
+ *
+ * <p>Each entry maps a horizontal distance (meters) to a pitch angle (degrees),
+ * flywheel RPM, and optionally a time-of-flight estimate. Between entries,
+ * values are linearly interpolated, matching the approach used by
+ * Mechanical Advantage's LaunchCalculator.
+ *
+ * <p>Typical usage:
  * <pre>{@code
  * ShotLookupTable table = new ShotLookupTable()
- *     .addEntry(1.5, 75.0, 2000)
- *     .addEntry(2.5, 65.0, 2800)
- *     .addEntry(4.0, 55.0, 3800);
- * ShotParameters shot = table.lookup(3.0);
+ *     .addEntry(2.0, 55.0, 3000)
+ *     .addEntry(3.5, 45.0, 3800)
+ *     .addEntry(5.0, 35.0, 4500, 0.62);
+ *
+ * ShotParameters params = table.lookup(2.8);
  * }</pre>
+ *
+ * @see ShooterSystem
+ * @see ShotParameters
  */
 public final class ShotLookupTable {
 
-    /** Maximum number of entries the table can hold. */
-    private static final int MAX_ENTRIES = 32;
-
-    private final double[] distances = new double[MAX_ENTRIES];
-    private final double[] pitchDegrees = new double[MAX_ENTRIES];
-    private final double[] rpms = new double[MAX_ENTRIES];
+    private final InterpolatingDoubleTreeMap pitchMap = new InterpolatingDoubleTreeMap();
+    private final InterpolatingDoubleTreeMap rpmMap = new InterpolatingDoubleTreeMap();
+    private final InterpolatingDoubleTreeMap tofMap = new InterpolatingDoubleTreeMap();
     private int size = 0;
+    private boolean hasTofData = false;
+    private double minDistance = Double.MAX_VALUE;
+    private double maxDistance = Double.MIN_VALUE;
+    private double rpmToVelocityFactor = 0.00532;
 
     /**
-     * Adds a tested shot entry. Entries are insertion-sorted by distance.
-     * 
+     * Creates a lookup table with the default RPM-to-velocity conversion factor
+     * ({@code 0.00532}, matching a ~4" compliant wheel at 1:1 gear ratio).
+     */
+    public ShotLookupTable() {}
+
+    /**
+     * Creates a lookup table with a custom RPM-to-velocity conversion factor.
+     * This should match the factor configured in {@link ShooterConfig} so that
+     * {@code exitVelocityMps} values from the table are consistent with the
+     * rest of the shooter pipeline.
+     *
+     * @param rpmToVelocityFactor multiplier converting RPM to m/s
+     */
+    public ShotLookupTable(double rpmToVelocityFactor) {
+        this.rpmToVelocityFactor = rpmToVelocityFactor;
+    }
+
+    /**
+     * Adds a shot entry for a given distance.
+     *
      * @param distanceMeters horizontal distance to target in meters
      * @param pitchDeg       pitch angle in degrees
      * @param rpm            flywheel RPM
      * @return this table for chaining
-     * @throws IllegalStateException if table is full ({@value MAX_ENTRIES} entries)
      */
     public ShotLookupTable addEntry(double distanceMeters, double pitchDeg, double rpm) {
-        if (size >= MAX_ENTRIES) {
-            throw new IllegalStateException("Lookup table is full (" + MAX_ENTRIES + " entries)");
-        }
-        int pos = size;
-        for (int i = 0; i < size; i++) {
-            if (distanceMeters < distances[i]) {
-                pos = i;
-                break;
-            }
-        }
-        for (int i = size; i > pos; i--) {
-            distances[i] = distances[i - 1];
-            pitchDegrees[i] = pitchDegrees[i - 1];
-            rpms[i] = rpms[i - 1];
-        }
-        distances[pos] = distanceMeters;
-        pitchDegrees[pos] = pitchDeg;
-        rpms[pos] = rpm;
+        pitchMap.put(distanceMeters, pitchDeg);
+        rpmMap.put(distanceMeters, rpm);
         size++;
+        minDistance = Math.min(minDistance, distanceMeters);
+        maxDistance = Math.max(maxDistance, distanceMeters);
         return this;
     }
 
     /**
-     * Looks up shot parameters for the given distance.
-     * <ul>
-     *   <li>If the distance is below the first entry, clamps to the first entry.</li>
-     *   <li>If the distance is above the last entry, clamps to the last entry.</li>
-     *   <li>Otherwise, linearly interpolates between the two surrounding entries.</li>
-     * </ul>
-     * 
-     * @param distanceMeters measured distance to target
-     * @return interpolated shot parameters tagged with {@link ShotParameters.Source#LOOKUP_TABLE}
+     * Adds a shot entry with time-of-flight estimate.
+     *
+     * @param distanceMeters horizontal distance to target in meters
+     * @param pitchDeg       pitch angle in degrees
+     * @param rpm            flywheel RPM
+     * @param tofSeconds     estimated time of flight in seconds
+     * @return this table for chaining
+     */
+    public ShotLookupTable addEntry(double distanceMeters, double pitchDeg, double rpm, double tofSeconds) {
+        addEntry(distanceMeters, pitchDeg, rpm);
+        tofMap.put(distanceMeters, tofSeconds);
+        hasTofData = true;
+        return this;
+    }
+
+    /**
+     * Looks up interpolated shot parameters for the given distance.
+     *
+     * @param distanceMeters horizontal distance to target
+     * @return interpolated shot parameters, or invalid if table is empty
      */
     public ShotParameters lookup(double distanceMeters) {
         if (size == 0) {
             return ShotParameters.invalid("Lookup table is empty");
         }
-        if (distanceMeters <= distances[0]) {
-            return new ShotParameters(pitchDegrees[0], rpms[0],
-                    rpmToVelocity(rpms[0]), distances[0], ShotParameters.Source.LOOKUP_TABLE);
-        }
-        if (distanceMeters >= distances[size - 1]) {
-            return new ShotParameters(pitchDegrees[size - 1], rpms[size - 1],
-                    rpmToVelocity(rpms[size - 1]), distances[size - 1], ShotParameters.Source.LOOKUP_TABLE);
-        }
-        for (int i = 0; i < size - 1; i++) {
-            if (distanceMeters >= distances[i] && distanceMeters <= distances[i + 1]) {
-                double t = (distanceMeters - distances[i]) / (distances[i + 1] - distances[i]);
-                double pitch = lerp(pitchDegrees[i], pitchDegrees[i + 1], t);
-                double rpm = lerp(rpms[i], rpms[i + 1], t);
-                return new ShotParameters(pitch, rpm, rpmToVelocity(rpm),
-                        distanceMeters, ShotParameters.Source.LOOKUP_TABLE);
-            }
-        }
-        return new ShotParameters(pitchDegrees[size - 1], rpms[size - 1],
-                rpmToVelocity(rpms[size - 1]), distanceMeters, ShotParameters.Source.LOOKUP_TABLE);
+        double clamped = Math.max(minDistance, Math.min(maxDistance, distanceMeters));
+        double pitch = pitchMap.get(clamped);
+        double rpm = rpmMap.get(clamped);
+        return new ShotParameters(pitch, rpm, rpmToVelocity(rpm),
+                distanceMeters, ShotParameters.Source.LOOKUP_TABLE);
     }
 
-    /** Returns true if the table has at least one entry. */
+    /**
+     * Returns the interpolated time-of-flight estimate for the given distance.
+     *
+     * @param distanceMeters horizontal distance to target
+     * @return estimated TOF in seconds, or 0 if no TOF data exists
+     */
+    public double getTimeOfFlight(double distanceMeters) {
+        if (size == 0 || !hasTofData) {
+            return 0;
+        }
+        double clamped = Math.max(minDistance, Math.min(maxDistance, distanceMeters));
+        return tofMap.get(clamped);
+    }
+
+    /** Returns {@code true} if at least one entry has been added. */
     public boolean hasEntries() {
         return size > 0;
     }
@@ -108,44 +127,45 @@ public final class ShotLookupTable {
         return size;
     }
 
-    /** Returns the minimum distance covered by the table, or 0 if empty. */
+    /** Returns the minimum distance entry in the table, or 0 if empty. */
     public double getMinDistance() {
-        return size > 0 ? distances[0] : 0;
+        return size > 0 ? minDistance : 0;
     }
 
-    /** Returns the maximum distance covered by the table, or 0 if empty. */
+    /** Returns the maximum distance entry in the table, or 0 if empty. */
     public double getMaxDistance() {
-        return size > 0 ? distances[size - 1] : 0;
+        return size > 0 ? maxDistance : 0;
     }
 
     /**
-     * Returns true if the given distance is within the table's range
-     * (between the first and last entry, inclusive).
+     * Returns {@code true} if the given distance falls within the table's
+     * min/max range and there are at least 2 entries for interpolation.
      */
     public boolean isInRange(double distanceMeters) {
-        return size >= 2 && distanceMeters >= distances[0] && distanceMeters <= distances[size - 1];
+        return size >= 2 && distanceMeters >= minDistance && distanceMeters <= maxDistance;
     }
 
-    private static double lerp(double a, double b, double t) {
-        return a + (b - a) * t;
+    /** Returns the underlying pitch interpolation map. */
+    public InterpolatingDoubleTreeMap getPitchMap() {
+        return pitchMap;
     }
 
-    /**
-     * Rough RPM → exit velocity conversion.
-     * Override with a proper model via {@link ShooterConfig#rpmToVelocityFactor}.
-     */
-    private static double rpmToVelocity(double rpm) {
-        return rpm * 0.00532;
+    /** Returns the underlying RPM interpolation map. */
+    public InterpolatingDoubleTreeMap getRpmMap() {
+        return rpmMap;
+    }
+
+    /** Returns the underlying time-of-flight interpolation map. */
+    public InterpolatingDoubleTreeMap getTofMap() {
+        return tofMap;
+    }
+
+    private double rpmToVelocity(double rpm) {
+        return rpm * rpmToVelocityFactor;
     }
 
     @Override
     public String toString() {
-        StringBuilder sb = new StringBuilder("ShotLookupTable[");
-        for (int i = 0; i < size; i++) {
-            if (i > 0) sb.append(", ");
-            sb.append(String.format("%.1fm→%.1f°@%.0fRPM", distances[i], pitchDegrees[i], rpms[i]));
-        }
-        sb.append(']');
-        return sb.toString();
+        return String.format("ShotLookupTable[%d entries, %.1f-%.1fm]", size, minDistance, maxDistance);
     }
 }

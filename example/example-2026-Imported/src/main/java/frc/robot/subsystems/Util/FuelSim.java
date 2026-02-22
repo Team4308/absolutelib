@@ -15,7 +15,7 @@ import org.littletonrobotics.junction.Logger;
 
 public class FuelSim {
     private static final double PERIOD = 0.02; // sec
-    private static int subticks = 5;
+    private static int subticks = 2;
     private static final Translation3d GRAVITY = new Translation3d(0, 0, -9.81); // m/s^2
     private static final double FIELD_COR = Math.sqrt(22 / 51.5); // coefficient of restitution with the field
     private static final double FUEL_COR = 0.5; // coefficient of restitution with another fuel
@@ -26,12 +26,10 @@ public class FuelSim {
     private static final double FIELD_WIDTH = 8.04;
     private static final double FRICTION = 0.1; // proportion of horizontal velocity to lose per second while on ground
 
-    // Air resistance parameters (must match TrajectorySolver physics)
     private static final double AIR_DENSITY = 1.204; // kg/m^3 at 20C
     private static final double DRAG_COEFFICIENT = 0.50; // foam ball Cd
     private static final double FUEL_MASS = 0.215; // kg (avg of 0.448-0.5 lbs)
     private static final double CROSS_SECTION_AREA = Math.PI * FUEL_RADIUS * FUEL_RADIUS; // m^2
-    // Pre-computed drag factor: 0.5 * rho * Cd * A / m
     private static final double DRAG_FACTOR = 0.5 * AIR_DENSITY * DRAG_COEFFICIENT * CROSS_SECTION_AREA / FUEL_MASS;
 
     private static FuelSim instance = null;
@@ -217,6 +215,7 @@ public class FuelSim {
     private Translation3d[] trackedPredictedPath = null;
     private int trackedTickCount = 0;
     private boolean trackedLanded = false; // true once the tracked ball hits the ground
+    private boolean trackedPublished = false; // true once we log the trajectory results
     private static final int TRACK_SAMPLE_INTERVAL = 5; // record every 5 subticks (= every 0.02s)
     private Supplier<Pose2d> robotSupplier = null;
     private Supplier<ChassisSpeeds> robotSpeedsSupplier = null;
@@ -288,6 +287,9 @@ public class FuelSim {
     private void logTrajectoryComparison() {
         if (trackedFuel == null) return;
 
+        // Only publish once after landing to reduce logging overhead
+        if (!trackedLanded || trackedPublished) return;
+
         // Log actual sim path so far
         Translation3d[] actualArr = trackedActualPath.toArray(new Translation3d[0]);
         Logger.recordOutput("Fuel Simulation/Comparison/ActualPath", actualArr);
@@ -343,7 +345,8 @@ public class FuelSim {
             Logger.recordOutput("Fuel Simulation/Comparison/MaxErrorMeters", maxError);
         }
 
-        Logger.recordOutput("Fuel Simulation/Comparison/TrackingActive", !trackedLanded);
+        Logger.recordOutput("Fuel Simulation/Comparison/TrackingActive", false);
+        trackedPublished = true;
     }
 
     /**
@@ -462,6 +465,7 @@ public class FuelSim {
         trackedActualPath.add(pos); // record initial position
         trackedTickCount = 0;
         trackedLanded = false;
+        trackedPublished = false;
 
         // Convert predicted Pose3d path to Translation3d array
         if (predictedPath != null && !predictedPath.isEmpty()) {

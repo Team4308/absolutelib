@@ -86,23 +86,44 @@ public final class ShooterSystem {
         this.mode = ShotMode.LOOKUP_ONLY;
     }
 
+    /** Sets the active shot calculation mode. */
     public void setMode(ShotMode mode) {
         this.mode = mode;
     }
 
+    /** Returns the active shot calculation mode. */
     public ShotMode getMode() {
         return mode;
     }
 
+    /**
+     * Sets the interpolation weight for {@link ShotMode#BLENDED} mode.
+     * 0.0 = full lookup, 1.0 = full solver.
+     *
+     * @param factor blend weight in [0, 1]
+     */
     public void setBlendFactor(double factor) {
         this.blendFactor = Math.max(0, Math.min(1, factor));
     }
 
+    /**
+     * Sets the manual pitch and RPM for {@link ShotMode#MANUAL} mode.
+     *
+     * @param pitchDegrees desired pitch angle
+     * @param rpm          desired flywheel RPM
+     */
     public void setManualOverride(double pitchDegrees, double rpm) {
         this.manualPitchDegrees = pitchDegrees;
         this.manualRpm = rpm;
     }
 
+    /**
+     * Sets the fallback shot used when the primary calculation fails or is
+     * rejected by the safety validator.
+     *
+     * @param pitchDegrees fallback pitch angle
+     * @param rpm          fallback flywheel RPM
+     */
     public void setFallbackShot(double pitchDegrees, double rpm) {
         this.fallbackShot = new ShotParameters(pitchDegrees, rpm,
                 config.rpmToVelocity(rpm), 0, ShotParameters.Source.FALLBACK);
@@ -285,7 +306,7 @@ public final class ShooterSystem {
             double rpm = lerp(lookupResult.rpm, solverResult.rpm, blendFactor);
             double vel = lerp(lookupResult.exitVelocityMps, solverResult.exitVelocityMps, blendFactor);
             return new ShotParameters(pitch, rpm, vel, distanceMeters,
-                    ShotParameters.Source.LOOKUP_TABLE);
+                    ShotParameters.Source.BLENDED);
         } else if (lookupResult != null && lookupResult.valid) {
             return lookupResult;
         } else if (solverResult.valid) {
@@ -294,22 +315,27 @@ public final class ShooterSystem {
         return ShotParameters.invalid("Both lookup and solver failed");
     }
 
+    /** Returns the last computed shot parameters. */
     public ShotParameters getLastResult() {
         return lastResult;
     }
 
+    /** Returns a human-readable description of which source produced the last shot. */
     public String getLastSourceDescription() {
         return lastSourceDescription;
     }
 
+    /** Returns the last safety validation result, or null if not yet computed. */
     public SafetyValidator.ValidationResult getLastValidation() {
         return lastValidation;
     }
 
+    /** Returns the shooter configuration. */
     public ShooterConfig getConfig() {
         return config;
     }
 
+    /** Returns the lookup table. */
     public ShotLookupTable getLookupTable() {
         return lookupTable;
     }

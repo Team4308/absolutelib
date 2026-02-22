@@ -1,5 +1,25 @@
 # Changelog for AbsoluteLib v2
 
+## 2.1.0 
+
+### Major Bug Patchs
+- **MovementCompensator NaN guard**: Added `Double.isFinite()` check on exit velocity — prevents NaN from corrupting all downstream yaw/pitch/TOF calculations during moving shots.
+- **MovementCompensator solver yaw accumulation**: Fixed yaw lead to accumulate on top of the solver's existing yaw adjustment instead of overwriting it. Moving shots now correctly incorporate spin drift and other solver yaw corrections.
+- **ShotLookupTable TOF null-pointer fix**: `getTimeOfFlight()` now checks `tofMap.isEmpty()` before accessing entries, preventing NPE when no TOF data has been added.
+- **ShotLookupTable distance clamping**: `lookup()` and `getTimeOfFlight()` now clamp the input distance to `[minDistance, maxDistance]` instead of extrapolating beyond table bounds.
+- **ShooterSystem blended source tag**: `blendResults()` now tags output as `Source.BLENDED` instead of `Source.LOOKUP_TABLE`, preventing double-compensation in MovementCompensator.
+
+### New Features
+- **`ShotParameters.Source.BLENDED`**: New enum value for shots produced by blending lookup table and solver results.
+- **Configurable RPM-to-velocity factor**: `ShotLookupTable` now accepts a custom `rpmToVelocityFactor` in its constructor (default 0.00532) so teams with different wheel diameters get correct exit velocity conversions.
+- **Flywheel integration in ExampleShooter**: `ExampleShooter` now demonstrates `FlywheelConfig` setup (DUAL_OVER_UNDER, 4" GREEN_COMPLIANT, KRAKEN_X60, 1:1 ratio) and logs 13 flywheel simulation result fields.
+
+### Code Quality
+- Removed dead code: `ScoringWeights`, `ChineseRemainderSolver`, `ShotCandidate`, `ShotCandidateList`.
+- Refactored `ShotLookupTable` internals to use `InterpolatingDoubleTreeMap` for proper interpolation.
+- Added comprehensive Javadoc across all public APIs: `TrajectorySolver`, `ShooterSystem`, `ShotParameters`, `MovementCompensator`, `ShotInput`, `SolveDebugInfo`, `ShotLookupTable`.
+
+
 ## 2.0.0 - Season Ready!
   - Patched any bugs found in simulations and is now ready be used for the season!
   - Removed any warnings 

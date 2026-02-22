@@ -61,6 +61,12 @@ Before building, install all required libraries:
 - `Vision`: PhotonVision wrapper + multi-camera support for pose estimation
 - `leds/*`: Addressable LED patterns and simulation helpers
 
+### Math Utilities
+
+- `ChineseRemainderSolver`: Generic CRT solver + turret anti-windup (shortest-path rotation within cable limits)
+- `DoubleUtils`: Clamping, normalization, range mapping
+- `Vector2` / `Vector3`: Lightweight vector math
+
 ### Trajectory System (2026 REBUILT)
 
 - `TrajectorySolver`: Complete trajectory solving for turret shooters with obstacle avoidance

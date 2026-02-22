@@ -19,10 +19,17 @@ package ca.team4308.absolutelib.math.trajectories.shooter;
  * ShotParameters adjusted = comp.compensate(baseShotParams, vxMps, vyMps, yawToTargetRad);
  * }</pre>
  */
+
 public final class MovementCompensator {
 
     private final ShooterConfig config;
 
+    /**
+     * Creates a compensator using the specified shooter configuration.
+     *
+     * @param config shooter configuration providing compensation gain,
+     *               iteration count, and pitch/RPM limits
+     */
     public MovementCompensator(ShooterConfig config) {
         this.config = config;
     }
@@ -44,6 +51,7 @@ public final class MovementCompensator {
      * @param yawToTargetRad    yaw angle from robot to target (radians)
      * @return movement-compensated shot parameters
      */
+
     public ShotParameters compensate(ShotParameters base, double robotVxMps, double robotVyMps,
                                      double yawToTargetRad) {
         if (!base.valid) {
@@ -56,26 +64,25 @@ public final class MovementCompensator {
         }
 
         double exitVelocity = base.exitVelocityMps;
+        if (!Double.isFinite(exitVelocity) || exitVelocity <= 0) {
+            return base;
+        }
         double horizontalSpeed = exitVelocity * Math.cos(Math.toRadians(base.pitchDegrees));
-        if (horizontalSpeed < 0.1) horizontalSpeed = 0.1;
+        if (!Double.isFinite(horizontalSpeed) || horizontalSpeed < 0.1) horizontalSpeed = 0.1;
 
         double tof = base.distanceMeters / horizontalSpeed;
 
-        // --- Yaw lead (always computed) ---
-        // Lateral velocity = component of robot velocity perpendicular to target direction
         double lateralVelocity = -robotVxMps * Math.sin(yawToTargetRad)
                                 + robotVyMps * Math.cos(yawToTargetRad);
-        // Ball drifts laterally by lateralV * tof; aim opposite to cancel
+
         double yawLead = Math.atan2(-lateralVelocity * tof, base.distanceMeters);
 
-        // If the solver already handled movement (adjusting effective target X/Y),
-        // skip the radial RPM/pitch re-compensation to avoid double-adjusting.
         if (base.source == ShotParameters.Source.SOLVER) {
+            double combinedYaw = base.yawAdjustmentRadians + yawLead;
             return new ShotParameters(base.pitchDegrees, base.rpm, base.exitVelocityMps,
-                    base.distanceMeters, yawLead, ShotParameters.Source.MOVING_COMPENSATED);
+                    base.distanceMeters, combinedYaw, ShotParameters.Source.MOVING_COMPENSATED);
         }
 
-        // --- Radial compensation (lookup / fallback / manual sources) ---
         double gain = config.getMovingCompensationGain();
         int iterations = config.getMovingIterations();
 
@@ -96,7 +103,6 @@ public final class MovementCompensator {
             tof = newTof;
         }
 
-        // Recompute yaw lead with converged TOF
         yawLead = Math.atan2(-lateralVelocity * tof, effectiveDistance);
 
         double rpmAdjustment = -radialVelocity * (base.rpm / exitVelocity) * gain;
@@ -125,23 +131,14 @@ public final class MovementCompensator {
      * @param distanceMeters distance to target (meters)
      * @return yaw lead offset in radians (add to current yaw)
      */
+
     public double calculateYawLead(double robotVxMps, double robotVyMps,
                                    double yawToTargetRad, double tofSeconds,
                                    double distanceMeters) {
         double lateralVelocity = -robotVxMps * Math.sin(yawToTargetRad)
                                 + robotVyMps * Math.cos(yawToTargetRad);
-        // Negate to aim opposite to the inherited lateral drift
-        return Math.atan2(-lateralVelocity * tofSeconds, distanceMeters);
-    }
 
-    /**
-     * @deprecated Use {@link #calculateYawLead(double, double, double, double, double)} instead.
-     */
-    @Deprecated
-    public double calculateYawLead(double robotVxMps, double robotVyMps,
-                                   double yawToTargetRad, double tofSeconds) {
-        // Legacy fallback — assumes 5m distance when not provided
-        return calculateYawLead(robotVxMps, robotVyMps, yawToTargetRad, tofSeconds, 5.0);
+        return Math.atan2(-lateralVelocity * tofSeconds, distanceMeters);
     }
 
     private static double clamp(double value, double min, double max) {
