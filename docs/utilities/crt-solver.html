@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CRT Solver | AbsoluteLib V2</title>
+    <link rel="stylesheet" href="../../styles.css">
+    <link rel="stylesheet"
+        href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script>hljs.highlightAll();</script>
+</head>
+
+<body>
+    <div class="layout">
+        <div class="sidebar" id="sidebar">
+            <div class="brand">
+                <h1>AbsoluteLib V2</h1>
+                <span class="version">v2.1.0</span>
+            </div>
+            <div class="nav-links">
+                <div class="nav-group">
+                    <div class="nav-group-title">Getting Started</div>
+                    <a href="../../index.html" class="nav-item">Introduction</a>
+                    <a href="../installation.html" class="nav-item">Installation</a>
+                </div>
+                <div class="nav-group">
+                    <div class="nav-group-title">Core</div>
+                    <a href="../wrappers.html" class="nav-item">Hardware Wrappers</a>
+                    <a href="../subsystems.html" class="nav-item">Subsystems</a>
+                    <a href="../vision.html" class="nav-item">Vision</a>
+                </div>
+                <div class="nav-group">
+                    <div class="nav-group-title">Utilities</div>
+                    <a href="leds.html" class="nav-item">LEDs</a>
+                    <a href="math.html" class="nav-item">Math</a>
+                    <a href="input.html" class="nav-item">Input</a>
+                    <a href="encoders.html" class="nav-item">Encoders</a>
+                    <a href="tuning.html" class="nav-item">Tuning</a>
+                    <a href="pathing.html" class="nav-item">Pathing</a>
+                    <a href="music.html" class="nav-item">Music</a>
+                    <a href="commands.html" class="nav-item">Commands</a>
+                    <a href="crt-solver.html" class="nav-item active">CRT Solver</a>
+                </div>
+                <div class="nav-group">
+                    <div class="nav-group-title">2026 REBUILT</div>
+                    <a href="../trajectory.html" class="nav-item">Trajectory Solver</a>
+                    <a href="../shooter.html" class="nav-item">Shooter System</a>
+                    <a href="../obstacles.html" class="nav-item">Obstacle Avoidance</a>
+                </div>
+                <div class="nav-group">
+                    <div class="nav-group-title">Tools</div>
+                    <a href="../../trajectory-debug.html" class="nav-item">Trajectory Debug</a>
+                    <a href="../../changelog-viewer.html" class="nav-item">Changelog</a>
+                </div>
+            </div>
+            <div class="sidebar-footer">
+                <a href="../javadoc/index.html" class="javadoc-link" target="_blank">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                        <polyline points="14 2 14 8 20 8"></polyline>
+                    </svg>
+                    API Javadoc
+                </a>
+            </div>
+        </div>
+        <div class="overlay" id="overlay" onclick="toggleSidebar()"></div>
+        <main class="main-content">
+            <div class="content-container">
+                <section id="crt-solver">
+                    <h2>CRT Solver &amp; Turret Anti-Windup</h2>
+                    <p>The <code>ChineseRemainderSolver</code> is a general-purpose math utility in the
+                        <code>ca.team4308.absolutelib.math</code> package. It provides two main capabilities:</p>
+                    <ul>
+                        <li><strong>Chinese Remainder Theorem (CRT):</strong> Solve systems of modular congruences to
+                            find values satisfying multiple discrete constraints simultaneously.</li>
+                        <li><strong>Turret Anti-Windup:</strong> Find the shortest rotation to a target heading
+                            that stays within cable/slip-ring limits &mdash; no over-rotation.</li>
+                    </ul>
+
+                    <h3>Turret Anti-Windup (Primary Use Case)</h3>
+                    <p>When a turret can rotate continuously but has cable limits (e.g., &plusmn;1.5 revolutions),
+                        you need to find the closest equivalent heading that doesn't exceed those limits.
+                        The solver handles this automatically.</p>
+                    <pre><code class="language-java">import ca.team4308.absolutelib.math.ChineseRemainderSolver;
+
+// Configuration
+int TICKS_PER_REV = 4096;       // encoder resolution
+double MIN_TICKS = -6144;       // -1.5 revolutions (CCW cable limit)
+double MAX_TICKS = 6144;        // +1.5 revolutions (CW cable limit)
+
+// In your turret periodic():
+double currentTicks = turretEncoder.getPosition();
+double targetDegrees = limelightYaw; // e.g., 270°
+
+// One call does it all — finds shortest path within limits
+double safeDest = ChineseRemainderSolver.safeTurretDestination(
+    currentTicks, targetDegrees, TICKS_PER_REV, MIN_TICKS, MAX_TICKS);
+
+turretMotor.setPosition(safeDest);</code></pre>
+
+                    <h3>Step-by-Step Breakdown</h3>
+                    <p>If you need more control, use the individual methods:</p>
+                    <pre><code class="language-java">// 1. Convert target heading to ticks
+double targetTick = ChineseRemainderSolver.degreesToTicks(270.0, 4096);
+// → 3072.0
+
+// 2. Find shortest rotation (wraps around one revolution)
+double shortestMove = ChineseRemainderSolver.shortestWrappedMove(
+    currentTicks, targetTick, 4096);
+// → could be +500 or -3596 — picks the shorter one
+
+// 3. Check if the ideal destination is within cable limits
+double destination = currentTicks + shortestMove;
+
+// 4. If it exceeds limits, clamp safely
+double safeDest = ChineseRemainderSolver.clampToWindupLimits(
+    currentTicks, targetTick, 4096, -6144, 6144);
+// → picks the closest valid equivalent position</code></pre>
+
+                    <h3>Discrete Value Snapping</h3>
+                    <p>Snap continuous RPM or angle values to hardware-achievable steps:</p>
+                    <pre><code class="language-java">// Snap to nearest 100 RPM
+double snappedRpm = ChineseRemainderSolver.snapToResolution(3487, 100);
+// → 3500.0
+
+// Snap to nearest 0.1°
+double snappedAngle = ChineseRemainderSolver.snapToResolution(45.47, 0.1);
+// → 45.5</code></pre>
+
+                    <h3>Core CRT — Modular Constraints</h3>
+                    <p>For advanced use: solve systems of modular congruences. For example, find a position
+                        that satisfies both encoder tick alignment AND gear mesh alignment:</p>
+                    <pre><code class="language-java">import ca.team4308.absolutelib.math.ChineseRemainderSolver.*;
+
+// x ≡ 2 (mod 3) AND x ≡ 3 (mod 5) AND x ≡ 2 (mod 7)
+List&lt;Constraint&gt; constraints = List.of(
+    new Constraint("encoder", 2, 3),
+    new Constraint("gear-A", 3, 5),
+    new Constraint("gear-B", 2, 7)
+);
+
+Solution sol = ChineseRemainderSolver.solve(constraints);
+// sol.getValue() = 23, sol.getPeriod() = 105
+
+// Find closest valid position to where we are now
+long nearest = sol.nearest(currentPosition);
+
+// Enumerate all valid positions in a range
+List&lt;Long&gt; options = sol.solutionsInRange(0, 500);</code></pre>
+
+                    <h3>Number Theory Utilities</h3>
+                    <pre><code class="language-java">long g = ChineseRemainderSolver.gcd(12, 18);  // 6
+long l = ChineseRemainderSolver.lcm(12, 18);  // 36
+long[] ext = ChineseRemainderSolver.extendedGcd(12, 18);
+// ext = [6, -1, 1] → 12*(-1) + 18*(1) = 6</code></pre>
+
+                    <h3>Legacy API</h3>
+                    <p>The old class names <code>ModularConstraint</code> and <code>CRTSolution</code> still work
+                        as subclass aliases of <code>Constraint</code> and <code>Solution</code>:</p>
+                    <pre><code class="language-java">// Both work:
+new ChineseRemainderSolver.Constraint("enc", 100, 4096);
+new ChineseRemainderSolver.ModularConstraint("enc", 100, 4096);</code></pre>
+                </section>
+            </div>
+        </main>
+    </div>
+    <button class="mobile-toggle" onclick="toggleSidebar()">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="3" y1="12" x2="21" y2="12"></line>
+            <line x1="3" y1="6" x2="21" y2="6"></line>
+            <line x1="3" y1="18" x2="21" y2="18"></line>
+        </svg>
+    </button>
+    <script>
+        function toggleSidebar() {
+            document.getElementById('sidebar').classList.toggle('open');
+            document.getElementById('overlay').classList.toggle('open');
+        }
+    </script>
+</body>
+
+</html>

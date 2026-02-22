@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AbsoluteLib V2 | FRC Team 4308</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet"
+        href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script>hljs.highlightAll();</script>
+</head>
+
+<body>
+
+    <div class="layout">
+        <div class="sidebar" id="sidebar">
+            <div class="brand">
+                <h1>AbsoluteLib V2</h1>
+                <span class="version">v2.1.0</span>
+            </div>
+
+            <div class="nav-links">
+                <div class="nav-group">
+                    <div class="nav-group-title">Getting Started</div>
+                    <a href="index.html" class="nav-item active">Introduction</a>
+                    <a href="docs/installation.html" class="nav-item">Installation</a>
+                </div>
+
+                <div class="nav-group">
+                    <div class="nav-group-title">Core</div>
+                    <a href="docs/wrappers.html" class="nav-item">Hardware Wrappers</a>
+                    <a href="docs/subsystems.html" class="nav-item">Subsystems</a>
+                    <a href="docs/vision.html" class="nav-item">Vision</a>
+                </div>
+
+                <div class="nav-group">
+                    <div class="nav-group-title">Utilities</div>
+                    <a href="docs/utilities/leds.html" class="nav-item">LEDs</a>
+                    <a href="docs/utilities/math.html" class="nav-item">Math</a>
+                    <a href="docs/utilities/input.html" class="nav-item">Input</a>
+                    <a href="docs/utilities/encoders.html" class="nav-item">Encoders</a>
+                    <a href="docs/utilities/tuning.html" class="nav-item">Tuning</a>
+                    <a href="docs/utilities/pathing.html" class="nav-item">Pathing</a>
+                    <a href="docs/utilities/music.html" class="nav-item">Music</a>
+                    <a href="docs/utilities/commands.html" class="nav-item">Commands</a>
+                    <a href="docs/utilities/crt-solver.html" class="nav-item">CRT Solver</a>
+                </div>
+
+                <div class="nav-group">
+                    <div class="nav-group-title">2026 REBUILT</div>
+                    <a href="docs/trajectory.html" class="nav-item">Trajectory Solver</a>
+                    <a href="docs/shooter.html" class="nav-item">Shooter System</a>
+                    <a href="docs/obstacles.html" class="nav-item">Obstacle Avoidance</a>
+                </div>
+
+                <div class="nav-group">
+                    <div class="nav-group-title">Tools</div>
+                    <a href="trajectory-debug.html" class="nav-item">Trajectory Debug</a>
+                    <a href="changelog-viewer.html" class="nav-item">Changelog</a>
+                </div>
+            </div>
+
+            <div class="sidebar-footer">
+                <a href="docs/javadoc/index.html" class="javadoc-link" target="_blank">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                        <polyline points="14 2 14 8 20 8"></polyline>
+                    </svg>
+                    API Javadoc
+                </a>
+            </div>
+        </div>
+
+        <!-- Mobile Overlay -->
+        <div class="overlay" id="overlay" onclick="toggleSidebar()"></div>
+
+        <main class="main-content">
+            <div class="content-container">
+
+                <!-- Hero Section -->
+                <section id="home" class="hero">
+                    <h1 class="hero-title">AbsoluteLib</h1>
+                    <p class="hero-subtitle">The ultimate FRC utility library for Team 4308. Rebuilt for 2026 with
+                        physics-based simulation, obstacle avoidance, and unified hardware control.</p>
+
+                    <div class="hero-actions">
+                        <a href="docs/installation.html" class="btn btn-primary">Get Started</a>
+                        <a href="https://github.com/Team4308/absolutelib" class="btn btn-secondary" target="_blank">View
+                            on GitHub</a>
+                    </div>
+
+                    <div class="feature-grid">
+                        <div class="feature-card">
+                            <div class="feature-title">2026 REBUILT</div>
+                            <p class="feature-desc">New trajectory solver with obstacle avoidance, flywheel simulation, and shoot-on-the-move.</p>
+                        </div>
+                        <div class="feature-card">
+                            <div class="feature-title">Match Ready</div>
+                            <p class="feature-desc">Hardened with NaN guards, distance clamping, and solver yaw accumulation for reliable in-match performance.</p>
+                        </div>
+                        <div class="feature-card">
+                            <div class="feature-title">Unified API</div>
+                            <p class="feature-desc">Write once, run on any motor. Builder-pattern APIs for all configuration.</p>
+                        </div>
+                    </div>
+                </section>
+
+            </div>
+        </main>
+    </div>
+
+    <button class="mobile-toggle" onclick="toggleSidebar()">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="3" y1="12" x2="21" y2="12"></line>
+            <line x1="3" y1="6" x2="21" y2="6"></line>
+            <line x1="3" y1="18" x2="21" y2="18"></line>
+        </svg>
+    </button>
+
+    <script>
+        function toggleSidebar() {
+            document.getElementById('sidebar').classList.toggle('open');
+            document.getElementById('overlay').classList.toggle('open');
+        }
+    </script>
+
+</body>
+
+</html>

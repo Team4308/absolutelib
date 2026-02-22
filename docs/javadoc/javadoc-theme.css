@@ -1,0 +1,9 @@
+/* Example Javadoc theme */
+body {
+  font-family: Arial, sans-serif;
+}
+
+hr,
+.block {
+  border-color: #eee;
+}

@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Shooter System | AbsoluteLib V2</title>
+    <link rel="stylesheet" href="../styles.css">
+    <link rel="stylesheet"
+        href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script>hljs.highlightAll();</script>
+</head>
+
+<body>
+    <div class="layout">
+        <div class="sidebar" id="sidebar">
+            <div class="brand">
+                <h1>AbsoluteLib V2</h1>
+                <span class="version">v2.1.0</span>
+            </div>
+            <div class="nav-links">
+                <div class="nav-group">
+                    <div class="nav-group-title">Getting Started</div>
+                    <a href="../index.html" class="nav-item">Introduction</a>
+                    <a href="installation.html" class="nav-item">Installation</a>
+                </div>
+                <div class="nav-group">
+                    <div class="nav-group-title">Core</div>
+                    <a href="wrappers.html" class="nav-item">Hardware Wrappers</a>
+                    <a href="subsystems.html" class="nav-item">Subsystems</a>
+                    <a href="vision.html" class="nav-item">Vision</a>
+                </div>
+                <div class="nav-group">
+                    <div class="nav-group-title">Utilities</div>
+                    <a href="utilities/leds.html" class="nav-item">LEDs</a>
+                    <a href="utilities/math.html" class="nav-item">Math</a>
+                    <a href="utilities/input.html" class="nav-item">Input</a>
+                    <a href="utilities/encoders.html" class="nav-item">Encoders</a>
+                    <a href="utilities/tuning.html" class="nav-item">Tuning</a>
+                    <a href="utilities/pathing.html" class="nav-item">Pathing</a>
+                    <a href="utilities/music.html" class="nav-item">Music</a>
+                    <a href="utilities/commands.html" class="nav-item">Commands</a>
+                    <a href="utilities/crt-solver.html" class="nav-item">CRT Solver</a>
+                </div>
+                <div class="nav-group">
+                    <div class="nav-group-title">2026 REBUILT</div>
+                    <a href="trajectory.html" class="nav-item">Trajectory Solver</a>
+                    <a href="shooter.html" class="nav-item active">Shooter System</a>
+                    <a href="obstacles.html" class="nav-item">Obstacle Avoidance</a>
+                </div>
+                <div class="nav-group">
+                    <div class="nav-group-title">Tools</div>
+                    <a href="../trajectory-debug.html" class="nav-item">Trajectory Debug</a>
+                    <a href="../changelog-viewer.html" class="nav-item">Changelog</a>
+                </div>
+            </div>
+            <div class="sidebar-footer">
+                <a href="javadoc/index.html" class="javadoc-link" target="_blank">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                        <polyline points="14 2 14 8 20 8"></polyline>
+                    </svg>
+                    API Javadoc
+                </a>
+            </div>
+        </div>
+        <div class="overlay" id="overlay" onclick="toggleSidebar()"></div>
+        <main class="main-content">
+            <div class="content-container">
+                <section id="shooter">
+                    <h2>Shooter System</h2>
+                    <p>The <code>ShooterSystem</code> is the high-level manager that integrates the <code>TrajectorySolver</code>,
+                        <code>ShotLookupTable</code>, and hardware control.
+                        It handles state machines, safety validation, movement compensation, and fallback references.</p>
+
+                    <h3>Shot Modes</h3>
+                    <ul>
+                        <li><strong>LOOKUP_ONLY:</strong> Uses a static lookup table (fastest, most reliable for static
+                            shots).</li>
+                        <li><strong>SOLVER_ONLY:</strong> Uses the physics solver for every frame (most flexible, higher
+                            CPU usage).</li>
+                        <li><strong>LOOKUP_WITH_SOLVER_FALLBACK:</strong> Tries lookup table first; if out of range,
+                            uses solver.</li>
+                        <li><strong>SOLVER_WITH_LOOKUP_FALLBACK:</strong> Tries solver first; if it fails (e.g., no
+                            solution), uses lookup table.</li>
+                        <li><strong>BLENDED:</strong> Interpolates between solver and lookup table for smooth
+                            transitions. Uses <code>Source.BLENDED</code> to prevent double movement compensation.</li>
+                    </ul>
+
+                    <h3>Lookup Table Setup</h3>
+                    <p>The <code>ShotLookupTable</code> uses <code>InterpolatingDoubleTreeMap</code> for smooth
+                        interpolation between data points. Distances are automatically clamped to the table bounds.</p>
+                    <pre><code class="language-java">// Build lookup table from practice data
+ShotLookupTable lookup = new ShotLookupTable();
+lookup.addEntry(2.0, 55.0, 3000);           // 2m: 55°, 3000 RPM
+lookup.addEntry(3.0, 45.0, 3500);           // 3m: 45°, 3500 RPM
+lookup.addEntry(4.0, 38.0, 4200, 0.45);     // 4m: 38°, 4200 RPM, 0.45s TOF
+lookup.addEntry(5.5, 30.0, 5000, 0.62);     // 5.5m: 30°, 5000 RPM, 0.62s TOF
+
+// For custom wheel diameters, pass an RPM-to-velocity factor
+ShotLookupTable customLookup = new ShotLookupTable(0.006); // different wheel size</code></pre>
+
+                    <h3>Example Implementation</h3>
+                    <pre><code class="language-java">// Initialize Dependencies
+ShooterConfig config = new ShooterConfig();
+ShotLookupTable lookup = new ShotLookupTable();
+// ... add entries ...
+TrajectorySolver solver = TrajectorySolver.builder()
+    .gamePiece(GamePieces.REBUILT_2026_BALL)
+    .config(SolverConfig.defaults())
+    .build();
+
+// Create System
+ShooterSystem system = new ShooterSystem(config, lookup, solver);
+system.setMode(ShotMode.SOLVER_WITH_LOOKUP_FALLBACK);
+
+// Periodic Loop
+public void periodic() {
+    ShotParameters shot = system.calculate(
+        distanceToTarget,
+        currentFlywheelRpm,
+        robotVx, robotVy,
+        yawToTarget
+    );
+
+    if (shot.isValid()) {
+        pivot.setPosition(shot.pitchDegrees);
+        flywheel.setVelocity(shot.rpm);
+        
+        if (system.isReadyToFire(currentFlywheelRpm) &amp;&amp; pivot.isAtSetpoint()) {
+            feeder.run();
+        }
+    } else {
+        pivot.setPosition(config.stowAngle);
+    }
+}</code></pre>
+
+                    <h3>Movement Compensation</h3>
+                    <p>The <code>MovementCompensator</code> automatically adjusts shots for robot movement.
+                        In v2.1.0 this includes:</p>
+                    <ul>
+                        <li><strong>NaN guard:</strong> Non-finite exit velocities are safely handled by returning the base shot unchanged.</li>
+                        <li><strong>Yaw accumulation:</strong> Movement yaw lead is added to the solver's existing yaw correction (spin drift, etc.) instead of replacing it.</li>
+                        <li><strong>Blended source awareness:</strong> Blended shots use <code>Source.BLENDED</code> to avoid double-compensation.</li>
+                    </ul>
+
+                    <h3>Safety Features</h3>
+                    <p>The system includes a <code>SafetyValidator</code> that prevents:</p>
+                    <ul>
+                        <li>Shots from too far away (max distance).</li>
+                        <li>Shots with impossible RPM or angles.</li>
+                        <li>Firing when the robot is moving too fast (if configured).</li>
+                    </ul>
+
+                    <h3>Flywheel Integration</h3>
+                    <p>The library includes a <code>FlywheelGenerator</code> for simulating thousands of flywheel
+                        configurations and a <code>FlywheelSimulator</code> for spin-up analysis.</p>
+                    <pre><code class="language-java">// Configure flywheel hardware
+FlywheelConfig flywheel = new FlywheelConfig(
+    FlywheelConfig.FlywheelType.DUAL_OVER_UNDER,
+    GamePieces.REBUILT_2026_BALL,
+    4.0,  // wheel diameter inches
+    FRCMotors.KRAKEN_X60,
+    1.0   // gear ratio
+);
+solver.setFlywheel(flywheel);
+
+// Generate optimal configurations
+FlywheelGenerator generator = new FlywheelGenerator(
+    GamePieces.REBUILT_2026_BALL,
+    GenerationParams.detailed()
+);
+GenerationResult result = generator.generateAndEvaluate(25.0); // 25 m/s target</code></pre>
+                </section>
+            </div>
+        </main>
+    </div>
+    <button class="mobile-toggle" onclick="toggleSidebar()">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="3" y1="12" x2="21" y2="12"></line>
+            <line x1="3" y1="6" x2="21" y2="6"></line>
+            <line x1="3" y1="18" x2="21" y2="18"></line>
+        </svg>
+    </button>
+    <script>
+        function toggleSidebar() {
+            document.getElementById('sidebar').classList.toggle('open');
+            document.getElementById('overlay').classList.toggle('open');
+        }
+    </script>
+</body>
+
+</html>

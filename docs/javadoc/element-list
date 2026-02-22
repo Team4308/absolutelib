@@ -1,0 +1,17 @@
+ca.team4308.absolutelib.commands
+ca.team4308.absolutelib.control
+ca.team4308.absolutelib.leds
+ca.team4308.absolutelib.math
+ca.team4308.absolutelib.math.trajectories
+ca.team4308.absolutelib.math.trajectories.flywheel
+ca.team4308.absolutelib.math.trajectories.gamepiece
+ca.team4308.absolutelib.math.trajectories.motor
+ca.team4308.absolutelib.math.trajectories.physics
+ca.team4308.absolutelib.math.trajectories.shooter
+ca.team4308.absolutelib.other
+ca.team4308.absolutelib.path
+ca.team4308.absolutelib.pid
+ca.team4308.absolutelib.subsystems
+ca.team4308.absolutelib.subsystems.simulation
+ca.team4308.absolutelib.vision
+ca.team4308.absolutelib.wrapper

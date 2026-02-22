@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>On-The-Fly Pathing | AbsoluteLib V2</title>
+    <link rel="stylesheet" href="../../styles.css">
+    <link rel="stylesheet"
+        href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script>hljs.highlightAll();</script>
+</head>
+
+<body>
+    <div class="layout">
+        <div class="sidebar" id="sidebar">
+            <div class="brand">
+                <h1>AbsoluteLib V2</h1>
+                <span class="version">v2.0.0</span>
+            </div>
+            <div class="nav-links">
+                <div class="nav-group">
+                    <div class="nav-group-title">Getting Started</div>
+                    <a href="../../index.html" class="nav-item">Introduction</a>
+                    <a href="../installation.html" class="nav-item">Installation</a>
+                </div>
+                <div class="nav-group">
+                    <div class="nav-group-title">Core</div>
+                    <a href="../wrappers.html" class="nav-item">Hardware Wrappers</a>
+                    <a href="../subsystems.html" class="nav-item">Subsystems</a>
+                    <a href="../vision.html" class="nav-item">Vision</a>
+                </div>
+                <div class="nav-group">
+                    <div class="nav-group-title">Utilities</div>
+                    <a href="leds.html" class="nav-item">LEDs</a>
+                    <a href="math.html" class="nav-item">Math</a>
+                    <a href="input.html" class="nav-item">Input</a>
+                    <a href="encoders.html" class="nav-item">Encoders</a>
+                    <a href="tuning.html" class="nav-item">Tuning</a>
+                    <a href="pathing.html" class="nav-item active">Pathing</a>
+                    <a href="music.html" class="nav-item">Music</a>
+                    <a href="commands.html" class="nav-item">Commands</a>
+                </div>
+                <div class="nav-group">
+                    <div class="nav-group-title">2026 REBUILT</div>
+                    <a href="../trajectory.html" class="nav-item">Trajectory Solver</a>
+                    <a href="../shooter.html" class="nav-item">Shooter System</a>
+                    <a href="../obstacles.html" class="nav-item">Obstacle Avoidance</a>
+                </div>
+                <div class="nav-group">
+                    <div class="nav-group-title">Tools</div>
+                    <a href="../../trajectory-debug.html" class="nav-item">Trajectory Debug</a>
+                    <a href="../../changelog-viewer.html" class="nav-item">Changelog</a>
+                </div>
+            </div>
+            <div class="sidebar-footer">
+                <a href="../javadoc/index.html" class="javadoc-link" target="_blank">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                        <polyline points="14 2 14 8 20 8"></polyline>
+                    </svg>
+                    API Javadoc
+                </a>
+            </div>
+        </div>
+        <div class="overlay" id="overlay" onclick="toggleSidebar()"></div>
+        <main class="main-content">
+            <div class="content-container">
+                <section id="pathing">
+                    <h1>On-The-Fly Pathing</h1>
+                    <p class="subtitle">Dynamic path generation for PathPlanner.</p>
+
+                    <hr style="border-top: 1px solid var(--border); margin: 2rem 0;">
+
+                    <h2>Overview</h2>
+                    <p>Allows you to generate PathPlanner paths at runtime based on the robot's current pose and a
+                        dynamic target. Useful for auto-aligning to game pieces or avoiding dynamic obstacles.</p>
+
+                    <h3>Available Shapes</h3>
+                    <ul>
+                        <li><code>direct</code>: Straight line (spline) to target.</li>
+                        <li><code>arcViaOffsetMidpoint</code>: Curved path via a left/right offset point.</li>
+                        <li><code>sCurve</code>: Double-bend path for complex alignments.</li>
+                        <li><code>orbit</code>: Circular path around a point of interest.</li>
+                        <li><code>manhattan</code>: Moves only along X then Y (or Y then X).</li>
+                    </ul>
+
+                    <h3>Example</h3>
+                    <pre><code class="language-java">// 1. Define Constraints
+PathConstraints constraints = OnTheFlyPathing.constraints(3.0, 2.0);
+
+// 2. Generate Path
+PathPlannerPath path = OnTheFlyPathing.arcViaOffsetMidpoint(
+    currentPose, 
+    targetPose, 
+    0.5, // 0.5m offset (Curve Left)
+    constraints, 
+    targetPose.getRotation(), // End Heading
+    0.0, // End Velocity
+    false
+);
+
+// 3. Execute
+AutoBuilder.followPath(path).schedule();</code></pre>
+                </section>
+            </div>
+        </main>
+    </div>
+    <button class="mobile-toggle" onclick="toggleSidebar()">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="3" y1="12" x2="21" y2="12"></line>
+            <line x1="3" y1="6" x2="21" y2="6"></line>
+            <line x1="3" y1="18" x2="21" y2="18"></line>
+        </svg>
+    </button>
+    <script>
+        function toggleSidebar() {
+            document.getElementById('sidebar').classList.toggle('open');
+            document.getElementById('overlay').classList.toggle('open');
+        }
+    </script>
+</body>
+
+</html>

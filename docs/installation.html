@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Installation | AbsoluteLib V2</title>
+    <link rel="stylesheet" href="../styles.css">
+    <link rel="stylesheet"
+        href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script>hljs.highlightAll();</script>
+</head>
+
+<body>
+    <div class="layout">
+        <div class="sidebar" id="sidebar">
+            <div class="brand">
+                <h1>AbsoluteLib V2</h1>
+                <span class="version">v2.0.0</span>
+            </div>
+            <div class="nav-links">
+                <div class="nav-group">
+                    <div class="nav-group-title">Getting Started</div>
+                    <a href="../index.html" class="nav-item">Introduction</a>
+                    <a href="installation.html" class="nav-item active">Installation</a>
+                </div>
+                <div class="nav-group">
+                    <div class="nav-group-title">Core</div>
+                    <a href="wrappers.html" class="nav-item">Hardware Wrappers</a>
+                    <a href="subsystems.html" class="nav-item">Subsystems</a>
+                    <a href="vision.html" class="nav-item">Vision</a>
+                </div>
+                <div class="nav-group">
+                    <div class="nav-group-title">Utilities</div>
+                    <a href="utilities/leds.html" class="nav-item">LEDs</a>
+                    <a href="utilities/math.html" class="nav-item">Math</a>
+                    <a href="utilities/input.html" class="nav-item">Input</a>
+                    <a href="utilities/encoders.html" class="nav-item">Encoders</a>
+                    <a href="utilities/tuning.html" class="nav-item">Tuning</a>
+                    <a href="utilities/pathing.html" class="nav-item">Pathing</a>
+                    <a href="utilities/music.html" class="nav-item">Music</a>
+                    <a href="utilities/commands.html" class="nav-item">Commands</a>
+                </div>
+                <div class="nav-group">
+                    <div class="nav-group-title">2026 REBUILT</div>
+                    <a href="trajectory.html" class="nav-item">Trajectory Solver</a>
+                    <a href="shooter.html" class="nav-item">Shooter System</a>
+                    <a href="obstacles.html" class="nav-item">Obstacle Avoidance</a>
+                </div>
+                <div class="nav-group">
+                    <div class="nav-group-title">Tools</div>
+                    <a href="../trajectory-debug.html" class="nav-item">Trajectory Debug</a>
+                    <a href="../changelog-viewer.html" class="nav-item">Changelog</a>
+                </div>
+            </div>
+            <div class="sidebar-footer">
+                <a href="javadoc/index.html" class="javadoc-link" target="_blank">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                        <polyline points="14 2 14 8 20 8"></polyline>
+                    </svg>
+                    API Javadoc
+                </a>
+            </div>
+        </div>
+        <div class="overlay" id="overlay" onclick="toggleSidebar()"></div>
+        <main class="main-content">
+            <div class="content-container">
+                <section id="installation">
+                    <h2>Installation</h2>
+                    <p>Install via WPILib Vendor Libraries (online):</p>
+                    <pre><code class="language-text">https://team4308.github.io/absolutelib/lib/absolutelib.json</code></pre>
+
+                    <h4>Required Dependencies</h4>
+                    <p>Ensure you have the following vendor libraries installed to avoid build errors:</p>
+                    <ul>
+                        <li>Phoenix6 Replay &amp; Phoenix5 Replay</li>
+                        <li>REVLib</li>
+                        <li>AdvantageKit</li>
+                        <li>PhotonLib</li>
+                        <li>PathPlannerLib</li>
+                    </ul>
+                </section>
+
+                <section id="updating">
+                    <h2>Updating AbsoluteLib</h2>
+                    <p>When a new version is released, you can update your robot project using any of these methods:</p>
+
+                    <h4>Option 1: Check for Updates (Recommended)</h4>
+                    <ol>
+                        <li>Open WPILib VS Code and press <code>Ctrl+Shift+P</code></li>
+                        <li>Run <code>WPILib: Manage Vendor Libraries</code></li>
+                        <li>Select <strong>Check for updates (online)</strong></li>
+                        <li>If AbsoluteLib shows an available update, accept it</li>
+                    </ol>
+                    <p>This works automatically because the vendor JSON URL always points to the latest published version.</p>
+
+                    <h4>Option 2: Re-install Online</h4>
+                    <ol>
+                        <li>Open WPILib VS Code and press <code>Ctrl+Shift+P</code></li>
+                        <li>Run <code>WPILib: Manage Vendor Libraries</code></li>
+                        <li>Select <strong>Install new library (online)</strong></li>
+                        <li>Paste the URL:</li>
+                    </ol>
+                    <pre><code class="language-text">https://team4308.github.io/absolutelib/lib/absolutelib.json</code></pre>
+                    <p>If prompted to replace the existing version, confirm. Then rebuild your project.</p>
+
+                    <h4>Option 3: Manual JSON Edit</h4>
+                    <ol>
+                        <li>Open <code>vendordeps/absolutelib.json</code> in your robot project</li>
+                        <li>Update the <code>"version"</code> field to the new version number</li>
+                        <li>Update <code>javaDependencies[0].version</code> to match</li>
+                        <li>Rebuild your project</li>
+                    </ol>
+
+                    <h4>After Updating</h4>
+                    <p>Always do a clean build after updating to avoid stale cached artifacts:</p>
+                    <pre><code class="language-bash">./gradlew clean build</code></pre>
+                    <p>Check the <a href="../changelog-viewer.html">Changelog</a> for details on what changed in each version.</p>
+                </section>
+            </div>
+        </main>
+    </div>
+    <button class="mobile-toggle" onclick="toggleSidebar()">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="3" y1="12" x2="21" y2="12"></line>
+            <line x1="3" y1="6" x2="21" y2="6"></line>
+            <line x1="3" y1="18" x2="21" y2="18"></line>
+        </svg>
+    </button>
+    <script>
+        function toggleSidebar() {
+            document.getElementById('sidebar').classList.toggle('open');
+            document.getElementById('overlay').classList.toggle('open');
+        }
+    </script>
+</body>
+
+</html>

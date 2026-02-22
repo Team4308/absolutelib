@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PID Tuning Tools | AbsoluteLib V2</title>
+    <link rel="stylesheet" href="../../styles.css">
+    <link rel="stylesheet"
+        href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script>hljs.highlightAll();</script>
+</head>
+
+<body>
+    <div class="layout">
+        <div class="sidebar" id="sidebar">
+            <div class="brand">
+                <h1>AbsoluteLib V2</h1>
+                <span class="version">v2.0.0</span>
+            </div>
+            <div class="nav-links">
+                <div class="nav-group">
+                    <div class="nav-group-title">Getting Started</div>
+                    <a href="../../index.html" class="nav-item">Introduction</a>
+                    <a href="../installation.html" class="nav-item">Installation</a>
+                </div>
+                <div class="nav-group">
+                    <div class="nav-group-title">Core</div>
+                    <a href="../wrappers.html" class="nav-item">Hardware Wrappers</a>
+                    <a href="../subsystems.html" class="nav-item">Subsystems</a>
+                    <a href="../vision.html" class="nav-item">Vision</a>
+                </div>
+                <div class="nav-group">
+                    <div class="nav-group-title">Utilities</div>
+                    <a href="leds.html" class="nav-item">LEDs</a>
+                    <a href="math.html" class="nav-item">Math</a>
+                    <a href="input.html" class="nav-item">Input</a>
+                    <a href="encoders.html" class="nav-item">Encoders</a>
+                    <a href="tuning.html" class="nav-item active">Tuning</a>
+                    <a href="pathing.html" class="nav-item">Pathing</a>
+                    <a href="music.html" class="nav-item">Music</a>
+                    <a href="commands.html" class="nav-item">Commands</a>
+                </div>
+                <div class="nav-group">
+                    <div class="nav-group-title">2026 REBUILT</div>
+                    <a href="../trajectory.html" class="nav-item">Trajectory Solver</a>
+                    <a href="../shooter.html" class="nav-item">Shooter System</a>
+                    <a href="../obstacles.html" class="nav-item">Obstacle Avoidance</a>
+                </div>
+                <div class="nav-group">
+                    <div class="nav-group-title">Tools</div>
+                    <a href="../../trajectory-debug.html" class="nav-item">Trajectory Debug</a>
+                    <a href="../../changelog-viewer.html" class="nav-item">Changelog</a>
+                </div>
+            </div>
+            <div class="sidebar-footer">
+                <a href="../javadoc/index.html" class="javadoc-link" target="_blank">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                        <polyline points="14 2 14 8 20 8"></polyline>
+                    </svg>
+                    API Javadoc
+                </a>
+            </div>
+        </div>
+        <div class="overlay" id="overlay" onclick="toggleSidebar()"></div>
+        <main class="main-content">
+            <div class="content-container">
+                <section id="tuning">
+                    <h1>PID Tuning Tools</h1>
+                    <p class="subtitle">Auto-tuning and live parameter adjustment.</p>
+
+                    <hr style="border-top: 1px solid var(--border); margin: 2rem 0;">
+
+                    <h2>SimpleTune (Auto-Tuner)</h2>
+                    <p>Implements the Åström–Hägglund Relay method for automatic PID tuning. This "Bang-Bang" approach
+                        estimates the system's Ultimate Gain (Ku) and Ultimate Period (Tu) to calculate stable PID
+                        constants.</p>
+
+                    <pre><code class="language-java">// Configure Tuner (Setpoint, Relay Voltage, Hysteresis)
+SimpleTune tuner = new SimpleTune(100.0, 6.0, 2.0);
+tuner.start();
+
+// In Periodic Loop
+if (!tuner.isFinished()) {
+    double output = tuner.update(currentPosition);
+    motor.setVoltage(output);
+} else {
+    // Tuning Complete
+    PIDResult result = tuner.calculateConstants(TuningRule.ZIEGLER_NICHOLS);
+    System.out.println("kP: " + result.kP + ", kI: " + result.kI + ", kD: " + result.kD);
+}</code></pre>
+
+                    <h3>Tuning Rules</h3>
+                    <p>Supports multiple commonly used tuning formulas:</p>
+                    <ul>
+                        <li><code>ZIEGLER_NICHOLS</code>: Aggressive, fast response.</li>
+                        <li><code>TYREUS_LUYBEN</code>: More conservative, good for laggy systems.</li>
+                        <li><code>NO_OVERSHOOT</code>: Designed to prevent overshooting the setpoint.</li>
+                        <li><code>P_ONLY</code> / <code>PI_ONLY</code>: Restricts to specific terms.</li>
+                    </ul>
+
+                    <hr style="border-top: 1px solid var(--border); margin: 2rem 0;">
+
+                    <h2>LoggedTunableNumber</h2>
+                    <p>A wrapper around <code>double</code> that syncs with AdvantageScope/SmartDashboard for live
+                        tuning. Changes in the dashboard instantly update the robot's code.</p>
+                    <pre><code class="language-java">LoggedTunableNumber kP = new LoggedTunableNumber("Elevator/kP", 0.5);
+
+public void periodic() {
+    if (kP.hasChanged(hashCode())) {
+        pidController.setP(kP.get());
+    }
+}</code></pre>
+                </section>
+            </div>
+        </main>
+    </div>
+    <button class="mobile-toggle" onclick="toggleSidebar()">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="3" y1="12" x2="21" y2="12"></line>
+            <line x1="3" y1="6" x2="21" y2="6"></line>
+            <line x1="3" y1="18" x2="21" y2="18"></line>
+        </svg>
+    </button>
+    <script>
+        function toggleSidebar() {
+            document.getElementById('sidebar').classList.toggle('open');
+            document.getElementById('overlay').classList.toggle('open');
+        }
+    </script>
+</body>
+
+</html>

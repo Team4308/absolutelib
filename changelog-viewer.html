@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AbsoluteLib Changelog</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script>hljs.highlightAll();</script>
+</head>
+
+<body>
+
+
+    <div class="layout">
+        <div class="sidebar" id="sidebar">
+            <div class="brand">
+                <h1>AbsoluteLib V2</h1>
+                <span class="version">v2.0.0</span>
+            </div>
+            <div class="nav-links">
+                <div class="nav-group">
+                    <div class="nav-group-title">Getting Started</div>
+                    <a href="index.html" class="nav-item">Introduction</a>
+                    <a href="docs/installation.html" class="nav-item">Installation</a>
+                </div>
+                <div class="nav-group">
+                    <div class="nav-group-title">Core</div>
+                    <a href="docs/wrappers.html" class="nav-item">Hardware Wrappers</a>
+                    <a href="docs/subsystems.html" class="nav-item">Subsystems</a>
+                    <a href="docs/vision.html" class="nav-item">Vision</a>
+                    <a href="docs/core-utilities.html" class="nav-item">Core Utilities</a>
+                </div>
+                <div class="nav-group">
+                    <div class="nav-group-title">2026 REBUILT</div>
+                    <a href="docs/trajectory.html" class="nav-item">Trajectory Solver</a>
+                    <a href="docs/shooter.html" class="nav-item">Shooter System</a>
+                    <a href="docs/obstacles.html" class="nav-item">Obstacle Avoidance</a>
+                </div>
+                <div class="nav-group">
+                    <div class="nav-group-title">Tools</div>
+                    <a href="trajectory-debug.html" class="nav-item">Trajectory Debug</a>
+                    <a href="changelog-viewer.html" class="nav-item active">Changelog</a>
+                </div>
+            </div>
+            <div class="sidebar-footer">
+                <a href="docs/javadoc/index.html" class="javadoc-link" target="_blank">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                        <polyline points="14 2 14 8 20 8"></polyline>
+                    </svg>
+                    API Javadoc
+                </a>
+            </div>
+        </div>
+
+        <!-- Mobile Overlay -->
+        <div class="overlay" id="overlay" onclick="toggleSidebar()"></div>
+
+        <main class="main-content">
+            <div class="content-container">
+                <section id="changelog">
+                    <h1>Changelog</h1>
+                    <p>Track the latest updates and changes to AbsoluteLib.</p>
+                    <hr style="border: 0; border-top: 1px solid var(--border); margin: 20px 0;">
+                    <div id="changelog-content">
+                        <p>Loading changelog...</p>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </div>
+
+    <button class="mobile-toggle" onclick="toggleSidebar()">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="3" y1="12" x2="21" y2="12"></line>
+            <line x1="3" y1="6" x2="21" y2="6"></line>
+            <line x1="3" y1="18" x2="21" y2="18"></line>
+        </svg>
+    </button>
+
+    <script>
+        function toggleSidebar() {
+            document.getElementById('sidebar').classList.toggle('open');
+            document.getElementById('overlay').classList.toggle('open');
+        }
+
+        const CHANGELOG_URL = 'https://raw.githubusercontent.com/Team4308/absolutelib/master/CHANGELOG.md';
+
+        (async () => {
+            try {
+                const res = await fetch(CHANGELOG_URL, { cache: 'no-store' });
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const markdownRaw = await res.text();
+                const markdown = markdownRaw.replace(/^#\s+.*\r?\n\r?\n/, '');
+
+                marked.setOptions({
+                    gfm: true,
+                    breaks: false,
+                    headerIds: true,
+                    mangle: false
+                });
+
+                document.getElementById('changelog-content').innerHTML = marked.parse(markdown);
+                hljs.highlightAll();
+            } catch (error) {
+                document.getElementById('changelog-content').innerHTML = `<p>Error: ${error.message}</p>`;
+            }
+        })();
+    </script>
+</body>
+
+</html>

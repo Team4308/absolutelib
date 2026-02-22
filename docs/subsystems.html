@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Subsystems | AbsoluteLib V2</title>
+    <link rel="stylesheet" href="../styles.css">
+    <link rel="stylesheet"
+        href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script>hljs.highlightAll();</script>
+</head>
+
+<body>
+    <div class="layout">
+        <div class="sidebar" id="sidebar">
+            <div class="brand">
+                <h1>AbsoluteLib V2</h1>
+                <span class="version">v2.0.0</span>
+            </div>
+            <div class="nav-links">
+                <div class="nav-group">
+                    <div class="nav-group-title">Getting Started</div>
+                    <a href="../index.html" class="nav-item">Introduction</a>
+                    <a href="installation.html" class="nav-item">Installation</a>
+                </div>
+                <div class="nav-group">
+                    <div class="nav-group-title">Core</div>
+                    <a href="wrappers.html" class="nav-item">Hardware Wrappers</a>
+                    <a href="subsystems.html" class="nav-item active">Subsystems</a>
+                    <a href="vision.html" class="nav-item">Vision</a>
+                </div>
+                <div class="nav-group">
+                    <div class="nav-group-title">Utilities</div>
+                    <a href="utilities/leds.html" class="nav-item">LEDs</a>
+                    <a href="utilities/math.html" class="nav-item">Math</a>
+                    <a href="utilities/input.html" class="nav-item">Input</a>
+                    <a href="utilities/encoders.html" class="nav-item">Encoders</a>
+                    <a href="utilities/tuning.html" class="nav-item">Tuning</a>
+                    <a href="utilities/pathing.html" class="nav-item">Pathing</a>
+                    <a href="utilities/music.html" class="nav-item">Music</a>
+                    <a href="utilities/commands.html" class="nav-item">Commands</a>
+                </div>
+                <div class="nav-group">
+                    <div class="nav-group-title">2026 REBUILT</div>
+                    <a href="trajectory.html" class="nav-item">Trajectory Solver</a>
+                    <a href="shooter.html" class="nav-item">Shooter System</a>
+                    <a href="obstacles.html" class="nav-item">Obstacle Avoidance</a>
+                </div>
+                <div class="nav-group">
+                    <div class="nav-group-title">Tools</div>
+                    <a href="../trajectory-debug.html" class="nav-item">Trajectory Debug</a>
+                    <a href="../changelog-viewer.html" class="nav-item">Changelog</a>
+                </div>
+            </div>
+            <div class="sidebar-footer">
+                <a href="javadoc/index.html" class="javadoc-link" target="_blank">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                        <polyline points="14 2 14 8 20 8"></polyline>
+                    </svg>
+                    API Javadoc
+                </a>
+            </div>
+        </div>
+        <div class="overlay" id="overlay" onclick="toggleSidebar()"></div>
+        <main class="main-content">
+            <div class="content-container">
+                <section id="subsystems">
+                    <h1>Subsystems</h1>
+                    <p>AbsoluteLib provides pre-built, production-ready, and simulation-compatible classes for common
+                        FRC mechanisms.
+                        These subsystems simplify control, motion profiling, and physics simulation.</p>
+
+                    <hr style="border-top: 1px solid var(--border); margin: 2rem 0;">
+
+                    <div id="pivot">
+                        <h2>Pivot</h2>
+                        <p>The <code>Pivot</code> class controls a single-joint rotating arm (e.g., wrist, intake arm,
+                            simple shooter angle).
+                            It supports ProfiledPID control, feedforward, stiffness simulation, and Smart Motion.</p>
+
+                        <h3>Configuration</h3>
+                        <pre><code class="language-java">public class Wrist extends Pivot {
+    public Wrist() {
+        super(new Pivot.Config()
+            // Hardware
+            .withLeader(new MotorWrapper(MotorType.TALONFX, 15))
+            .withEncoder(EncoderWrapper.canCoder(20, 0.0)) // ID 20, offset 0.0
+            .encoderInverted(false)
+            .gear(50.0) // 50:1 gear ratio
+
+            // Limits & Motion
+            .limits(Math.toRadians(-90), Math.toRadians(90))
+            .tolerance(Math.toRadians(1.0))
+
+            // Control (PID + Feedforward)
+            .pid(0.02, 0.0, 0.0)
+            .ff(0.0, 0.45, 0.0, 0.0) // kS, kG, kV, kA
+
+            // Power Distribution & Motion Magic
+            .motion(Math.toRadians(180), Math.toRadians(360)) // Max Vel, Max Accel
+
+            // Simulation
+            .enableSimulation(true)
+            .withSimulation(new PivotSimulation.PivotSimulationConfig()
+                .armLength(0.35) // meters
+                .armMass(2.5)    // kg
+                .limits(Math.toRadians(-95), Math.toRadians(95))
+            )
+        );
+    }
+}</code></pre>
+
+                        <h3>Usage</h3>
+                        <pre><code class="language-java">Wrist wrist = new Wrist();
+
+// Set target angle in radians
+wrist.setTargetAngle(Math.toRadians(45));
+
+// Create a command to move to position
+Command moveCmd = wrist.setAngle(Math.toRadians(90));</code></pre>
+                    </div>
+
+                    <hr style="border-top: 1px solid var(--border); margin: 3rem 0;">
+
+                    <div id="elevator">
+                        <h2>Elevator</h2>
+                        <p>The <code>Elevator</code> class controls a linear actuator. It handles gravity feedforward,
+                            position limits,
+                            and motion profiling.</p>
+
+                        <h3>Configuration</h3>
+                        <pre><code class="language-java">public class Lift extends Elevator {
+    public Lift() {
+        super(new Elevator.Config()
+            .withLeader(new MotorWrapper(MotorType.SPARKMAX, 10))
+            .withFollowers(new MotorWrapper(MotorType.SPARKMAX, 11))
+            .gear(10.0)
+            .drumRadius(0.05) // 5cm radius drum
+            .limits(0.0, 1.5) // 0 to 1.5 meters
+
+            // Control
+            .pid(5.0, 0.0, 0.0)
+            .ff(0.0, 0.1, 2.5, 0.1) // kG, kV, kA (kS usually 0 for elevator)
+
+            // Simulation
+            .enableSimulation(true)
+            .withSimulation(new ElevatorSimulation.ElevatorSimulationConfig()
+                .carriageMass(4.0) // kg
+                .minHeight(0.0)
+                .maxHeight(1.55)
+            )
+        );
+    }
+}</code></pre>
+                    </div>
+
+                    <hr style="border-top: 1px solid var(--border); margin: 3rem 0;">
+
+                    <div id="arm">
+                        <h2>Arm (Multi-Joint)</h2>
+                        <p>The <code>Arm</code> class manages multi-jointed arms using Inverse Kinematics (IK).
+                            It allows you to control the end-effector in Cartesian space (x, y) rather than managing
+                            individual joint angles.</p>
+
+                        <h3>Initialization</h3>
+                        <pre><code class="language-java">public class SuperStructure extends AbsoluteSubsystem {
+    private final Arm arm = new Arm();
+    private final Arm.Joint shoulder;
+    
+    public SuperStructure() {
+        // 1. Configure the Motor
+        MotorWrapper shoulderMotor = new MotorWrapper(MotorType.TALONFX, 1);
+        shoulderMotor.setInverted(true);
+        
+        // PID Configuration via MotorWrapper or MotorConfig
+        MotorWrapper.UnifiedMotorConfig motorCfg = MotorWrapper.UnifiedMotorConfig.builder()
+            .kP(0.5)
+            .kI(0.0)
+            .kD(0.0)
+            .build();
+
+        // 2. Configure the Joint Kinematics
+        Arm.JointConfig shoulderKinematics = Arm.JointConfig.builder()
+            .linkLengthMeters(0.8) // Arm segment length
+            .minAngleRad(Math.toRadians(-90))
+            .maxAngleRad(Math.toRadians(90))
+            .metersToRadians(1.0) // If encoder returns radians directly
+            .build();
+        
+        // 3. Add Joint to Arm
+        shoulder = arm.addJoint(
+            shoulderMotor,
+            motorCfg, // Apply PID config
+            EncoderWrapper.canCoder(1, 0.0), // Encoder
+            shoulderKinematics
+        );
+
+        // ... Add Elbow Joint ...
+
+        arm.initialize(); // Must call after adding joints
+    }
+}</code></pre>
+
+                        <h3>Cartesian Control</h3>
+                        <pre><code class="language-java">// Move end-effector to x=0.5m, y=1.2m
+arm.setGoalPose(new Translation2d(0.5, 1.2)); // or arm.setGoalPose(0.5, 1.2)
+
+// Periodic update runs the IK solver and PID loops
+@Override
+public void periodic() {
+    arm.periodic();
+}</code></pre>
+                    </div>
+
+                    <hr style="border-top: 1px solid var(--border); margin: 3rem 0;">
+
+                    <div id="end-effector">
+                        <h2>End Effector</h2>
+                        <p>A simple class for intake/outtake mechanisms. It handles leader/follower setup and simple
+                            speed control.</p>
+                        <pre><code class="language-java">public class Intake extends AbsoluteSubsystem {
+    private final EndEffector roller;
+
+    public Intake() {
+        roller = new EndEffector(new EndEffector.Config()
+            .withLeader(new MotorWrapper(MotorType.SPARKMAX, 30))
+            .withFollowers(new MotorWrapper(MotorType.SPARKMAX, 31)) // Optional follower
+            .inverted(false)
+        );
+    }
+
+    public void intake() {
+        roller.start(0.8);
+    }
+
+    public void eject() {
+        roller.start(-0.8);
+    }
+    
+    public void stop() {
+        roller.stop();
+    }
+}</code></pre>
+                    </div>
+
+                </section>
+            </div>
+        </main>
+    </div>
+    <button class="mobile-toggle" onclick="toggleSidebar()">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="3" y1="12" x2="21" y2="12"></line>
+            <line x1="3" y1="6" x2="21" y2="6"></line>
+            <line x1="3" y1="18" x2="21" y2="18"></line>
+        </svg>
+    </button>
+    <script>
+        function toggleSidebar() {
+            document.getElementById('sidebar').classList.toggle('open');
+            document.getElementById('overlay').classList.toggle('open');
+        }
+    </script>
+</body>
+
+</html>
