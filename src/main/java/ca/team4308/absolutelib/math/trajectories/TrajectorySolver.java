@@ -73,6 +73,28 @@ public class TrajectorySolver {
 
         private final double hoopToleranceMultiplier;
 
+        /**
+         * Sweep angle step size (degrees).
+         */
+        private final double sweepStepDegrees;
+
+        /**
+         * Number of binary-search iterations for velocity refinement.
+         */
+        private final int velocityRefineIterations;
+
+        /**
+         * Simulation timestep (seconds) for the ProjectileMotion integrator.
+         * Smaller = more accurate but slower. Default uses PhysicsConstants.DEFAULT_TIME_STEP.
+         */
+        private final double simulationTimeStep;
+
+        /**
+         * Fast simulation timestep (seconds) for search/sweep passes.
+         * Larger = faster but less accurate. Default is 5x the simulation timestep.
+         */
+        private final double fastSimulationTimeStep;
+
         private SolverConfig(Builder builder) {
             this.minPitchDegrees = builder.minPitchDegrees;
             this.maxPitchDegrees = builder.maxPitchDegrees;
@@ -86,6 +108,10 @@ public class TrajectorySolver {
             this.crtControlLoopMs = builder.crtControlLoopMs;
             this.crtEncoderTicks = builder.crtEncoderTicks;
             this.hoopToleranceMultiplier = builder.hoopToleranceMultiplier;
+            this.sweepStepDegrees = builder.sweepStepDegrees;
+            this.velocityRefineIterations = builder.velocityRefineIterations;
+            this.simulationTimeStep = builder.simulationTimeStep;
+            this.fastSimulationTimeStep = builder.fastSimulationTimeStep;
         }
 
         public double getMinPitchDegrees() {
@@ -136,6 +162,22 @@ public class TrajectorySolver {
             return hoopToleranceMultiplier;
         }
 
+        public double getSweepStepDegrees() {
+            return sweepStepDegrees;
+        }
+
+        public int getVelocityRefineIterations() {
+            return velocityRefineIterations;
+        }
+
+        public double getSimulationTimeStep() {
+            return simulationTimeStep;
+        }
+
+        public double getFastSimulationTimeStep() {
+            return fastSimulationTimeStep;
+        }
+
         /** Creates a new solver config builder with default values. */
         public static Builder builder() {
             return new Builder();
@@ -155,7 +197,11 @@ public class TrajectorySolver {
                     .crtAngleResolution(crtAngleResolution)
                     .crtControlLoopMs(crtControlLoopMs)
                     .crtEncoderTicks(crtEncoderTicks)
-                    .hoopToleranceMultiplier(hoopToleranceMultiplier);
+                    .hoopToleranceMultiplier(hoopToleranceMultiplier)
+                    .sweepStepDegrees(sweepStepDegrees)
+                    .velocityRefineIterations(velocityRefineIterations)
+                    .simulationTimeStep(simulationTimeStep)
+                    .fastSimulationTimeStep(fastSimulationTimeStep);
         }
 
         /**
@@ -180,6 +226,10 @@ public class TrajectorySolver {
             private int crtControlLoopMs = 20;
             private int crtEncoderTicks = 4096;
             private double hoopToleranceMultiplier = 1.0;
+            private double sweepStepDegrees = 0.5;
+            private int velocityRefineIterations = 8;
+            private double simulationTimeStep = ca.team4308.absolutelib.math.trajectories.physics.PhysicsConstants.DEFAULT_TIME_STEP;
+            private double fastSimulationTimeStep = ca.team4308.absolutelib.math.trajectories.physics.PhysicsConstants.DEFAULT_TIME_STEP * 5.0;
 
             /** Sets the minimum launch pitch angle in degrees (default 0). */
             public Builder minPitchDegrees(double val) {
@@ -253,6 +303,30 @@ public class TrajectorySolver {
                 return this;
             }
 
+            /** Sets the sweep angle step size in degrees (default 0.5). */
+            public Builder sweepStepDegrees(double val) {
+                this.sweepStepDegrees = val;
+                return this;
+            }
+
+            /** Sets the number of binary-search iterations for velocity refinement (default 8). */
+            public Builder velocityRefineIterations(int val) {
+                this.velocityRefineIterations = val;
+                return this;
+            }
+
+            /** Sets the simulation timestep in seconds (default 0.001). */
+            public Builder simulationTimeStep(double val) {
+                this.simulationTimeStep = val;
+                return this;
+            }
+
+            /** Sets the fast simulation timestep in seconds (default 0.005). */
+            public Builder fastSimulationTimeStep(double val) {
+                this.fastSimulationTimeStep = val;
+                return this;
+            }
+
             /** Builds the solver config. */
             public SolverConfig build() {
                 return new SolverConfig(this);
@@ -286,6 +360,28 @@ public class TrajectorySolver {
                     .angleTolerance(2.0)
                     .rpmTolerance(200)
                     .flywheelGenParams(FlywheelGenerator.GenerationParams.quickScan())
+                    .sweepStepDegrees(2.0)
+                    .velocityRefineIterations(4)
+                    .simulationTimeStep(0.002)
+                    .fastSimulationTimeStep(0.01)
+                    .build();
+        }
+
+        /**
+         * Returns a preset optimized for roboRIO hardware. Balances solve speed
+         * against accuracy for real-time use on the ARM Cortex-A9. Uses a
+         * coarser sweep, fewer refinement iterations, and a larger simulation
+         * timestep to reduce CPU load.
+         */
+        public static SolverConfig roboRIO() {
+            return builder()
+                    .angleTolerance(1.5)
+                    .rpmTolerance(150)
+                    .flywheelGenParams(FlywheelGenerator.GenerationParams.quickScan())
+                    .sweepStepDegrees(1.5)
+                    .velocityRefineIterations(5)
+                    .simulationTimeStep(0.002)
+                    .fastSimulationTimeStep(0.008)
                     .build();
         }
     }
@@ -429,14 +525,9 @@ public class TrajectorySolver {
     }
 
     /**
-     * Maximum number of binary-search iterations for velocity refinement.
-     */
-
-    private static final int VELOCITY_REFINE_ITERATIONS = 8;
-
-    /**
      * Binary-searches velocity to land the ball through the rim plane within
-     * the target opening. Corrects for drag overshoot.
+     * the target opening. Corrects for drag overshoot. Uses simulateFast()
+     * for search iterations since only hit/miss metrics are needed.
      *
      * @return a hit result, or null if nothing in range works
      */
@@ -452,10 +543,11 @@ public class TrajectorySolver {
         double vHigh = initialVelocity * 1.05;
 
         ProjectileMotion.TrajectoryResult bestHit = null;
+        int iterations = config.getVelocityRefineIterations();
 
-        for (int i = 0; i < VELOCITY_REFINE_ITERATIONS; i++) {
+        for (int i = 0; i < iterations; i++) {
             double vMid = (vLow + vHigh) / 2.0;
-            ProjectileMotion.TrajectoryResult result = projectileMotion.simulate(
+            ProjectileMotion.TrajectoryResult result = projectileMotion.simulateFast(
                     gp, shooterX, shooterY, shooterZ,
                     vMid, pitchRad, yawRad, spinRpm,
                     targetX, targetY, targetZ, targetRadius);
@@ -469,6 +561,15 @@ public class TrajectorySolver {
                 vLow = vMid;
             }
         }
+
+        if (bestHit != null) {
+            double bestV = (vLow + vHigh) / 2.0;
+            bestHit = projectileMotion.simulate(
+                    gp, shooterX, shooterY, shooterZ,
+                    bestV, pitchRad, yawRad, spinRpm,
+                    targetX, targetY, targetZ, targetRadius);
+        }
+
         return bestHit;
     }
 
@@ -661,7 +762,7 @@ public class TrajectorySolver {
 
             double actualVelocity = pitchFw.exitVelocityMps;
 
-            ProjectileMotion.TrajectoryResult trajSim = projectileMotion.simulate(
+            ProjectileMotion.TrajectoryResult trajSim = projectileMotion.simulateFast(
                     gp,
                     input.getShooterX(), input.getShooterY(), input.getShooterZ(),
                     actualVelocity, pitchRad, requiredYaw,
@@ -695,14 +796,6 @@ public class TrajectorySolver {
                 estimatedTof = trajSim.flightTime;
             }
 
-            if (trajectoryCollides(trajSim, input, input.getShooterX(), input.getShooterY())) {
-                if (debugInfo != null) {
-                    debugInfo.recordRejected(pitchDeg, SolveDebugInfo.RejectionReason.COLLISION,
-                            trajSim.closestApproach, trajSim.maxHeight, trajSim.flightTime, trajSim.hitTarget, trajSim.trajectory);
-                }
-                currentClearance += 0.25;
-                continue;
-            }
             if (requiredClearance > 0 && trajSim.maxHeight < requiredClearance) {
                 if (debugInfo != null) {
                     debugInfo.recordRejected(pitchDeg, SolveDebugInfo.RejectionReason.CLEARANCE_TOO_LOW,
@@ -839,8 +932,10 @@ public class TrajectorySolver {
     }
 
     /**
-     * Sweep core: tests every pitch at 0.5 deg steps, picks smallest miss
-     * distance. Returns {pitch, targetX, targetY, tof} or null.
+     * Sweep core: tests every pitch at configurable degree steps using
+     * fast simulation, picks highest quality score. Collision and flyover
+     * checks are deferred to the final full-accuracy validation pass.
+     * Returns {pitch, targetX, targetY, tof} or null.
      */
 
     private double[] solveSweepCore(
@@ -854,7 +949,7 @@ public class TrajectorySolver {
         double bestQualityScore = -1.0;
         double itX = effectiveTargetX, itY = effectiveTargetY;
 
-        double sweepStep = 0.5;
+        double sweepStep = config.getSweepStepDegrees();
 
         for (double pitchDeg = effectiveMinPitch; pitchDeg <= effectiveMaxPitch; pitchDeg += sweepStep) {
             double pitchRad = Math.toRadians(pitchDeg);
@@ -900,7 +995,7 @@ public class TrajectorySolver {
 
             double actualVelocity = pitchFw.exitVelocityMps;
 
-            ProjectileMotion.TrajectoryResult trajSim = projectileMotion.simulate(
+            ProjectileMotion.TrajectoryResult trajSim = projectileMotion.simulateFast(
                     gp,
                     input.getShooterX(), input.getShooterY(), input.getShooterZ(),
                     actualVelocity, pitchRad, requiredYaw,
@@ -927,14 +1022,6 @@ public class TrajectorySolver {
                         continue;
                     }
                 }
-            }
-
-            if (trajectoryCollides(trajSim, input, input.getShooterX(), input.getShooterY())) {
-                if (debugInfo != null) {
-                    debugInfo.recordRejected(pitchDeg, SolveDebugInfo.RejectionReason.COLLISION,
-                            trajSim.closestApproach, trajSim.maxHeight, trajSim.flightTime, trajSim.hitTarget, trajSim.trajectory);
-                }
-                continue;
             }
 
             if (requiredClearance > 0 && trajSim.maxHeight < requiredClearance) {
@@ -1170,7 +1257,8 @@ public class TrajectorySolver {
 
         AirResistance airResistance = new AirResistance(true, 1.18,
                 ca.team4308.absolutelib.math.trajectories.physics.PhysicsConstants.FOAM_BALL_DRAG_COEFFICIENT, true);
-        this.projectileMotion = new ProjectileMotion(airResistance);
+        this.projectileMotion = new ProjectileMotion(airResistance,
+                config.getSimulationTimeStep(), config.getFastSimulationTimeStep());
         this.flywheelGenerator = new FlywheelGenerator(gamePiece, config.getFlywheelGenParams());
     }
 
@@ -1409,8 +1497,20 @@ public class TrajectorySolver {
                     }
 
                     if (fw.isAchievable) {
-                        bestTrajSim = traj;
-                        bestFlywheelSim = fw;
+                        boolean finalValid = true;
+
+                        if (trajectoryCollides(traj, input, input.getShooterX(), input.getShooterY())) {
+                            finalValid = false;
+                        }
+                        if (finalValid && isFlyover(traj.trajectory, effectiveTargetX, effectiveTargetY,
+                                input.getTargetZ(), input.getTargetRadius())) {
+                            finalValid = false;
+                        }
+
+                        if (finalValid) {
+                            bestTrajSim = traj;
+                            bestFlywheelSim = fw;
+                        }
                     }
                 }
             }

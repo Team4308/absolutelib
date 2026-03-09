@@ -197,7 +197,7 @@ public class RobotContainer {
                 drivebase::getPose, // Supplier<Pose2d> of robot pose
                 drivebase::getFieldVelocity); // Supplier<ChassisSpeeds> of field-centric chassis speeds
 
-        FuelSim.getInstance().setSubticks(5); // sets the number of physics iterations to perform per 20ms loop. Default
+        FuelSim.getInstance().setSubticks(2); // sets the number of physics iterations to perform per 20ms loop. Default
                                               // = 5
 
         FuelSim.getInstance().start();

@@ -11,6 +11,7 @@ public class ProjectileMotion {
 
     private final AirResistance airResistance;
     private final double timeStep;
+    private final double fastTimeStep;
     private static final double MIN_ANGLE_BOUND = 0.1;
     private static final double MAX_ANGLE_OFFSET = 0.1;
     private static final double ANGLE_SWEEP_STEP = 0.05;
@@ -121,10 +122,25 @@ public class ProjectileMotion {
 
     /**
      * Creates projectile motion calculator with full customization.
+     *
+     * @param airResistance Air resistance model
+     * @param timeStep Integration timestep for full-accuracy simulation (s)
      */
     public ProjectileMotion(AirResistance airResistance, double timeStep) {
+        this(airResistance, timeStep, timeStep * 5.0);
+    }
+
+    /**
+     * Creates projectile motion calculator with separate fast timestep.
+     *
+     * @param airResistance Air resistance model
+     * @param timeStep Integration timestep for full-accuracy simulation (s)
+     * @param fastTimeStep Integration timestep for fast simulation (s)
+     */
+    public ProjectileMotion(AirResistance airResistance, double timeStep, double fastTimeStep) {
         this.airResistance = airResistance;
         this.timeStep = timeStep;
+        this.fastTimeStep = fastTimeStep;
     }
 
     /**
@@ -252,6 +268,149 @@ public class ProjectileMotion {
             double velocity, double pitchAngle, double yawAngle,
             double targetX, double targetY, double targetZ, double targetRadius) {
         return simulate(gamePiece, x0, y0, z0, velocity, pitchAngle, yawAngle, 0, targetX, targetY, targetZ, targetRadius);
+    }
+
+    /**
+     * Fast trajectory simulation optimized for search iterations. Uses a
+     * larger timestep with Heun (improved Euler) integration and skips
+     * trajectory point recording. Returns the same TrajectoryResult type
+     * but with an empty trajectory array. Suitable for sweep searches and
+     * velocity refinement where only hit/miss metrics matter.
+     *
+     * @param gamePiece The game piece being shot
+     * @param x0 Initial X position (m)
+     * @param y0 Initial Y position (m)
+     * @param z0 Initial Z position (m)
+     * @param velocity Exit velocity (m/s)
+     * @param pitchAngle Pitch angle from horizontal (radians)
+     * @param yawAngle Yaw angle from +X axis (radians)
+     * @param spinRpm Backspin rate in RPM
+     * @param targetX Target X position (m)
+     * @param targetY Target Y position (m)
+     * @param targetZ Target Z position (m)
+     * @param targetRadius Acceptable hit radius (m)
+     * @return Trajectory simulation result (trajectory array is empty)
+     */
+    public TrajectoryResult simulateFast(GamePiece gamePiece,
+            double x0, double y0, double z0,
+            double velocity, double pitchAngle, double yawAngle,
+            double spinRpm,
+            double targetX, double targetY, double targetZ, double targetRadius) {
+
+        double dt = fastTimeStep;
+
+        double horizontalVelocity = velocity * Math.cos(pitchAngle);
+        double vx = horizontalVelocity * Math.cos(yawAngle);
+        double vy = horizontalVelocity * Math.sin(yawAngle);
+        double vz = velocity * Math.sin(pitchAngle);
+
+        double spinAxisX = -Math.sin(yawAngle);
+        double spinAxisY = Math.cos(yawAngle);
+        double spinAxisZ = 0;
+
+        double x = x0, y = y0, z = z0;
+        double maxHeight = z0;
+        double closestApproach = Double.MAX_VALUE;
+        boolean hitTarget = false;
+        boolean pastApex = false;
+        double prevZ = z0;
+        double time = 0;
+
+        double closestVx = vx, closestVy = vy, closestVz = vz;
+
+        double entryAngleDeg = -1;
+        double hDistAtCrossing = -1;
+
+        double targetHorizDist2 = (targetX - x0) * (targetX - x0) + (targetY - y0) * (targetY - y0);
+
+        while (time < PhysicsConstants.MAX_FLIGHT_TIME && z >= 0) {
+            if (z > maxHeight) {
+                maxHeight = z;
+            }
+
+            if (z < prevZ && !pastApex) {
+                pastApex = true;
+            }
+
+            double dx = x - targetX;
+            double dy = y - targetY;
+            double dz = z - targetZ;
+            double distToTarget = Math.sqrt(dx * dx + dy * dy + dz * dz);
+            double horizontalDistToTarget = Math.sqrt(dx * dx + dy * dy);
+
+            if (distToTarget < closestApproach) {
+                closestApproach = distToTarget;
+                closestVx = vx; closestVy = vy; closestVz = vz;
+            }
+
+            if (pastApex && prevZ >= targetZ && z <= targetZ && targetZ > 0) {
+                double hSpeed = Math.sqrt(vx * vx + vy * vy);
+                double vSpeed = Math.abs(vz);
+                entryAngleDeg = Math.toDegrees(Math.atan2(vSpeed, hSpeed));
+                hDistAtCrossing = horizontalDistToTarget;
+
+                if (entryAngleDeg >= SolverConstants.getMinEntryAngleDegrees()
+                        && horizontalDistToTarget <= targetRadius) {
+                    hitTarget = true;
+                }
+                break;
+            }
+
+            if (pastApex) {
+                double currentHorizDist2 = (x - x0) * (x - x0) + (y - y0) * (y - y0);
+                if (currentHorizDist2 > targetHorizDist2 * 1.5 && z < targetZ) {
+                    break;
+                }
+            }
+
+            prevZ = z;
+
+            double[] a1 = calculateAcceleration(gamePiece, vx, vy, vz, spinRpm, spinAxisX, spinAxisY, spinAxisZ);
+
+            double vxPred = vx + dt * a1[0];
+            double vyPred = vy + dt * a1[1];
+            double vzPred = vz + dt * a1[2];
+
+            double[] a2 = calculateAcceleration(gamePiece, vxPred, vyPred, vzPred, spinRpm, spinAxisX, spinAxisY, spinAxisZ);
+
+            vx += 0.5 * dt * (a1[0] + a2[0]);
+            vy += 0.5 * dt * (a1[1] + a2[1]);
+            vz += 0.5 * dt * (a1[2] + a2[2]);
+
+            x += dt * vx;
+            y += dt * vy;
+            z += dt * vz;
+
+            time += dt;
+        }
+
+        boolean descending = closestVz < 0;
+        if (!hitTarget && descending
+                && closestApproach <= targetRadius * SolverConstants.getHoopToleranceMultiplier()) {
+            if (entryAngleDeg < 0) {
+                double hSpeed = Math.sqrt(closestVx * closestVx + closestVy * closestVy);
+                double vSpeed = Math.abs(closestVz);
+                entryAngleDeg = Math.toDegrees(Math.atan2(vSpeed, hSpeed));
+            }
+            if (entryAngleDeg >= SolverConstants.getMinEntryAngleDegrees()) {
+                hitTarget = true;
+            }
+        }
+
+        TrajectoryState finalState = new TrajectoryState(x, y, z, vx, vy, vz, time);
+
+        return new TrajectoryResult(new TrajectoryState[0], hitTarget, closestApproach,
+                descending, entryAngleDeg, hDistAtCrossing, finalState, maxHeight, time);
+    }
+
+    /**
+     * Fast trajectory simulation (no spin).
+     */
+    public TrajectoryResult simulateFast(GamePiece gamePiece,
+            double x0, double y0, double z0,
+            double velocity, double pitchAngle, double yawAngle,
+            double targetX, double targetY, double targetZ, double targetRadius) {
+        return simulateFast(gamePiece, x0, y0, z0, velocity, pitchAngle, yawAngle, 0, targetX, targetY, targetZ, targetRadius);
     }
 
     /**
@@ -719,5 +878,12 @@ public class ProjectileMotion {
 
     public double getTimeStep() {
         return timeStep;
+    }
+
+    /**
+     * Returns the fast simulation timestep.
+     */
+    public double getFastTimeStep() {
+        return fastTimeStep;
     }
 }

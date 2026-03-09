@@ -54,6 +54,7 @@ public class ExampleShooter extends AbsoluteSubsystem {
     private Translation3d targetPosition = new Translation3d(0, 0.0, 0); 
     // Updated in robot container based on alliance and can be changed for testing different target positions
     private boolean trackingEnabled = true;
+    private boolean loggingEnabled = true;
 
     public ExampleShooter() {
         super();
@@ -96,26 +97,20 @@ public class ExampleShooter extends AbsoluteSubsystem {
                 .maxPitchDegrees(82.5)
                 .build();
         solver = new TrajectorySolver(gamePiece, solverConfig);
-        // Sweep looks for the best angle by testing many candidates, good for long distances and tight tolerances. Iterative is faster but less thorough, good for close targets and quick updates.
         solver.setSolveMode(TrajectorySolver.SolveMode.SWEEP);
-
-        // Configure the physical flywheel so the solver can simulate ball-wheel interaction
-        // and provide motor power %, spin-up time, current draw, and exit velocity estimates.
         FlywheelConfig flywheelConfig = FlywheelConfig.builder()
                 .name("Example 2026 Shooter")
-                .arrangement(WheelArrangement.DUAL_OVER_UNDER)
+                .arrangement(WheelArrangement.SINGLE)
                 .wheelDiameterInches(4.0)
-                .material(WheelMaterial.GREEN_COMPLIANT)
+                .material(WheelMaterial.VERY_HARD)
                 .compressionRatio(0.10)
                 .motor(FRCMotors.KRAKEN_X60)
-                .motorsPerWheel(1)
-                .gearRatio(1.0) // Direct drive (1:1)
+                .motorsPerWheel(2)
+                .gearRatio(1.0) 
                 .build();
         solver.setFlywheel(flywheelConfig);
-
-        // Shooter system with both solver and lookup table, falls back to table if no valid solution from solver
         shooterSystem = new ShooterSystem(config, table, solver);
-        shooterSystem.setMode(ShotMode.SOLVER_ONLY);
+        shooterSystem.setMode(ShotMode.SOLVER_WITH_LOOKUP_FALLBACK);
         shooterSystem.setFallbackShot(60.0, 6000);
 
         solver.setDebugEnabled(true);
@@ -147,6 +142,10 @@ public class ExampleShooter extends AbsoluteSubsystem {
 
     public void setTrackingEnabled(boolean enabled) {
         this.trackingEnabled = enabled;
+    }
+
+    public void setLoggingEnabled(boolean enabled) {
+        this.loggingEnabled = enabled;
     }
 
     public boolean isTrackingEnabled() {
@@ -186,41 +185,44 @@ public class ExampleShooter extends AbsoluteSubsystem {
             flywheelLeader.set(Math.min(currentShot.rpm / 6000.0, 1.0));
         }
 
-        recordOutput("ValidShot", currentShot.valid);
-        recordOutput("TargetRPM", currentShot.rpm);
-        recordOutput("TargetPitchDeg", currentShot.pitchDegrees);
-        recordOutput("TargetYawDeg", targetYawDegrees);
-        recordOutput("Distance", lastDistanceMeters);
-        recordOutput("ShotSource", currentShot.source.name());
-        recordOutput("Mode", shooterSystem.getMode().name());
-        recordOutput("SourceDetail", shooterSystem.getLastSourceDescription());
-        recordOutput("TrackingEnabled", trackingEnabled);
-        
-        if (currentRpmSupplier != null) {
-            double measured = currentRpmSupplier.get();
-            recordOutput("MeasuredRPM", measured);
-            recordOutput("RpmDeficit", currentShot.rpm - measured);
-            recordOutput("ReadyToFire", shooterSystem.isReadyToFire(measured));
+        if (loggingEnabled) {
+            recordOutput("ValidShot", currentShot.valid);
+            recordOutput("TargetRPM", currentShot.rpm);
+            recordOutput("TargetPitchDeg", currentShot.pitchDegrees);
+            recordOutput("TargetYawDeg", targetYawDegrees);
+            recordOutput("Distance", lastDistanceMeters);
+            recordOutput("ShotSource", currentShot.source.name());
+            recordOutput("Mode", shooterSystem.getMode().name());
+            recordOutput("SourceDetail", shooterSystem.getLastSourceDescription());
+            recordOutput("TrackingEnabled", trackingEnabled);
+            
+            if (currentRpmSupplier != null) {
+                double measured = currentRpmSupplier.get();
+                recordOutput("MeasuredRPM", measured);
+                recordOutput("RpmDeficit", currentShot.rpm - measured);
+                recordOutput("ReadyToFire", shooterSystem.isReadyToFire(measured));
+            }
+
+            Pose3d goalPose = new Pose3d(targetPosition, new Rotation3d());
+            Logger.recordOutput("ExampleShooter/GoalPose3d", goalPose);
+            Logger.recordOutput("ExampleShooter/GoalPose3dArray", new Pose3d[]{goalPose});
+
+            Pose3d shooterYawPose = new Pose3d(new Translation3d(0, 0, 0), new Rotation3d(0, 0, Math.toRadians(targetYawDegrees)));
+            Logger.recordOutput("ExampleShooter/ShooterYawPose3d", shooterYawPose);
+            Logger.recordOutput("ExampleShooter/Test", new Pose3d(new Translation3d(0, 0, 0), new Rotation3d(0, 0, 0)));
+
+            recordOutput("TargetX", targetPosition.getX());
+            recordOutput("TargetY", targetPosition.getY());
+            recordOutput("TargetZ", targetPosition.getZ());
+            recordOutput("ShooterHeight", shooterHeightMeters);
+            recordOutput("ExitVelocity", currentShot.exitVelocityMps);
         }
-
-        Pose3d goalPose = new Pose3d(targetPosition, new Rotation3d());
-        Logger.recordOutput("ExampleShooter/GoalPose3d", goalPose);
-        Logger.recordOutput("ExampleShooter/GoalPose3dArray", new Pose3d[]{goalPose});
-
-        Pose3d shooterYawPose = new Pose3d(new Translation3d(0, 0, 0), new Rotation3d(0, 0, Math.toRadians(targetYawDegrees)));
-        Logger.recordOutput("ExampleShooter/ShooterYawPose3d", shooterYawPose);
-        Logger.recordOutput("ExampleShooter/Test", new Pose3d(new Translation3d(0, 0, 0), new Rotation3d(0, 0, 0)));
-
-        recordOutput("TargetX", targetPosition.getX());
-        recordOutput("TargetY", targetPosition.getY());
-        recordOutput("TargetZ", targetPosition.getZ());
-        recordOutput("ShooterHeight", shooterHeightMeters);
-        recordOutput("ExitVelocity", currentShot.exitVelocityMps);
 
         logTrajectoryDebug();
     }
 
     private void logTrajectoryDebug() {
+        if (!loggingEnabled) return;
         TrajectoryResult trajResult = shooterSystem.getLastTrajectoryResult();
         if (trajResult == null) {
             return;
@@ -240,7 +242,6 @@ public class ExampleShooter extends AbsoluteSubsystem {
             recordOutput("Trajectory/Margin", trajResult.getMarginOfErrorMeters());
             recordOutput("Trajectory/RPM", trajResult.getRecommendedRpm());
 
-            // Flywheel simulation results (populated when solver has a FlywheelConfig set)
             FlywheelSimulator.SimulationResult flywheelSim = trajResult.getFlywheelSimulation();
             if (flywheelSim != null) {
                 recordOutput("Flywheel/ExitVelocityMps", flywheelSim.exitVelocityMps);
@@ -371,10 +372,12 @@ public class ExampleShooter extends AbsoluteSubsystem {
         long endTime = System.nanoTime();
         lastComputationTimeMs = (endTime - startTime) / 1_000_000.0;
 
-        recordOutput("RobotX", pose.getX());
-        recordOutput("RobotY", pose.getY());
-        recordOutput("ShooterX", shooterX);
-        recordOutput("ShooterY", shooterY);
+        if (loggingEnabled) {
+            recordOutput("RobotX", pose.getX());
+            recordOutput("RobotY", pose.getY());
+            recordOutput("ShooterX", shooterX);
+            recordOutput("ShooterY", shooterY);
+        }
     }
 
     /**
@@ -436,8 +439,6 @@ public class ExampleShooter extends AbsoluteSubsystem {
 
         Pose2d robotPose = poseSupplier.get();
         ChassisSpeeds speeds = chassisSpeedsSupplier != null ? chassisSpeedsSupplier.get() : new ChassisSpeeds();
-
-        // Get the trajectory result for accurate ballistics
         TrajectoryResult trajResult = shooterSystem.getLastTrajectoryResult();
         if (trajResult == null || !trajResult.isSuccess()) {
             System.out.println("Cannot shoot: no valid trajectory");
@@ -461,7 +462,6 @@ public class ExampleShooter extends AbsoluteSubsystem {
 
         List<Pose3d> predictedPath = trajResult.getFlightPath();
         FuelSim.getInstance().spawnFuelTracked(pos, vel, predictedPath);
-        System.out.printf("Shot! %.1fm/s @ %.1f° pitch, %.1f° yaw [%s]%n", launchSpeed, trajResult.getPitchAngleDegrees(), targetYawDegrees, currentShot.source);
     }
 
     public double getTargetRpm() {

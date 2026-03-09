@@ -337,4 +337,16 @@ public final class SolverConstants {
         minEntryAngleDegrees = 30.0;
         rimClearanceMeters = 0.15;
     }
+
+    /**
+     * Applies solver constants tuned for roboRIO real-time performance.
+     * Reduces convergence iterations and widens sample interval to lower
+     * CPU load. Pair with {@link TrajectorySolver.SolverConfig#roboRIO()}.
+     */
+    public static void applyRoboRIODefaults() {
+        resetToDefaults();
+        movingIterations = 2;
+        movingConvergenceIterations = 3;
+        trajectorySampleIntervalSeconds = 0.02;
+    }
 }

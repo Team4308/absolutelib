@@ -1,6 +1,27 @@
 # Changelog for AbsoluteLib v2
 
-## 2.1.0 
+## 2.0.5 — Performance Optimization
+
+### Solver Performance
+- **`simulateFast()` added to `ProjectileMotion`**: New lightweight simulation method using Heun (improved Euler) integration with 2 acceleration evaluations per step instead of RK4's 4. Skips trajectory point recording and adds early termination when the ball is clearly past the target. ~10× faster than full `simulate()` per call.
+- **Fast simulation wired into solver search paths**: Sweep loop, constraint core validation, and velocity refinement binary search all use `simulateFast()` for candidate evaluation. Full-accuracy `simulate()` is only used for the final validation pass — accuracy is not compromised.
+- **Collision and flyover checks moved to final validation**: Since `simulateFast()` doesn't record trajectory points, collision and flyover detection are now performed once on the winning candidate using the full-accuracy simulation. Eliminates redundant checks on rejected candidates.
+
+### Configurable Solver Tuning
+- **New `SolverConfig` fields**: `sweepStepDegrees` (default 0.5°), `velocityRefineIterations` (default 8), `simulationTimeStep` (default 0.001s), `fastSimulationTimeStep` (default 0.005s). All configurable via the builder.
+- **`SolverConfig.roboRIO()` preset**: Balanced preset for real-time use on roboRIO ARM Cortex-A9 hardware. Uses 1.5° sweep steps, 5 velocity refinement iterations, 0.002s simulation timestep, and 0.008s fast timestep.
+- **`SolverConfig.quickSolve()` updated**: Now includes performance tuning (2.0° sweep steps, 4 velocity refinement iterations, 0.002s/0.01s timesteps) in addition to the existing coarser tolerances and quick-scan flywheel generation.
+- **`SolverConstants.applyRoboRIODefaults()`**: Convenience method that reduces `movingIterations` (3→2), `movingConvergenceIterations` (5→3), and widens `trajectorySampleIntervalSeconds` (0.01→0.02) for lower CPU load on roboRIO.
+
+### Physics Improvements
+- **Predicted flight path now includes robot velocity**: `TrajectoryResult.getFlightPath()` adds robot `vx`/`vy` to the launch velocity components so the predicted path matches the actual field-relative trajectory during shoot-while-moving.
+- **`FuelSim` upgraded to Velocity Verlet**: Example simulation uses Velocity Verlet integration instead of basic Euler, matching the solver's physics fidelity more closely.
+- **Entry angle and flyover detection tightened**: `minEntryAngleDegrees` default corrected to 30° (was 10° in `resetToDefaults()`). Flyover check now uses 60% of target radius for the horizontal distance threshold and requires the entry angle to meet the minimum.
+
+### Bug Fixes
+- **`SolverConstants.resetToDefaults()` consistency**: `velocityBufferMultiplier` default in `resetToDefaults()` now matches the field initializer (1.3).
+
+## 2.0.4 
 
 ### Major Bug Patchs
 - **MovementCompensator NaN guard**: Added `Double.isFinite()` check on exit velocity — prevents NaN from corrupting all downstream yaw/pitch/TOF calculations during moving shots.
