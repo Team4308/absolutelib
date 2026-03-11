@@ -36,9 +36,9 @@ public final class SolverConstants {
 
     /**
      * Buffer multiplier applied to minimum required velocity. Adds safety
-     * margin for achievable shots. Default: 1.5 (50% buffer)
+     * margin for achievable shots. Default: 1.3 (30% buffer)
      */
-    private static double velocityBufferMultiplier = 1.5;
+    private static double velocityBufferMultiplier = 1.3;
 
     /**
      * Multiplier applied to minimum velocity for velocity range calculations.

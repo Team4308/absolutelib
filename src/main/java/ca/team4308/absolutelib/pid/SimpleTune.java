@@ -179,7 +179,7 @@ public class SimpleTune {
     private double lastSwitchTime = 0;
 
     private int requiredCycles = 5;
-    private int precision = 5;  // Lowkey idk
+    private int precision = 5;
 
     // Feedforward 
     private double kS_est = 0.0;

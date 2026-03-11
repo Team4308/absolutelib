@@ -310,6 +310,55 @@ public class TrajectoryResult {
         return discreteSolution != null ? discreteSolution.pitchAngleDegrees : getPitchAngleDegrees();
     }
 
+    /**
+     * Returns true if flywheel simulation data is available.
+     */
+    public boolean hasFlywheelData() {
+        return flywheelSimulation != null;
+    }
+
+    /**
+     * Returns true if a discrete (CRT) solution was found.
+     */
+    public boolean hasDiscreteSolution() {
+        return discreteSolution != null;
+    }
+
+    /**
+     * Gets the horizontal distance from shooter to target in meters,
+     * or NaN if the input is not available.
+     */
+    public double getDistanceToTargetMeters() {
+        if (input == null) {
+            return Double.NaN;
+        }
+        double dx = input.getTargetX() - input.getShooterX();
+        double dy = input.getTargetY() - input.getShooterY();
+        return Math.hypot(dx, dy);
+    }
+
+    /**
+     * Gets the height difference from shooter to target in meters,
+     * or NaN if the input is not available.
+     */
+    public double getHeightDifferenceMeters() {
+        if (input == null) {
+            return Double.NaN;
+        }
+        return input.getTargetZ() - input.getShooterZ();
+    }
+
+    /**
+     * Gets the spin-up time required for the flywheel in seconds,
+     * or NaN if flywheel data is not available.
+     */
+    public double getSpinUpTimeSeconds() {
+        if (flywheelSimulation == null) {
+            return Double.NaN;
+        }
+        return flywheelSimulation.spinUpTimeSeconds;
+    }
+
     // Getters
     public Status getStatus() {
         return status;

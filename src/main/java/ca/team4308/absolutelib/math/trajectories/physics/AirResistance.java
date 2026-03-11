@@ -46,7 +46,6 @@ public class AirResistance {
      * Creates air resistance model optimized for indoor FRC competition.
      */
     public static AirResistance indoorFRC() {
-        // we should add a barometic sensor Ong frfr so we can get real time data this is tottaly going to make a huge difference
         return new AirResistance(true, 1.225, PhysicsConstants.FOAM_BALL_DRAG_COEFFICIENT, false);
     }
     

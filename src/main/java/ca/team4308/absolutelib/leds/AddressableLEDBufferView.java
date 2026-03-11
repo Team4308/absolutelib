@@ -19,8 +19,10 @@ public class AddressableLEDBufferView {
      * @param length The number of LEDs in this view
      */
     public AddressableLEDBufferView(AddressableLEDBuffer buffer, int startIndex, int length) {
-        if (startIndex < 0 || startIndex + length > buffer.getLength()) {
-            throw new IllegalArgumentException("Invalid buffer view range");
+        if (startIndex < 0 || length < 0 || startIndex + length > buffer.getLength()) {
+            throw new IllegalArgumentException(
+                    String.format("Invalid buffer view range: startIndex=%d, length=%d, bufferLength=%d",
+                            startIndex, length, buffer.getLength()));
         }
         this.buffer = buffer;
         this.startIndex = startIndex;
@@ -35,7 +37,7 @@ public class AddressableLEDBufferView {
 
     public void setColor(int index, Color color) {
         if (isValidIndex(index)) {
-            buffer.setLED(index, color);
+            buffer.setLED(startIndex + index, color);
         }
     }
 

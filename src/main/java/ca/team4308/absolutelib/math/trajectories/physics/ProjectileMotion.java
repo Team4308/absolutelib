@@ -373,13 +373,17 @@ public class ProjectileMotion {
 
             double[] a2 = calculateAcceleration(gamePiece, vxPred, vyPred, vzPred, spinRpm, spinAxisX, spinAxisY, spinAxisZ);
 
-            vx += 0.5 * dt * (a1[0] + a2[0]);
-            vy += 0.5 * dt * (a1[1] + a2[1]);
-            vz += 0.5 * dt * (a1[2] + a2[2]);
+            double newVx = vx + 0.5 * dt * (a1[0] + a2[0]);
+            double newVy = vy + 0.5 * dt * (a1[1] + a2[1]);
+            double newVz = vz + 0.5 * dt * (a1[2] + a2[2]);
 
-            x += dt * vx;
-            y += dt * vy;
-            z += dt * vz;
+            x += 0.5 * dt * (vx + newVx);
+            y += 0.5 * dt * (vy + newVy);
+            z += 0.5 * dt * (vz + newVz);
+
+            vx = newVx;
+            vy = newVy;
+            vz = newVz;
 
             time += dt;
         }
@@ -473,8 +477,6 @@ public class ProjectileMotion {
 
         // Minimum velocity occurs at 45 degrees for level ground
         // For elevated targets: v_min = sqrt(g * (h + sqrt(h^2 + d^2)))
-        // where h = heightDiff, d = distance/
-        // - Some dude from StackOverflow (????) idk
         return Math.sqrt(g * (heightDiff + Math.sqrt(heightDiff * heightDiff + distance * distance)));
     }
 
@@ -853,8 +855,8 @@ public class ProjectileMotion {
 
             double velocity = idealVelocity;
             if (airResistance.isEnabled()) {
-                // Change !?
-                velocity = idealVelocity * 1.15;
+                double dragComp = 1.0 + 0.15 * Math.min(1.0, horizontalDistance / 8.0);
+                velocity = idealVelocity * dragComp;
                 if (velocity > maxVelocity) {
                     velocity = maxVelocity;
                 }

@@ -50,6 +50,7 @@ public final class ShooterSystem {
     private double manualRpm = 0;
 
     private ShotParameters fallbackShot;
+    private ShotParameters lastGoodShot = null;
 
     private ShotParameters lastResult = ShotParameters.invalid("Not yet calculated");
     private SafetyValidator.ValidationResult lastValidation;
@@ -180,7 +181,11 @@ public final class ShooterSystem {
 
             case SOLVER_ONLY:
                 base = solveWithSolver(distanceMeters, yawToTargetRad);
-                lastSourceDescription = "solver";
+                if (base.valid) {
+                    lastSourceDescription = "solver";
+                } else {
+                    base = fallbackToTableOrLastGood(distanceMeters, "solver failed");
+                }
                 break;
 
             case LOOKUP_WITH_SOLVER_FALLBACK:
@@ -189,35 +194,48 @@ public final class ShooterSystem {
                     lastSourceDescription = "lookup";
                 } else {
                     base = solveWithSolver(distanceMeters, yawToTargetRad);
-                    if (!base.valid && lookupTable.hasEntries()) {
-
-                        base = lookupTable.lookup(distanceMeters);
-                        lastSourceDescription = "lookup (clamped, solver failed)";
-                    } else {
+                    if (base.valid) {
                         lastSourceDescription = "solver (out of table range)";
+                    } else {
+                        base = fallbackToTableOrLastGood(distanceMeters, "solver failed, out of table range");
                     }
                 }
                 break;
 
             case SOLVER_WITH_LOOKUP_FALLBACK:
                 base = solveWithSolver(distanceMeters, yawToTargetRad);
-                if (!base.valid && lookupTable.hasEntries()) {
-                    base = lookupTable.lookup(distanceMeters);
-                    lastSourceDescription = "lookup (solver fallback)";
-                } else {
+                if (base.valid) {
                     lastSourceDescription = "solver";
+                } else if (lookupTable.hasEntries()) {
+                    base = lookupTable.lookup(distanceMeters);
+                    if (base.valid) {
+                        lastSourceDescription = "lookup (solver fallback)";
+                    } else {
+                        base = fallbackToLastGoodOrConstant("solver and lookup failed");
+                    }
+                } else {
+                    base = fallbackToLastGoodOrConstant("solver failed, no table");
                 }
                 break;
 
             case BLENDED:
                 base = blendResults(distanceMeters, yawToTargetRad);
-                lastSourceDescription = "blended";
+                if (base.valid) {
+                    lastSourceDescription = "blended";
+                } else {
+                    base = fallbackToTableOrLastGood(distanceMeters, "blend failed");
+                }
                 break;
 
             default:
                 base = fallbackShot;
                 lastSourceDescription = "fallback (unknown mode)";
                 break;
+        }
+
+        if (base.valid && base.source != ShotParameters.Source.FALLBACK
+                && base.source != ShotParameters.Source.LAST_KNOWN_GOOD) {
+            lastGoodShot = base;
         }
 
         if (!base.valid) {
@@ -296,6 +314,34 @@ public final class ShooterSystem {
         }
     }
 
+    /**
+     * Fallback chain: lookup table (clamped) → last known good → constant fallback.
+     * Used when the primary calculation source fails and a table lookup is reasonable.
+     */
+    private ShotParameters fallbackToTableOrLastGood(double distanceMeters, String reason) {
+        if (lookupTable.hasEntries()) {
+            ShotParameters tableResult = lookupTable.lookup(distanceMeters);
+            if (tableResult.valid) {
+                lastSourceDescription = "lookup (clamped, " + reason + ")";
+                return tableResult;
+            }
+        }
+        return fallbackToLastGoodOrConstant(reason);
+    }
+
+    /**
+     * Fallback chain: last known good → constant fallback.
+     * Used when neither the primary nor the lookup table produced a valid result.
+     */
+    private ShotParameters fallbackToLastGoodOrConstant(String reason) {
+        if (lastGoodShot != null) {
+            lastSourceDescription = "last known good (" + reason + ")";
+            return lastGoodShot.withSource(ShotParameters.Source.LAST_KNOWN_GOOD);
+        }
+        lastSourceDescription = "fallback (" + reason + ")";
+        return fallbackShot;
+    }
+
     private ShotParameters blendResults(double distanceMeters, double yawToTargetRad) {
         ShotParameters lookupResult = lookupTable.hasEntries()
                 ? lookupTable.lookup(distanceMeters) : null;
@@ -323,6 +369,35 @@ public final class ShooterSystem {
     /** Returns a human-readable description of which source produced the last shot. */
     public String getLastSourceDescription() {
         return lastSourceDescription;
+    }
+
+    /**
+     * Returns whether the last calculated shot came from a real calculation
+     * (solver, lookup, blended) rather than a fallback or last-known-good.
+     * Use this to decide whether to show a "shot ready" indicator to the driver.
+     */
+    public boolean isLastShotFresh() {
+        if (lastResult == null || !lastResult.valid) {
+            return false;
+        }
+        return lastResult.source != ShotParameters.Source.FALLBACK
+                && lastResult.source != ShotParameters.Source.LAST_KNOWN_GOOD;
+    }
+
+    /**
+     * Returns the last known good shot, or null if no successful calculation
+     * has been performed yet.
+     */
+    public ShotParameters getLastGoodShot() {
+        return lastGoodShot;
+    }
+
+    /**
+     * Clears the cached last-known-good shot. Useful when the robot
+     * re-localizes or the target changes significantly.
+     */
+    public void clearLastGoodShot() {
+        lastGoodShot = null;
     }
 
     /** Returns the last safety validation result, or null if not yet computed. */
@@ -376,6 +451,25 @@ public final class ShooterSystem {
      */
     public TrajectorySolver getSolver() {
         return solver;
+    }
+
+    /**
+     * Returns the horizontal distance to the target from the last solver input,
+     * or 0 if no input has been set. Useful for dashboard telemetry.
+     */
+    public double getDistanceToTarget() {
+        if (solverInput == null) {
+            return 0;
+        }
+        return solverInput.getHorizontalDistanceMeters();
+    }
+
+    /**
+     * Returns the last calculated shot's source as a human-readable string.
+     * Shorthand for {@code getLastResult().source.name()}.
+     */
+    public String getLastSourceName() {
+        return lastResult != null ? lastResult.source.name() : "NONE";
     }
 
     private static double lerp(double a, double b, double t) {

@@ -51,8 +51,7 @@ public class ExampleShooter extends AbsoluteSubsystem {
 
     private double shooterHeightMeters = 0.5;
     private Translation2d shooterOffset = new Translation2d(0.1, 0.1);
-    private Translation3d targetPosition = new Translation3d(0, 0.0, 0); 
-    // Updated in robot container based on alliance and can be changed for testing different target positions
+    private Translation3d targetPosition = new Translation3d(0, 0.0, 0);
     private boolean trackingEnabled = true;
     private boolean loggingEnabled = true;
 
@@ -73,7 +72,7 @@ public class ExampleShooter extends AbsoluteSubsystem {
                 .movingIterations(5)
                 .safetyMaxExitVelocity(30.0)
                 .build();
-        // All these values are made up your must tune them irl for best results
+
         ShotLookupTable table = new ShotLookupTable()
                 .addEntry(1.0, 78.0, 1000)
                 .addEntry(1.5, 75.0, 1100)
@@ -343,7 +342,7 @@ public class ExampleShooter extends AbsoluteSubsystem {
 
         double dx = targetPosition.getX() - shooterX;
         double dy = targetPosition.getY() - shooterY;
-        double yawRad = Math.atan2(dy, dx); // Finds the yaw angle from the given xy cords, returns in radians
+        double yawRad = Math.atan2(dy, dx);
         lastDistanceMeters = Math.hypot(dx, dy);
         targetYawDegrees = Math.toDegrees(yawRad);
 

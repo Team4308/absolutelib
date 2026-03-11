@@ -53,7 +53,9 @@ public final class ShotParameters {
         /** Manual override from driver. */
         MANUAL,
         /** Blended result from lookup table and solver. */
-        BLENDED
+        BLENDED,
+        /** Re-used from the last successful calculation because the current attempt failed. */
+        LAST_KNOWN_GOOD
     }
 
     /**
@@ -149,6 +151,34 @@ public final class ShotParameters {
      */
     public double getPitchRadians() {
         return Math.toRadians(pitchDegrees);
+    }
+
+    /**
+     * Returns true if these parameters came from the trajectory solver.
+     */
+    public boolean isFromSolver() {
+        return source == Source.SOLVER;
+    }
+
+    /**
+     * Returns true if these parameters came from the lookup table.
+     */
+    public boolean isFromLookup() {
+        return source == Source.LOOKUP_TABLE;
+    }
+
+    /**
+     * Returns true if these parameters are a fallback or last-known-good reuse.
+     */
+    public boolean isFromFallback() {
+        return source == Source.FALLBACK || source == Source.LAST_KNOWN_GOOD;
+    }
+
+    /**
+     * Returns true if this shot has been compensated for robot movement.
+     */
+    public boolean isMovementCompensated() {
+        return source == Source.MOVING_COMPENSATED || Math.abs(yawAdjustmentRadians) > 1e-6;
     }
 
     @Override

@@ -484,6 +484,33 @@ public class ShotInput {
     }
 
     /**
+     * Creates a ShotInput for a stationary robot shooting at a target.
+     * Convenience factory for the common case of no robot velocity and
+     * default solver settings.
+     *
+     * @param shooterX  shooter X position (meters)
+     * @param shooterY  shooter Y position (meters)
+     * @param shooterZ  shooter height (meters)
+     * @param targetX   target X position (meters)
+     * @param targetY   target Y position (meters)
+     * @param targetZ   target height (meters)
+     * @param targetRadius target acceptance radius (meters)
+     * @return a fully configured ShotInput
+     */
+    public static ShotInput stationary(double shooterX, double shooterY, double shooterZ,
+                                        double targetX, double targetY, double targetZ,
+                                        double targetRadius) {
+        double yaw = Math.atan2(targetY - shooterY, targetX - shooterX);
+        return builder()
+                .shooterPositionMeters(shooterX, shooterY, shooterZ)
+                .shooterYawRadians(yaw)
+                .targetPositionMeters(targetX, targetY, targetZ)
+                .targetRadiusMeters(targetRadius)
+                .includeAirResistance(true)
+                .build();
+    }
+
+    /**
      * Calculates horizontal (XY-plane) distance from shooter to target.
      *
      * @return horizontal distance in meters

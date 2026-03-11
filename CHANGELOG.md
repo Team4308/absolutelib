@@ -1,5 +1,30 @@
 # Changelog for AbsoluteLib v2
 
+## 2.0.6 — Bug Fixes
+
+
+
+### Bug Fixes
+- **`simulateFast()` Heun position update**: Fixed position update to use average velocity `0.5 * dt * (oldV + newV)` instead of post-update velocity. Now matches RK4 integration behavior for consistent accuracy.
+- **`velocityBufferMultiplier` field initializer**: Changed field default from 1.5 to 1.3 to match `resetToDefaults()` and CHANGELOG 2.0.4 documentation.
+- **`findAllAnglesWithVelocity` drag compensation**: Replaced hardcoded `1.15` multiplier with distance-scaled formula `1.0 + 0.15 * min(1.0, dist / 8.0)` that ramps from no compensation at close range to full 15% at 8m+.
+- ** `AddressableLEDBufferView ` Fixed error with invaild ranges. idk** 
+
+### New Methods
+- **`ShotParameters`**: Added `isFromSolver()`, `isFromLookup()`, `isFromFallback()`, `isMovementCompensated()` for quick source checks without comparing enum values.
+- **`TrajectoryResult`**: Added `hasFlywheelData()`, `hasDiscreteSolution()`, `getDistanceToTargetMeters()`, `getHeightDifferenceMeters()`, `getSpinUpTimeSeconds()`.
+- **`ShotInput.stationary()`**: Static factory method for the common case of a stationary robot shooting at a target — auto-calculates yaw and uses default solver settings.
+- **`ShooterSystem`**: Added `getDistanceToTarget()` (horizontal distance from last solver input) and `getLastSourceName()` for dashboard telemetry.
+
+## 2.0.6 — Smart Fallback Chain
+
+### Fallback Logic
+- **Smart fallback chain for all shot modes**: When the primary calculation method (solver, lookup, blended) fails, `ShooterSystem` now cascades through: lookup table (clamped to range) → last known good shot → constant fallback. Previously, all failures immediately fell through to the hardcoded constant fallback shot.
+- **`ShotParameters.Source.LAST_KNOWN_GOOD`**: New source tag identifies shots that were re-used from a previous successful calculation rather than freshly computed.
+- **`lastGoodShot` tracking in `ShooterSystem`**: The system caches the most recent valid, freshly-calculated shot. Only solver, lookup, blended, and RPM-feedback results are cached — fallback and last-known-good re-uses are never written back.
+- **`isLastShotFresh()`**: New convenience method returns `true` only when the last shot came from a real calculation (solver, lookup, blended), not a fallback or last-known-good. Use this for driver "shot ready" indicators.
+- **`getLastGoodShot()` / `clearLastGoodShot()`**: Access or reset the cached last-known-good shot. Call `clearLastGoodShot()` after re-localization or target changes to avoid stale data.
+
 ## 2.0.5 — Performance Optimization
 
 ### Solver Performance
