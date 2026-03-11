@@ -66,16 +66,14 @@ public class Patterns {
     /**
      * Creates an alliance-colored pattern (red or blue based on driver station)
      */
-    public static LEDPattern getAlliancePattern() {
-        Color color = getAllianceColor();
+    public static LEDPattern getAlliancePattern(Color color) {
         return createSolidPattern(color);
     }
 
     /**
      * Creates a breathing alliance-colored pattern
      */
-    public static LEDPattern getAllianceBreathing(double periodSeconds) {
-        Color color = getAllianceColor();
+    public static LEDPattern getAllianceBreathing(Color color,double periodSeconds) {
         return createBreathingPattern(color, periodSeconds);
     }
 
