@@ -78,6 +78,71 @@ Before building, install all required libraries:
 - `SolverConstants`: Runtime-tunable constants for all solver behavior
 - `GamePieces`: Predefined game pieces including 2026 REBUILT ball
 
+### Shot Table Precompute (JSON)
+
+If the trajectory solver is too heavy for the roboRIO, you can precompute a JSON
+lookup table on a desktop JVM and load the entries into `ShotLookupTable` at runtime.
+
+- `ShotTablePrecompute`: Samples robot poses within a bounding box, runs the solver
+    once per pose, and outputs JSON with pitch/RPM/TOF data.
+- `ShotTablePrecomputeRunner`: Example `main()` for generating JSON offline. Provide
+    a JSON config file with robot outline, bounds, and target settings.
+
+Example usage:
+
+Create a config file (e.g. `shot-precompute.json`):
+
+```json
+{
+    "bounds": { "minX": 1.0, "maxX": 7.5, "minY": 1.0, "maxY": 7.5 },
+    "outline": { "lengthMeters": 0.9, "widthMeters": 0.8, "shooterOffsetXMeters": 0.25, "shooterOffsetYMeters": 0.0 },
+    "gridStepMeters": 0.25,
+    "shooterZMeters": 0.5,
+    "targetX": 8.2,
+    "targetY": 4.1,
+    "targetZ": 2.0,
+    "targetRadiusMeters": 0.45,
+    "includeAirResistance": true,
+    "outputPath": "shot-table.json"
+}
+```
+
+Then run:
+
+```bash
+./gradlew runShotTablePrecompute -PprecomputeArgs="shot-precompute.json"
+```
+
+If you prefer Java configs (e.g., reuse your `ShooterConfig`/`FlywheelConfig` setup),
+create a profile class that implements `ShotTablePrecompute.PrecomputeProfile` and
+pass the class name instead of a JSON file:
+
+```java
+public class RebuiltPrecomputeProfile implements ShotTablePrecompute.PrecomputeProfile {
+    @Override
+    public ShotTablePrecompute.PrecomputeSpec buildSpec() {
+        ShotTablePrecompute.PrecomputeSpec spec = new ShotTablePrecompute.PrecomputeSpec();
+        spec.bounds = new ShotTablePrecompute.FieldBounds(1.0, 7.5, 1.0, 7.5);
+        spec.outline = new ShotTablePrecompute.RobotOutline(0.9, 0.8, 0.25, 0.0);
+        spec.solverConfig = TrajectorySolver.SolverConfig.defaults().toBuilder().build();
+        spec.flywheelConfig = FlywheelConfig.builder().name("Shooter").build();
+        spec.shooterConfig = ShooterConfig.builder().build();
+        return spec;
+    }
+}
+```
+
+```bash
+./gradlew runShotTablePrecompute -PprecomputeArgs="frc.robot.Util.RebuiltPrecomputeProfile"
+```
+
+Then load entries in your robot code:
+
+```java
+ShotLookupTable table = new ShotLookupTable();
+// parse JSON and call table.addEntry(distance, pitch, rpm, tofSeconds)
+```
+
 ### Example Code
 
 Under `./example/example-2026-Imported` you can find full robot code for all subsystems + simulation.

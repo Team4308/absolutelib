@@ -165,6 +165,18 @@ javadoc {
     }
 }
 
+// Shot table precompute runner
+tasks.register("runShotTablePrecompute", JavaExec) {
+    group = "application"
+    description = "Run the JSON shot table precompute runner."
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = "ca.team4308.absolutelib.math.trajectories.solver.ShotTablePrecomputeRunner"
+
+    if (project.hasProperty("precomputeArgs")) {
+        args project.property("precomputeArgs").toString().split("\\s+")
+    }
+}
+
 // Gradle wrapper
 wrapper {
   gradleVersion = '8.11'

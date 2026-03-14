@@ -1,5 +1,13 @@
 # Changelog for AbsoluteLib v2
 
+## 2.0.7 — Shot Table Precompute
+
+### New Tooling
+- **`ShotTablePrecompute`**: Samples robot poses inside a bounding box, using a robot outline (length/width + shooter offset) to generate JSON shot tables for every reachable pose.
+- **`ShotTablePrecomputeRunner`**: Desktop runner to emit a `shot-table.json` file for use with `ShotLookupTable`, driven by a JSON config file and progress output during generation.
+- **Java profile support**: `ShotTablePrecompute.PrecomputeProfile` lets teams reuse their existing `ShooterConfig`/`FlywheelConfig` setup when running the Gradle task.
+- **Gradle task `runShotTablePrecompute`**: Convenience task for running the precompute runner with `-PprecomputeArgs`.
+
 ## 2.0.6 — Bug Fixes
 
 
