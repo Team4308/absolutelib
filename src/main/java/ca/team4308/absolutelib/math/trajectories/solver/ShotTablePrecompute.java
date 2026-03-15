@@ -10,6 +10,8 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import ca.team4308.absolutelib.math.trajectories.flywheel.FlywheelConfig;
@@ -203,8 +205,11 @@ public final class ShotTablePrecompute {
          * @param shooterOffsetXMeters shooter offset from robot center (forward +)
          * @param shooterOffsetYMeters shooter offset from robot center (left +)
          */
-        public RobotOutline(double lengthMeters, double widthMeters,
-                double shooterOffsetXMeters, double shooterOffsetYMeters) {
+    @JsonCreator
+    public RobotOutline(@JsonProperty("lengthMeters") double lengthMeters,
+        @JsonProperty("widthMeters") double widthMeters,
+        @JsonProperty("shooterOffsetXMeters") double shooterOffsetXMeters,
+        @JsonProperty("shooterOffsetYMeters") double shooterOffsetYMeters) {
             if (lengthMeters <= 0 || widthMeters <= 0) {
                 throw new IllegalArgumentException("Robot outline dimensions must be > 0");
             }
@@ -248,7 +253,11 @@ public final class ShotTablePrecompute {
         private final double minY;
         private final double maxY;
 
-        public FieldBounds(double minX, double maxX, double minY, double maxY) {
+        @JsonCreator
+        public FieldBounds(@JsonProperty("minX") double minX,
+                @JsonProperty("maxX") double maxX,
+                @JsonProperty("minY") double minY,
+                @JsonProperty("maxY") double maxY) {
             if (maxX < minX || maxY < minY) {
                 throw new IllegalArgumentException("Invalid bounds: max must be >= min");
             }

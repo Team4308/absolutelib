@@ -1,0 +1,14 @@
+{
+  "bounds": { "minX": 0.0, "maxX": 16.54, "minY": 0.0, "maxY": 8.07 },
+  "outline": { "lengthMeters": 0.9, "widthMeters": 0.8, "shooterOffsetXMeters": 0.25, "shooterOffsetYMeters": 0.0 },
+  "gridStepMeters": 0.1,
+  "shooterZMeters": 0.5,
+  "targetX": 4.0,
+  "targetY": 3.535,
+  "targetZ": 2.6,
+  "targetRadiusMeters": 0.45,
+  "includeAirResistance": true,
+  "maxCandidates": 100,
+  "angleStepDegrees": 0.5,
+  "outputPath": "deploy/TrajectoryMap/shot-table-pass-left.json"
+}

@@ -49,7 +49,6 @@ public final class ShooterSystem {
     private double manualPitchDegrees = 0;
     private double manualRpm = 0;
 
-    private ShotParameters fallbackShot;
     private ShotParameters lastGoodShot = null;
 
     private ShotParameters lastResult = ShotParameters.invalid("Not yet calculated");
@@ -75,8 +74,6 @@ public final class ShooterSystem {
         this.rpmCorrector = new RPMCorrector(config);
         this.movementCompensator = new MovementCompensator(config);
         this.safetyValidator = new SafetyValidator(config);
-        this.fallbackShot = new ShotParameters(60.0, 3000, config.rpmToVelocity(3000),
-                3.0, ShotParameters.Source.FALLBACK);
     }
 
     /**
@@ -119,18 +116,6 @@ public final class ShooterSystem {
     }
 
     /**
-     * Sets the fallback shot used when the primary calculation fails or is
-     * rejected by the safety validator.
-     *
-     * @param pitchDegrees fallback pitch angle
-     * @param rpm          fallback flywheel RPM
-     */
-    public void setFallbackShot(double pitchDegrees, double rpm) {
-        this.fallbackShot = new ShotParameters(pitchDegrees, rpm,
-                config.rpmToVelocity(rpm), 0, ShotParameters.Source.FALLBACK);
-    }
-
-    /**
      * Updates the input parameters for the solver.
      * <p>
      * Must be called periodically to provide the solver with the latest
@@ -160,10 +145,11 @@ public final class ShooterSystem {
             double yawToTargetRad) {
         SafetyValidator.ValidationResult distCheck = safetyValidator.validateDistance(distanceMeters);
         if (!distCheck.safe) {
-            lastResult = fallbackShot;
-            lastSourceDescription = "fallback (bad distance: " + distCheck.reason + ")";
+            ShotParameters invalidShot = ShotParameters.invalid("bad distance: " + distCheck.reason);
+            lastResult = invalidShot;
+            lastSourceDescription = "invalid (bad distance: " + distCheck.reason + ")";
             lastValidation = distCheck;
-            return fallbackShot;
+            return invalidShot;
         }
 
         ShotParameters base;
@@ -211,10 +197,10 @@ public final class ShooterSystem {
                     if (base.valid) {
                         lastSourceDescription = "lookup (solver fallback)";
                     } else {
-                        base = fallbackToLastGoodOrConstant("solver and lookup failed");
+                        base = fallbackToLastGood("solver and lookup failed");
                     }
                 } else {
-                    base = fallbackToLastGoodOrConstant("solver failed, no table");
+                    base = fallbackToLastGood("solver failed, no table");
                 }
                 break;
 
@@ -228,8 +214,8 @@ public final class ShooterSystem {
                 break;
 
             default:
-                base = fallbackShot;
-                lastSourceDescription = "fallback (unknown mode)";
+                base = ShotParameters.invalid("unknown mode");
+                lastSourceDescription = "invalid (unknown mode)";
                 break;
         }
 
@@ -239,10 +225,10 @@ public final class ShooterSystem {
         }
 
         if (!base.valid) {
-            lastResult = fallbackShot;
-            lastSourceDescription += " → fallback";
+            lastResult = base;
+            lastSourceDescription += " -> invalid";
             lastValidation = SafetyValidator.ValidationResult.fail("Base calculation failed");
-            return fallbackShot;
+            return base;
         }
 
         ShotParameters compensated = movementCompensator.compensate(
@@ -264,9 +250,10 @@ public final class ShooterSystem {
                 return base;
             }
 
-            lastResult = fallbackShot;
-            lastSourceDescription += " → fallback (safety)";
-            return fallbackShot;
+            ShotParameters invalidShot = ShotParameters.invalid("safety rejection");
+            lastResult = invalidShot;
+            lastSourceDescription += " -> invalid (safety)";
+            return invalidShot;
         }
 
         lastResult = corrected;
@@ -315,7 +302,7 @@ public final class ShooterSystem {
     }
 
     /**
-     * Fallback chain: lookup table (clamped) → last known good → constant fallback.
+     * Fallback chain: lookup table (clamped) -> last known good.
      * Used when the primary calculation source fails and a table lookup is reasonable.
      */
     private ShotParameters fallbackToTableOrLastGood(double distanceMeters, String reason) {
@@ -326,20 +313,20 @@ public final class ShooterSystem {
                 return tableResult;
             }
         }
-        return fallbackToLastGoodOrConstant(reason);
+        return fallbackToLastGood(reason);
     }
 
     /**
-     * Fallback chain: last known good → constant fallback.
+     * Fallback chain: last known good -> invalid.
      * Used when neither the primary nor the lookup table produced a valid result.
      */
-    private ShotParameters fallbackToLastGoodOrConstant(String reason) {
+    private ShotParameters fallbackToLastGood(String reason) {
         if (lastGoodShot != null) {
             lastSourceDescription = "last known good (" + reason + ")";
             return lastGoodShot.withSource(ShotParameters.Source.LAST_KNOWN_GOOD);
         }
-        lastSourceDescription = "fallback (" + reason + ")";
-        return fallbackShot;
+        lastSourceDescription = "invalid (" + reason + ")";
+        return ShotParameters.invalid(reason);
     }
 
     private ShotParameters blendResults(double distanceMeters, double yawToTargetRad) {

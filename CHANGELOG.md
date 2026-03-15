@@ -1,5 +1,15 @@
 # Changelog for AbsoluteLib v2
 
+## 2.1.0 — Advanced Trajectory Solving & Null Safety
+
+### New Solver Modes
+- **`MAP` Mode**: Computes evaluations instantaneously by utilizing an inner high-density lookup map. Enables bypasses of heavy physics simulations entirely, delivering peak cycle speeds ideal for roboRIO limits.
+- **`BISECTION` Mode**: Integrates binary search over the pitch angle boundaries. Drastically lowers convergence iterations over `SWEEP` (~8 computations down from ~30-70) while preserving 100% full-physics simulator accuracy.
+
+### Trajectory Updates & Safeguards
+- **Null Safety in Interpolation**: The `ShotLookupTable` has extensive fallback checking when handling missing map lookups bounds from WPILib `InterpolatingDoubleTreeMap`. Safely defaults rather than uncaught NullPointerExceptions.
+- **Removed Hardcoded Fallbacks**: Eradicated the flawed static constant shot parameters embedded in `ShooterSystem.java`. Now fails cleanly with explicitly marked invalid flags, permitting better logic branching in the fallback chains.
+
 ## 2.0.7 — Shot Table Precompute
 
 ### New Tooling

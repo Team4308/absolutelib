@@ -335,9 +335,11 @@ public class Shooter {
             .build();
             
         solver = new TrajectorySolver(GamePieces.REBUILT_2026_BALL, solverConfig);
-        // SWEEP mode finds best angle by testing candidates (thorough)
-        // ITERATIVE mode is faster but less robust for complex obstacles
-        solver.setSolveMode(TrajectorySolver.SolveMode.SWEEP);
+        // BISECTION mode finds best angle using a remarkably fast binary search while preserving physics precision
+        // MAP mode evaluates ultra-fast lookup arrays bypassing simulation for instantaneous fallback
+        // SWEEP mode is thorough but computationally heavy; tests angle candidates incrementally
+        // CONSTRAINT mode uses algebraic checks focusing heavily on geometric intersections boundaries
+        solver.setSolveMode(TrajectorySolver.SolveMode.BISECTION);
 
         // 2. Configure Shooter Limits
         ShooterConfig config = ShooterConfig.builder()

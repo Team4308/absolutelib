@@ -97,8 +97,26 @@ public final class ShotLookupTable {
             return ShotParameters.invalid("Lookup table is empty");
         }
         double clamped = Math.max(minDistance, Math.min(maxDistance, distanceMeters));
-        double pitch = pitchMap.get(clamped);
-        double rpm = rpmMap.get(clamped);
+        
+        Double pitchObj = pitchMap.get(clamped);
+        Double rpmObj = rpmMap.get(clamped);
+        
+        // WPILib InterpolatingDoubleTreeMap can return null in some edge cases (e.g., size == 1)
+        if (pitchObj == null) {
+            pitchObj = pitchMap.get(minDistance);
+        }
+        if (rpmObj == null) {
+            rpmObj = rpmMap.get(minDistance);
+        }
+        
+        if (pitchObj == null || rpmObj == null) {
+            // Hard fallback if something is severely wrong with the map
+            return ShotParameters.invalid("Lookup map interpolation failed (null)");
+        }
+        
+        double pitch = pitchObj;
+        double rpm = rpmObj;
+        
         return new ShotParameters(pitch, rpm, rpmToVelocity(rpm),
                 distanceMeters, ShotParameters.Source.LOOKUP_TABLE);
     }
@@ -114,7 +132,11 @@ public final class ShotLookupTable {
             return 0;
         }
         double clamped = Math.max(minDistance, Math.min(maxDistance, distanceMeters));
-        return tofMap.get(clamped);
+        Double tofObj = tofMap.get(clamped);
+        if (tofObj == null) {
+            tofObj = tofMap.get(minDistance);
+        }
+        return tofObj != null ? tofObj : 0.0;
     }
 
     /** Returns {@code true} if at least one entry has been added. */
