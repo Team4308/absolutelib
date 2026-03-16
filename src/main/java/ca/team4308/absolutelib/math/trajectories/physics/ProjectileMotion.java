@@ -603,9 +603,7 @@ public class ProjectileMotion {
                 ? calculateHighArcAngle(horizontalDistance, heightDiff, velocity)
                 : calculateLowArcAngle(horizontalDistance, heightDiff, velocity);
 
-        // If analytical solution fails, try a broader search
-        // The analytical solution doesn't account for air resistance and spin
-        // which can allow shots that seem impossible in vacuum physics
+
         if (Double.isNaN(angle)) {
             // Try a sweep to find any viable angle
             double bestAngle = Double.NaN;

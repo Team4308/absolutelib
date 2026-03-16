@@ -55,12 +55,15 @@ public class ExampleShooter extends AbsoluteSubsystem {
     private boolean trackingEnabled = true;
     private boolean loggingEnabled = true;
 
+
     public ExampleShooter() {
         super();
 
         flywheelLeader = new TalonFX(40);
 
-        ShooterConfig config = ShooterConfig.builder()
+        // --- 1. Mechanical Setup ---
+        // (ShooterConfig defines hardware limits and electronics)
+        ShooterConfig shooterConfig = ShooterConfig.builder()
                 .pitchLimits(47.5, 82.5)
                 .rpmLimits(0, 6000) // Kraken xt60 max rpm
                 .rpmToVelocityFactor(0.00532)
@@ -86,17 +89,18 @@ public class ExampleShooter extends AbsoluteSubsystem {
                 .addEntry(7.0, 50.0, 3000)
                 .addEntry(8.0, 48.0, 3300);
 
+        // --- 2. Trajectory Logic Setup ---
+        // (SolverConfig defines physics simulation and search algorithms)
         GamePiece gamePiece = GamePieces.REBUILT_2026_BALL;
-        SolverConstants.setMinTargetDistanceMeters(0.05);
-        SolverConstants.setVelocityBufferMultiplier(1.2);
-        SolverConstants.setRimClearanceMeters(0.15);
-        TrajectorySolver.SolverConfig solverConfig = TrajectorySolver.SolverConfig.defaults()
+        TrajectorySolver.SolverConfig solverConfig = TrajectorySolver.SolverConfig.coProcessor()
                 .toBuilder()
                 .minPitchDegrees(47.5)
                 .maxPitchDegrees(82.5)
                 .build();
+
         solver = new TrajectorySolver(gamePiece, solverConfig);
-        solver.setSolveMode(TrajectorySolver.SolveMode.SWEEP);
+        solver.setSolveMode(TrajectorySolver.SolveMode.HYBRID); // Seed bisection with lookup table
+
         FlywheelConfig flywheelConfig = FlywheelConfig.builder()
                 .name("Example 2026 Shooter")
                 .arrangement(WheelArrangement.SINGLE)
@@ -108,9 +112,10 @@ public class ExampleShooter extends AbsoluteSubsystem {
                 .gearRatio(1.0) 
                 .build();
         solver.setFlywheel(flywheelConfig);
-        shooterSystem = new ShooterSystem(config, table, solver);
+
+        // --- 3. System Integration ---
+        shooterSystem = new ShooterSystem(shooterConfig, table, solver);
         shooterSystem.setMode(ShotMode.SOLVER_WITH_LOOKUP_FALLBACK);
-        shooterSystem.setFallbackShot(60.0, 6000);
 
         solver.setDebugEnabled(true);
     }
@@ -174,7 +179,7 @@ public class ExampleShooter extends AbsoluteSubsystem {
 
     @Override
     public void periodic() {
-        currentRpmSupplier = () -> RobotBase.isReal() ? flywheelLeader.getVelocity().getValueAsDouble() * 60.0 : currentShot.rpm; 
+        double measuredRpm = RobotBase.isReal() ? flywheelLeader.getVelocity().getValueAsDouble() * 60.0 : currentShot.rpm; 
 
         if (trackingEnabled && poseSupplier != null) {
             updateShot();
@@ -185,36 +190,28 @@ public class ExampleShooter extends AbsoluteSubsystem {
         }
 
         if (loggingEnabled) {
-            recordOutput("ValidShot", currentShot.valid);
-            recordOutput("TargetRPM", currentShot.rpm);
-            recordOutput("TargetPitchDeg", currentShot.pitchDegrees);
-            recordOutput("TargetYawDeg", targetYawDegrees);
-            recordOutput("Distance", lastDistanceMeters);
-            recordOutput("ShotSource", currentShot.source.name());
-            recordOutput("Mode", shooterSystem.getMode().name());
-            recordOutput("SourceDetail", shooterSystem.getLastSourceDescription());
-            recordOutput("TrackingEnabled", trackingEnabled);
+            ShooterSystem.ShooterTelemetry telemetry = shooterSystem.getSystemTelemetry(measuredRpm);
             
-            if (currentRpmSupplier != null) {
-                double measured = currentRpmSupplier.get();
-                recordOutput("MeasuredRPM", measured);
-                recordOutput("RpmDeficit", currentShot.rpm - measured);
-                recordOutput("ReadyToFire", shooterSystem.isReadyToFire(measured));
+            recordOutput("Shooter/Mode", telemetry.mode.name());
+            recordOutput("Shooter/Source", telemetry.source.name());
+            recordOutput("Shooter/SourceDetail", telemetry.sourceDetail);
+            recordOutput("Shooter/Distance", telemetry.distanceMeters);
+            recordOutput("Shooter/TargetRPM", telemetry.targetRpm);
+            recordOutput("Shooter/TargetPitchDeg", telemetry.targetPitchDegrees);
+            recordOutput("Shooter/IsValid", telemetry.isValid);
+            recordOutput("Shooter/IsReady", telemetry.isReady);
+            
+            if (telemetry.safetyResult != null) {
+                recordOutput("Shooter/Safety/Safe", telemetry.safetyResult.safe);
+                recordOutput("Shooter/Safety/Reason", telemetry.safetyResult.reason);
             }
 
             Pose3d goalPose = new Pose3d(targetPosition, new Rotation3d());
             Logger.recordOutput("ExampleShooter/GoalPose3d", goalPose);
-            Logger.recordOutput("ExampleShooter/GoalPose3dArray", new Pose3d[]{goalPose});
-
-            Pose3d shooterYawPose = new Pose3d(new Translation3d(0, 0, 0), new Rotation3d(0, 0, Math.toRadians(targetYawDegrees)));
-            Logger.recordOutput("ExampleShooter/ShooterYawPose3d", shooterYawPose);
-            Logger.recordOutput("ExampleShooter/Test", new Pose3d(new Translation3d(0, 0, 0), new Rotation3d(0, 0, 0)));
-
-            recordOutput("TargetX", targetPosition.getX());
-            recordOutput("TargetY", targetPosition.getY());
-            recordOutput("TargetZ", targetPosition.getZ());
-            recordOutput("ShooterHeight", shooterHeightMeters);
-            recordOutput("ExitVelocity", currentShot.exitVelocityMps);
+            
+            recordOutput("TargetYawDeg", targetYawDegrees);
+            recordOutput("MeasuredRPM", measuredRpm);
+            recordOutput("RpmDeficit", telemetry.targetRpm - measuredRpm);
         }
 
         logTrajectoryDebug();
@@ -227,10 +224,12 @@ public class ExampleShooter extends AbsoluteSubsystem {
             return;
         }
 
+        recordOutput("Trajectory/Trace/SourceMode", trajResult.getSolveModeUsed().name());
+        recordOutput("Trajectory/Trace/TimeMs", trajResult.getComputationTimeMs());
+        recordOutput("Trajectory/Trace/Iterations", trajResult.getIterations());
+
         recordOutput("Trajectory/Status", trajResult.getStatus().name());
         recordOutput("Trajectory/StatusMessage", trajResult.getStatusMessage());
-        recordOutput("Trajectory/Confidence", trajResult.getConfidenceScore());
-        recordOutput("Trajectory/ComputationTimeMs", lastComputationTimeMs);
 
         if (trajResult.isSuccess()) {
             recordOutput("Trajectory/PitchDeg", trajResult.getPitchAngleDegrees());

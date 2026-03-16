@@ -1,5 +1,26 @@
 # Changelog for AbsoluteLib v2
 
+## 2.1.1 — Precompute System Upgrade
+
+### Full Robot Config in JSON
+- **Flywheel config in JSON**: `motorName`, `wheelDiameterInches`, `wheelWidthInches`, `gearRatio`, `motorsPerWheel`, `wheelCount`, `compressionRatio`, and `wheelArrangement` are now fields in the JSON precompute config. Motors are resolved by name from `FRCMotors` (e.g. `"Kraken X60"`, `"NEO Vortex"`, `"Falcon 500"`). No Java code needed.
+- **Game piece selection**: `gamePieceYear` field (e.g. `2026`) selects the correct ball properties (diameter, mass, drag) from `GamePieces`.
+- **Solve mode**: `solveMode` field (`"SWEEP"`, `"CONSTRAINT"`, `"BISECTION"`) controls which solver path is used during precompute.
+- **Sweep step**: `sweepStepDegrees` field lets you tune angle resolution for SWEEP mode right from JSON.
+
+### Alliance Mirroring
+- **`lookupMirrored(robotX, robotY)`**: New method on `ShotTable` that mirrors the robot X coordinate about the field center line. Precompute once for one alliance, look up for both at runtime.
+- **`lookupNearest(robotX, robotY)`**: New coordinate-based lookup that finds the nearest precomputed entry by (X,Y) distance.
+- **`fieldLengthMeters`**: Config field (default 16.54m) defines the mirror axis. Stored in JSON metadata for runtime use.
+- **`halfFieldOnly`**: When `true`, bounds are clamped to one half of the field, cutting precompute time and table size in half.
+
+### Precision Mode
+- **`precisionMode` flag**: When `true`, automatically overrides grid step to ≤0.10m, angle step to ≤0.5°, max candidates to ≥100, and velocity refinement to 12 iterations. Designed for offline precompute where compute time is unlimited.
+
+### Enhanced Output Metadata
+- Output JSON now includes: `version`, `gameYear`, `motorName`, `fieldLengthMeters`, `halfFieldOnly` alongside the existing grid/bounds/outline metadata.
+
+
 ## 2.1.0 — Advanced Trajectory Solving & Null Safety
 
 ### New Solver Modes

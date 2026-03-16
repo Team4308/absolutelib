@@ -459,6 +459,66 @@ public final class ShooterSystem {
         return lastResult != null ? lastResult.source.name() : "NONE";
     }
 
+    /**
+     * Unified telemetry information for the shooter system.
+     * Use this to get all relevant status data in one call for dashboarding.
+     */
+    public static class ShooterTelemetry {
+        public final ShotMode mode;
+        public final ShotParameters.Source source;
+        public final String sourceDetail;
+        public final double distanceMeters;
+        public final double targetRpm;
+        public final double targetPitchDegrees;
+        public final boolean isValid;
+        public final boolean isReady;
+        public final SafetyValidator.ValidationResult safetyResult;
+
+        public ShooterTelemetry(ShotMode mode, ShotParameters result, String sourceDetail, 
+                double distance, boolean isReady, SafetyValidator.ValidationResult safety) {
+            this.mode = mode;
+            this.isValid = result != null && result.valid;
+            
+            if (result != null) {
+                this.source = result.source;
+                this.targetRpm = result.rpm;
+                this.targetPitchDegrees = result.pitchDegrees;
+            } else {
+                this.source = ShotParameters.Source.FALLBACK;
+                this.targetRpm = 0;
+                this.targetPitchDegrees = 0;
+            }
+            
+            this.sourceDetail = sourceDetail != null ? sourceDetail : "none";
+            this.distanceMeters = distance;
+            this.isReady = isReady;
+            this.safetyResult = safety;
+        }
+
+        @Override
+        public String toString() {
+            return String.format("Mode: %s | Source: %s (%s) | Dist: %.2fm | RPM: %.0f | Pitch: %.1f° | Valid: %b | Ready: %b",
+                    mode, source, sourceDetail, distanceMeters, targetRpm, targetPitchDegrees, isValid, isReady);
+        }
+    }
+
+    /**
+     * Returns a snapshot of the system's current telemetry.
+     * 
+     * @param measuredRpm current flywheel RPM from sensors
+     * @return snapshots of the shooter state
+     */
+    public ShooterTelemetry getSystemTelemetry(double measuredRpm) {
+        return new ShooterTelemetry(
+                mode, 
+                lastResult, 
+                lastSourceDescription, 
+                getDistanceToTarget(),
+                isReadyToFire(measuredRpm),
+                lastValidation
+        );
+    }
+
     private static double lerp(double a, double b, double t) {
         return a + (b - a) * t;
     }

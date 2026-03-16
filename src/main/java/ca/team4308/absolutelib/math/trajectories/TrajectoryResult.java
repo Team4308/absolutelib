@@ -41,22 +41,23 @@ public class TrajectoryResult {
             double effectivePitch = Math.atan2(launchVz, Math.sqrt(launchVx * launchVx + launchVy * launchVy));
             double effectiveYaw = Math.atan2(launchVy, launchVx);
 
-            ca.team4308.absolutelib.math.trajectories.physics.ProjectileMotion projectileMotion
-                    = new ca.team4308.absolutelib.math.trajectories.physics.ProjectileMotion();
-            ca.team4308.absolutelib.math.trajectories.physics.ProjectileMotion.TrajectoryResult simResult = projectileMotion.simulate(
+            ca.team4308.absolutelib.math.trajectories.physics.ProjectileMotion pm
+                    = new ca.team4308.absolutelib.math.trajectories.physics.ProjectileMotion(
+                            ca.team4308.absolutelib.math.trajectories.physics.AirResistance.withMagnus());
+            ca.team4308.absolutelib.math.trajectories.physics.ProjectileMotion.TrajectoryResult simResult = pm.simulate(
                     gamePiece != null ? gamePiece : ca.team4308.absolutelib.math.trajectories.gamepiece.GamePieces.getCurrent(),
                     input.getShooterX(), input.getShooterY(), input.getShooterZ(),
                     totalLaunchSpeed,
                     effectivePitch,
                     effectiveYaw,
-                    0,
+                    flywheelSimulation != null ? flywheelSimulation.ballSpinRpm : 0,
                     input.getTargetX(), input.getTargetY(), input.getTargetZ(),
-                    0
+                    input.getTargetRadius()
             );
 
             int validCount = 0;
-            for (int i = 0; i < simResult.trajectory.length; i++) {
-                if (simResult.trajectory[i] == null) {
+            for (ca.team4308.absolutelib.math.trajectories.physics.ProjectileMotion.TrajectoryState s : simResult.trajectory) {
+                if (s == null) {
                     break;
                 }
                 validCount++;
@@ -147,6 +148,9 @@ public class TrajectoryResult {
 
     // Debug info (null unless debug mode was enabled on the solver)
     private SolveDebugInfo debugInfo;
+    private TrajectorySolver.SolveMode solveModeUsed = TrajectorySolver.SolveMode.CONSTRAINT;
+    private double computationTimeMs = 0;
+    private int iterations = 0;
 
     /**
      * Represents an RPM/angle combination that satisfies constraints.
@@ -175,9 +179,6 @@ public class TrajectoryResult {
         }
     }
 
-    /**
-     * Creates a successful trajectory result.
-     */
     public TrajectoryResult(ShotInput input, GamePiece gamePiece,
             double pitchAngleRadians, double yawAdjustmentRadians,
             double requiredVelocityMps,
@@ -203,6 +204,19 @@ public class TrajectoryResult {
         this.marginOfErrorMeters = marginOfErrorMeters;
         this.discreteSolution = discreteSolution;
         this.confidenceScore = confidenceScore;
+    }
+
+    /**
+     * Attaches trace information to this result.
+     * 
+     * @param mode solver mode used
+     * @param timeMs time taken to calculate (ms)
+     * @param iter number of iterations (sweep candidates or bisection steps)
+     */
+    public void setTraceInfo(TrajectorySolver.SolveMode mode, double timeMs, int iter) {
+        this.solveModeUsed = mode;
+        this.computationTimeMs = timeMs;
+        this.iterations = iter;
     }
 
     /**
@@ -251,6 +265,15 @@ public class TrajectoryResult {
     public double getYawAdjustmentDegrees() {
         return Math.toDegrees(yawAdjustmentRadians);
     }
+
+    /** Returns the solver mode used for this solution. */
+    public TrajectorySolver.SolveMode getSolveModeUsed() { return solveModeUsed; }
+
+    /** Returns the computation time in milliseconds. */
+    public double getComputationTimeMs() { return computationTimeMs; }
+
+    /** Returns the number of iterations or candidates tested. */
+    public int getIterations() { return iterations; }
 
     /**
      * Gets the recommended motor power percentage (0.0 to 1.0).

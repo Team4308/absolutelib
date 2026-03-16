@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
+import ca.team4308.absolutelib.math.trajectories.shooter.ShotLookupTable;
 import edu.wpi.first.math.util.Units;
 
 /**
@@ -73,7 +74,6 @@ public class ShotInput {
     private final double robotVx;
     private final double robotVy;
 
-    private final boolean preferHighArc;
     private final boolean includeAirResistance;
 
     private final ShotPreference shotPreference;
@@ -90,6 +90,8 @@ public class ShotInput {
     private final double preferredArcHeightMeters;
     private final double arcBiasStrength;
 
+    private final ShotLookupTable map;
+
     /**
      * Full constructor with all new parameters.
      */
@@ -99,13 +101,14 @@ public class ShotInput {
                       double targetX, double targetY, double targetZ,
                       double targetRadius,
                       double robotVx, double robotVy,
-                      boolean preferHighArc, boolean includeAirResistance,
+                      boolean includeAirResistance,
                       ShotPreference shotPreference, int maxCandidates,
                       double minPitchDegrees, double maxPitchDegrees,
                       double minVelocityMps, double maxVelocityMps,
                       double angleStepDegrees, double minArcHeightMeters,
                       List<ObstacleConfig> obstacles, boolean collisionCheckEnabled,
-                      double preferredArcHeightMeters, double arcBiasStrength) {
+                      double preferredArcHeightMeters, double arcBiasStrength,
+                      ShotLookupTable map) {
         this.shooterX = shooterX;
         this.shooterY = shooterY;
         this.shooterZ = shooterZ;
@@ -116,7 +119,6 @@ public class ShotInput {
         this.targetRadius = targetRadius;
         this.robotVx = robotVx;
         this.robotVy = robotVy;
-        this.preferHighArc = preferHighArc;
         this.includeAirResistance = includeAirResistance;
         this.shotPreference = shotPreference;
         this.maxCandidates = maxCandidates;
@@ -130,6 +132,7 @@ public class ShotInput {
         this.collisionCheckEnabled = collisionCheckEnabled;
         this.preferredArcHeightMeters = preferredArcHeightMeters;
         this.arcBiasStrength = arcBiasStrength;
+        this.map = map;
     }
 
     /**
@@ -147,7 +150,6 @@ public class ShotInput {
         private double targetRadius = 0.15;
         private double robotVx = 0;
         private double robotVy = 0;
-        private boolean preferHighArc = true;
         private boolean includeAirResistance = true;
 
         private ShotPreference shotPreference = ShotPreference.AUTO;
@@ -159,10 +161,11 @@ public class ShotInput {
         private double angleStepDegrees = 1.0;
         private double minArcHeightMeters = 0.0;
 
-        private List<ObstacleConfig> obstacles = new ArrayList<>();
+        private final List<ObstacleConfig> obstacles = new ArrayList<>();
         private boolean collisionCheckEnabled = false;
         private double preferredArcHeightMeters = 0.0;
         private double arcBiasStrength = 0.5;
+        private ShotLookupTable map = null;
 
         /**
          * Sets shooter position in meters.
@@ -292,7 +295,6 @@ public class ShotInput {
 
         public Builder shotPreference(ShotPreference preference) {
             this.shotPreference = preference;
-            this.preferHighArc = (preference == ShotPreference.HIGH_CLEARANCE);
             return this;
         }
 
@@ -441,6 +443,14 @@ public class ShotInput {
         }
 
         /**
+         * Sets the lookup table for precomputed shots.
+         */
+        public Builder shotMap(ShotLookupTable map) {
+            this.map = map;
+            return this;
+        }
+
+        /**
          * Configures for fast solving with fewer candidates.
          */
 
@@ -467,13 +477,14 @@ public class ShotInput {
                 targetX, targetY, targetZ,
                 targetRadius,
                 robotVx, robotVy,
-                preferHighArc, includeAirResistance,
+                includeAirResistance,
                 shotPreference, maxCandidates,
                 minPitchDegrees, maxPitchDegrees,
                 minVelocityMps, maxVelocityMps,
                 angleStepDegrees, minArcHeightMeters,
                 obstacles, collisionCheckEnabled,
-                preferredArcHeightMeters, arcBiasStrength
+                preferredArcHeightMeters, arcBiasStrength,
+                map
             );
         }
     }
@@ -587,6 +598,9 @@ public class ShotInput {
     public boolean isCollisionCheckEnabled() { return collisionCheckEnabled; }
     public double getPreferredArcHeightMeters() { return preferredArcHeightMeters; }
     public double getArcBiasStrength() { return arcBiasStrength; }
+
+    /** Returns the precomputed shot map, if any. */
+    public ShotLookupTable getMap() { return map; }
 
     /**
      * Whether any obstacle's footprint lies between shooter and target.

@@ -14,61 +14,71 @@ import ca.team4308.absolutelib.math.trajectories.physics.ProjectileMotion;
  * Trajectory solver for FRC shooting. Handles projectile physics, flywheel
  * selection.
  *
- * <p>Supports two solve modes: {@link SolveMode#CONSTRAINT} (two-constraint algebraic solver)
- * and {@link SolveMode#SWEEP} (full pitch-range sweep with miss-distance selection).
- * Both modes account for air resistance, Magnus effect, robot movement compensation,
- * and obstacle avoidance.
- *
- * <p>The solver uses a {@link FlywheelGenerator} to find optimal flywheel configurations,
- * then simulates the full trajectory with RK4 integration via {@link ProjectileMotion}.
- *
- * @see #solve(ShotInput)
- * @see #solveAtCurrentRpm(ShotInput, FlywheelConfig, double)
+ * <p>
+ * This solver acts as the "Brain" of the shooter, translating desired target hits into 
+ * physical actuator setpoints. It encapsulates a high-fidelity RK4 integrator and 
+ * multiple search strategies to balance accuracy with computation budget.
+ * </p>
+ * 
+ * <h2>Configuration Hierarchy</h2>
+ * <p>The system is split into two distinct configuration layers:</p>
+ * <ul>
+ *   <li><b>SolverConfig (This Class):</b> Governs the <i>Physics & Math</i> logic. 
+ *       Includes simulation timesteps, search tolerances, and solve modes. Change these for performance or accuracy tuning.</li>
+ *   <li><b>ShooterConfig (ShooterSystem):</b> Governs the <i>Mechanical/Electronic</i> hardware.
+ *       Includes physical hard-stops, gear ratios, and conversion factors. Change these to match your robot's build.</li>
+ * </ul>
  */
 public class TrajectorySolver {
 
     /**
      * Strategy for finding a trajectory.
      */
-
     public enum SolveMode {
 
         /**
-         * Two-constraint algebraic solver (default).
+         * Direct algebraic solver. Computes the required velocity and pitch by solving
+         * the system of equations for a given entry angle or peak clearance.
+         * Best for long-range shots where the parabolic arc is well-behaved.
          */
-
         CONSTRAINT,
-
         /**
-         * Full pitch-range sweep with miss-distance selection.
+         * Discrete search across the entire pitch range. Simulates multiple trajectories
+         * and picks the one with the smallest miss distance.
+         * Best for complex scenarios with high drag or vertical obstacles.
          */
-
         SWEEP,
-
         /**
-         * Uses an internally populated interpolation map for maximum speed on the roboRIO.
+         * Fast-lookup mode. Interpolates between precomputed states for near-instant execution.
          */
-
         MAP,
-
         /**
-         * Binary Search (Bisection) solving. Much faster than SWEEP (uses ~5 iterations instead of ~30)
-         * while keeping full physics simulation accuracy.
+         * Binary Search (Bisection) solving. Much faster than SWEEP (uses ~5
+         * iterations instead of ~30) while keeping full physics simulation
+         * accuracy.
          */
-
-        BISECTION
+        BISECTION,
+        /**
+         * Hybrid mode for roboRIO: uses lookup table to seed a narrow, high-precision
+         * bisection search.
+         */
+        HYBRID
     }
 
     /**
-     * Configuration for the solver.
+     * Configuration for the trajectory math engine.
+     * 
+     * <p>Use this to tune the "how" of the search: speed vs. precision. 
+     * Constants like {@link #simulationTimeStep} and {@link #angleTolerance} 
+     * live here.</p>
      */
-
     public static class SolverConfig {
 
         private final double minPitchDegrees;
         private final double maxPitchDegrees;
         private final double minRpm;
         private final double maxRpm;
+        private final boolean useParallel;
 
         private final double rpmTolerance;
         private final double angleTolerance;
@@ -83,7 +93,6 @@ public class TrajectorySolver {
         /**
          * Multiplier for target radius when checking hits.
          */
-
         private final double hoopToleranceMultiplier;
 
         /**
@@ -92,19 +101,22 @@ public class TrajectorySolver {
         private final double sweepStepDegrees;
 
         /**
-         * Number of binary-search iterations for velocity refinement.
+         * Number of iterations used to refine the initial velocity estimate after
+         * drag simulation reveals a miss. Higher values closer the "Velocity Gap"
+         * created by air resistance.
          */
         private final int velocityRefineIterations;
 
         /**
-         * Simulation timestep (seconds) for the ProjectileMotion integrator.
-         * Smaller = more accurate but slower. Default uses PhysicsConstants.DEFAULT_TIME_STEP.
+         * The temporal resolution (seconds) of the physics integrator. 
+         * A step of 0.02 matches the RIO loop frequency, while 0.005 provides
+         * extreme precision for long-range drag modeling.
          */
         private final double simulationTimeStep;
 
         /**
-         * Fast simulation timestep (seconds) for search/sweep passes.
-         * Larger = faster but less accurate. Default is 5x the simulation timestep.
+         * Fast simulation timestep (seconds) for search/sweep passes. Larger =
+         * faster but less accurate. Default is 5x the simulation timestep.
          */
         private final double fastSimulationTimeStep;
 
@@ -125,6 +137,7 @@ public class TrajectorySolver {
             this.velocityRefineIterations = builder.velocityRefineIterations;
             this.simulationTimeStep = builder.simulationTimeStep;
             this.fastSimulationTimeStep = builder.fastSimulationTimeStep;
+            this.useParallel = builder.useParallel;
         }
 
         public double getMinPitchDegrees() {
@@ -191,12 +204,20 @@ public class TrajectorySolver {
             return fastSimulationTimeStep;
         }
 
-        /** Creates a new solver config builder with default values. */
+        public boolean useParallel() {
+            return useParallel;
+        }
+
+        /**
+         * Creates a new solver config builder with default values.
+         */
         public static Builder builder() {
             return new Builder();
         }
 
-        /** Creates a builder pre-populated with this config's values. */
+        /**
+         * Creates a builder pre-populated with this config's values.
+         */
         public Builder toBuilder() {
             return new Builder()
                     .minPitchDegrees(minPitchDegrees)
@@ -214,12 +235,13 @@ public class TrajectorySolver {
                     .sweepStepDegrees(sweepStepDegrees)
                     .velocityRefineIterations(velocityRefineIterations)
                     .simulationTimeStep(simulationTimeStep)
-                    .fastSimulationTimeStep(fastSimulationTimeStep);
+                    .fastSimulationTimeStep(fastSimulationTimeStep)
+                    .useParallel(useParallel);
         }
 
         /**
-         * Builder for fluent construction of {@link SolverConfig}.
-         * All values have sensible defaults for typical FRC use.
+         * Builder for fluent construction of {@link SolverConfig}. All values
+         * have sensible defaults for typical FRC use.
          */
         public static class Builder {
 
@@ -243,117 +265,165 @@ public class TrajectorySolver {
             private int velocityRefineIterations = 8;
             private double simulationTimeStep = ca.team4308.absolutelib.math.trajectories.physics.PhysicsConstants.DEFAULT_TIME_STEP;
             private double fastSimulationTimeStep = ca.team4308.absolutelib.math.trajectories.physics.PhysicsConstants.DEFAULT_TIME_STEP * 5.0;
+            private boolean useParallel = false;
 
-            /** Sets the minimum launch pitch angle in degrees (default 0). */
+            /**
+             * Sets the minimum launch pitch angle in degrees (default 0).
+             */
             public Builder minPitchDegrees(double val) {
                 this.minPitchDegrees = val;
                 return this;
             }
 
-            /** Sets the maximum launch pitch angle in degrees (default 90). */
+            /**
+             * Sets the maximum launch pitch angle in degrees (default 90).
+             */
             public Builder maxPitchDegrees(double val) {
                 this.maxPitchDegrees = val;
                 return this;
             }
 
-            /** Sets the minimum flywheel RPM to consider (default 0). */
+            /**
+             * Sets the minimum flywheel RPM to consider (default 0).
+             */
             public Builder minRpm(double val) {
                 this.minRpm = val;
                 return this;
             }
 
-            /** Sets the maximum flywheel RPM to consider (default 10,000). */
+            /**
+             * Sets the maximum flywheel RPM to consider (default 10,000).
+             */
             public Builder maxRpm(double val) {
                 this.maxRpm = val;
                 return this;
             }
 
-            /** Sets the RPM convergence tolerance (default 100). */
+            /**
+             * Sets the RPM convergence tolerance (default 100).
+             */
             public Builder rpmTolerance(double val) {
                 this.rpmTolerance = val;
                 return this;
             }
 
-            /** Sets the angle convergence tolerance in degrees (default 1.0). */
+            /**
+             * Sets the angle convergence tolerance in degrees (default 1.0).
+             */
             public Builder angleTolerance(double val) {
                 this.angleTolerance = val;
                 return this;
             }
 
-            /** Sets the flywheel generation parameters for CRT sweep. */
+            /**
+             * Sets the flywheel generation parameters for CRT sweep.
+             */
             public Builder flywheelGenParams(FlywheelGenerator.GenerationParams val) {
                 this.flywheelGenParams = val;
                 return this;
             }
 
-            /** Sets the CRT RPM resolution in RPM (default 1.0). */
+            /**
+             * Sets the CRT RPM resolution in RPM (default 1.0).
+             */
             public Builder crtRpmResolution(double val) {
                 this.crtRpmResolution = val;
                 return this;
             }
 
-            /** Sets the CRT angle resolution in degrees (default 0.1). */
+            /**
+             * Sets the CRT angle resolution in degrees (default 0.1).
+             */
             public Builder crtAngleResolution(double val) {
                 this.crtAngleResolution = val;
                 return this;
             }
 
-            /** Sets the CRT control loop period in milliseconds (default 20). */
+            /**
+             * Sets the CRT control loop period in milliseconds (default 20).
+             */
             public Builder crtControlLoopMs(int val) {
                 this.crtControlLoopMs = val;
                 return this;
             }
 
-            /** Sets the CRT encoder ticks per revolution (default 4096). */
+            /**
+             * Sets the CRT encoder ticks per revolution (default 4096).
+             */
             public Builder crtEncoderTicks(int val) {
                 this.crtEncoderTicks = val;
                 return this;
             }
 
-            /** Sets the hoop tolerance multiplier for target acceptance (default 1.0). */
+            /**
+             * Sets the hoop tolerance multiplier for target acceptance (default
+             * 1.0).
+             */
             public Builder hoopToleranceMultiplier(double val) {
                 this.hoopToleranceMultiplier = val;
                 return this;
             }
 
-            /** Sets the sweep angle step size in degrees (default 0.5). */
+            /**
+             * Sets the sweep angle step size in degrees (default 0.5).
+             */
             public Builder sweepStepDegrees(double val) {
                 this.sweepStepDegrees = val;
                 return this;
             }
 
-            /** Sets the number of binary-search iterations for velocity refinement (default 8). */
+            /**
+             * Sets the number of binary-search iterations for velocity
+             * refinement (default 8).
+             */
             public Builder velocityRefineIterations(int val) {
                 this.velocityRefineIterations = val;
                 return this;
             }
 
-            /** Sets the simulation timestep in seconds (default 0.001). */
+            /**
+             * Sets the simulation timestep in seconds (default 0.001).
+             */
             public Builder simulationTimeStep(double val) {
                 this.simulationTimeStep = val;
                 return this;
             }
 
-            /** Sets the fast simulation timestep in seconds (default 0.005). */
+            /**
+             * Sets the fast simulation timestep in seconds (default 0.005).
+             */
             public Builder fastSimulationTimeStep(double val) {
                 this.fastSimulationTimeStep = val;
                 return this;
             }
 
-            /** Builds the solver config. */
+            /**
+             * Sets whether to use parallel execution for certain solver tasks
+             * (default false).
+             */
+            public Builder useParallel(boolean val) {
+                this.useParallel = val;
+                return this;
+            }
+
+            /**
+             * Builds the solver config.
+             */
             public SolverConfig build() {
                 return new SolverConfig(this);
             }
         }
 
-        /** Returns a config with all default values. */
+        /**
+         * Returns a config with all default values.
+         */
         public static SolverConfig defaults() {
             return builder().build();
         }
 
         /**
-         * Returns a preset tuned for high accuracy: finer angle/RPM
-         * tolerances and detailed flywheel generation.
+         * Returns a preset tuned for high accuracy: finer angle/RPM tolerances
+         * and detailed flywheel generation.
          */
         public static SolverConfig highAccuracy() {
             return builder()
@@ -365,8 +435,8 @@ public class TrajectorySolver {
         }
 
         /**
-         * Returns a preset tuned for speed: coarser tolerances and
-         * quick-scan flywheel generation.
+         * Returns a preset tuned for speed: coarser tolerances and quick-scan
+         * flywheel generation.
          */
         public static SolverConfig quickSolve() {
             return builder()
@@ -397,6 +467,40 @@ public class TrajectorySolver {
                     .fastSimulationTimeStep(0.008)
                     .build();
         }
+
+        /**
+         * Returns a preset optimized for powerful co-processors (e.g. Orange Pi 5,
+         * Beelink Mini PC). Uses high-fidelity simulations, fine-grained
+         * sweeping, and multi-threaded execution.
+         */
+        public static SolverConfig coProcessor() {
+            return builder()
+                    .angleTolerance(0.2)
+                    .rpmTolerance(25)
+                    .flywheelGenParams(FlywheelGenerator.GenerationParams.detailed())
+                    .sweepStepDegrees(0.25)
+                    .velocityRefineIterations(15)
+                    .simulationTimeStep(0.001)
+                    .fastSimulationTimeStep(0.004)
+                    .useParallel(true)
+                    .build();
+        }
+
+        /**
+         * Returns a high-performance preset for the roboRIO. Uses the bisection
+         * solver for speed while keeping a relatively fine simulation timestep.
+         */
+        public static SolverConfig roboRIOPerformance() {
+            return builder()
+                    .angleTolerance(0.8)
+                    .rpmTolerance(80)
+                    .flywheelGenParams(FlywheelGenerator.GenerationParams.detailed())
+                    .sweepStepDegrees(1.0)
+                    .velocityRefineIterations(8)
+                    .simulationTimeStep(0.002)
+                    .fastSimulationTimeStep(0.008)
+                    .build();
+        }
     }
 
     private final GamePiece gamePiece;
@@ -411,7 +515,6 @@ public class TrajectorySolver {
     /**
      * Sets the solve strategy.
      */
-
     public void setSolveMode(SolveMode mode) {
         this.solveMode = (mode != null) ? mode : SolveMode.CONSTRAINT;
     }
@@ -419,7 +522,6 @@ public class TrajectorySolver {
     /**
      * Returns the current solve strategy.
      */
-
     public SolveMode getSolveMode() {
         return solveMode;
     }
@@ -428,7 +530,6 @@ public class TrajectorySolver {
      * Enables or disables debug recording. Adds overhead; disable for
      * competition.
      */
-
     public void setDebugEnabled(boolean enabled) {
         this.debugEnabled = enabled;
     }
@@ -436,7 +537,6 @@ public class TrajectorySolver {
     /**
      * Returns whether debug mode is currently enabled.
      */
-
     public boolean isDebugEnabled() {
         return debugEnabled;
     }
@@ -445,14 +545,12 @@ public class TrajectorySolver {
      * Min pitch range (deg) after forcing high arc. If too narrow, skip the
      * force.
      */
-
     private static final double MIN_FORCED_ARC_RANGE_DEG = 15.0;
 
     /**
      * Distance (m) at which full drag compensation kicks in. Linearly
      * interpolated below this.
      */
-
     private static final double DRAG_COMP_FULL_RANGE_METERS = 8.0;
 
     /**
@@ -461,7 +559,6 @@ public class TrajectorySolver {
      *
      * @return velocity in m/s, or NaN if the angle can't reach
      */
-
     static double calculateRequiredVelocityForPitch(double distance, double heightDiff, double pitchRad) {
         double cosTheta = Math.cos(pitchRad);
         double tanTheta = Math.tan(pitchRad);
@@ -485,7 +582,6 @@ public class TrajectorySolver {
      * @param c rim clearance height (m)
      * @return {pitchRadians, velocityMps} or null
      */
-
     static double[] computeConstraintSolution(double d, double h, double r, double c) {
 
         if (d <= r || r <= 0 || d < 0.3) {
@@ -521,7 +617,6 @@ public class TrajectorySolver {
      * Distance-scaled drag compensation. Linearly ramps from 1.0 at close range
      * to full dragCompensationMultiplier at long range.
      */
-
     static double calculateDragCompensation(double distance) {
         double closeRange = SolverConstants.getCloseRangeThresholdMeters();
         double fullDragComp = SolverConstants.getDragCompensationMultiplier();
@@ -539,12 +634,11 @@ public class TrajectorySolver {
 
     /**
      * Binary-searches velocity to land the ball through the rim plane within
-     * the target opening. Corrects for drag overshoot. Uses simulateFast()
-     * for search iterations since only hit/miss metrics are needed.
+     * the target opening. Corrects for drag overshoot. Uses simulateFast() for
+     * search iterations since only hit/miss metrics are needed.
      *
      * @return a hit result, or null if nothing in range works
      */
-
     private ProjectileMotion.TrajectoryResult refineVelocityForHit(
             GamePiece gp,
             double shooterX, double shooterY, double shooterZ,
@@ -590,7 +684,6 @@ public class TrajectorySolver {
      * Checks if a trajectory collides with any obstacle, respecting grace
      * distance and the opening exemption for descending balls.
      */
-
     private static boolean trajectoryCollides(ProjectileMotion.TrajectoryResult trajSim,
             ShotInput input, double shooterX, double shooterY) {
         return trajectoryCollidesInternal(trajSim, input, shooterX, shooterY, false);
@@ -599,7 +692,6 @@ public class TrajectorySolver {
     /**
      * Checks collision with optional verbose logging for diagnostics.
      */
-
     static boolean trajectoryCollidesInternal(ProjectileMotion.TrajectoryResult trajSim,
             ShotInput input, double shooterX, double shooterY, boolean verbose) {
         if (!input.isCollisionCheckEnabled() || trajSim.trajectory.length == 0) {
@@ -610,8 +702,10 @@ public class TrajectorySolver {
         double graceDist2 = graceDistance * graceDistance;
 
         for (ObstacleConfig obstacle : input.getObstacles()) {
-            for (int i = 0; i < trajSim.trajectory.length; i++) {
-                ProjectileMotion.TrajectoryState state = trajSim.trajectory[i];
+            for (ProjectileMotion.TrajectoryState state : trajSim.trajectory) {
+                if (state == null) {
+                    break;
+                }
                 double sdx = state.x - shooterX;
                 double sdy = state.y - shooterY;
                 if (sdx * sdx + sdy * sdy < graceDist2) {
@@ -627,9 +721,9 @@ public class TrajectorySolver {
                         double distFromCenter = Math.sqrt(
                                 Math.pow(state.x - obstacle.getCenterX(), 2)
                                 + Math.pow(state.y - obstacle.getCenterY(), 2));
-                        System.out.printf("    COLLISION at pt[%d]: (%.3f, %.3f, %.3f) vz=%.2f "
+                        System.out.printf("    COLLISION at pt: (%.3f, %.3f, %.3f) vz=%.2f "
                                 + "distFromCenter=%.3f opening=%.3f wallH=%.2f totalH=%.2f%n",
-                                i, state.x, state.y, state.z, state.vz,
+                                state.x, state.y, state.z, state.vz,
                                 distFromCenter, obstacle.getOpeningDiameter() / 2.0,
                                 obstacle.getWallHeight(), obstacle.getTotalHeight());
                     }
@@ -647,7 +741,6 @@ public class TrajectorySolver {
      * shots that barely clear the hoop edge but would likely fly over in
      * practice.
      */
-
     private static boolean isFlyover(ProjectileMotion.TrajectoryState[] trajectory,
             double targetX, double targetY, double targetZ, double targetRadius) {
         if (trajectory == null || trajectory.length == 0) {
@@ -696,7 +789,6 @@ public class TrajectorySolver {
      * RK4 + velocity refinement. Returns {pitch, targetX, targetY, tof} or
      * null.
      */
-
     private double[] solveConstraintCore(
             ShotInput input, FlywheelSimulator flywheelSimForPitch, GamePiece gp,
             double effectiveTargetX, double effectiveTargetY, double estimatedTof,
@@ -709,7 +801,6 @@ public class TrajectorySolver {
 
         double bestPitch = Double.NaN;
         ProjectileMotion.TrajectoryResult bestTraj = null;
-        FlywheelSimulator.SimulationResult bestFw = null;
         double itX = effectiveTargetX, itY = effectiveTargetY;
 
         while (currentClearance <= rimClearance + 3.0) {
@@ -852,7 +943,6 @@ public class TrajectorySolver {
 
             bestPitch = pitchRad;
             bestTraj = trajSim;
-            bestFw = pitchFw;
             itX = iterTargetX;
             itY = iterTargetY;
 
@@ -945,12 +1035,11 @@ public class TrajectorySolver {
     }
 
     /**
-     * Sweep core: tests every pitch at configurable degree steps using
-     * fast simulation, picks highest quality score. Collision and flyover
-     * checks are deferred to the final full-accuracy validation pass.
-     * Returns {pitch, targetX, targetY, tof} or null.
+     * Sweep core: tests every pitch at configurable degree steps using fast
+     * simulation, picks highest quality score. Collision and flyover checks are
+     * deferred to the final full-accuracy validation pass. Returns {pitch,
+     * targetX, targetY, tof} or null.
      */
-
     private double[] solveSweepCore(
             ShotInput input, FlywheelSimulator flywheelSimForPitch, GamePiece gp,
             double effectiveTargetX, double effectiveTargetY, double estimatedTof,
@@ -958,21 +1047,25 @@ public class TrajectorySolver {
             double effectiveMinPitch, double effectiveMaxPitch,
             double requiredClearance, boolean moving, SolveDebugInfo debugInfo) {
 
-        double bestPitch = Double.NaN;
-        double bestQualityScore = -1.0;
-        double itX = effectiveTargetX, itY = effectiveTargetY;
-
         double sweepStep = config.getSweepStepDegrees();
+        int steps = (int) Math.ceil((effectiveMaxPitch - effectiveMinPitch) / sweepStep) + 1;
 
-        for (double pitchDeg = effectiveMinPitch; pitchDeg <= effectiveMaxPitch; pitchDeg += sweepStep) {
+        java.util.stream.IntStream stepStream = java.util.stream.IntStream.range(0, steps);
+        if (config.useParallel()) {
+            stepStream = stepStream.parallel();
+        }
+
+        final double finalEstimatedTof = estimatedTof;
+        SweepCandidate best = stepStream.mapToObj(i -> {
+            double pitchDeg = effectiveMinPitch + i * sweepStep;
             double pitchRad = Math.toRadians(pitchDeg);
 
             double iterTargetX = effectiveTargetX;
             double iterTargetY = effectiveTargetY;
 
-            if (moving && estimatedTof > 0) {
-                iterTargetX = input.getTargetX() - input.getRobotVx() * estimatedTof;
-                iterTargetY = input.getTargetY() - input.getRobotVy() * estimatedTof;
+            if (moving && finalEstimatedTof > 0) {
+                iterTargetX = input.getTargetX() - input.getRobotVx() * finalEstimatedTof;
+                iterTargetY = input.getTargetY() - input.getRobotVy() * finalEstimatedTof;
             }
 
             double dx = iterTargetX - input.getShooterX();
@@ -982,12 +1075,7 @@ public class TrajectorySolver {
 
             double vacuumV = calculateRequiredVelocityForPitch(iterDistance, heightDiff, pitchRad);
             if (Double.isNaN(vacuumV) || vacuumV <= 0) {
-                if (debugInfo != null) {
-                    debugInfo.recordRejected(pitchDeg,
-                            SolveDebugInfo.RejectionReason.ARC_TOO_LOW,
-                            Double.MAX_VALUE, 0, 0, false, new ProjectileMotion.TrajectoryState[0]);
-                }
-                continue;
+                return null;
             }
 
             double vacuumHoriz = vacuumV * Math.cos(pitchRad);
@@ -995,15 +1083,9 @@ public class TrajectorySolver {
             double vVert = compensatedHoriz * Math.tan(pitchRad);
             double targetV = Math.sqrt(compensatedHoriz * compensatedHoriz + vVert * vVert);
 
-            FlywheelSimulator.SimulationResult pitchFw
-                    = flywheelSimForPitch.simulateForVelocity(targetV);
+            FlywheelSimulator.SimulationResult pitchFw = flywheelSimForPitch.simulateForVelocity(targetV);
             if (!pitchFw.isAchievable) {
-                if (debugInfo != null) {
-                    debugInfo.recordRejected(pitchDeg,
-                            SolveDebugInfo.RejectionReason.ARC_TOO_LOW,
-                            Double.MAX_VALUE, 0, 0, false, new ProjectileMotion.TrajectoryState[0]);
-                }
-                continue;
+                return null;
             }
 
             double actualVelocity = pitchFw.exitVelocityMps;
@@ -1029,148 +1111,92 @@ public class TrajectorySolver {
                     if (refined.trajectory.length > 0) {
                         ProjectileMotion.TrajectoryState s0 = refined.trajectory[0];
                         actualVelocity = Math.sqrt(s0.vx * s0.vx + s0.vy * s0.vy + s0.vz * s0.vz);
-                    }
-                    pitchFw = flywheelSimForPitch.simulateForVelocity(actualVelocity);
-                    if (!pitchFw.isAchievable) {
-                        continue;
+                        pitchFw = flywheelSimForPitch.simulateForVelocity(actualVelocity);
                     }
                 }
             }
 
+            if (!pitchFw.isAchievable) return null;
+
             if (requiredClearance > 0 && trajSim.maxHeight < requiredClearance) {
-                if (debugInfo != null) {
-                    debugInfo.recordRejected(pitchDeg, SolveDebugInfo.RejectionReason.CLEARANCE_TOO_LOW,
-                            trajSim.closestApproach, trajSim.maxHeight, trajSim.flightTime, trajSim.hitTarget, trajSim.trajectory);
-                }
-                continue;
+                return null;
             }
 
             double minArcHeight = input.getMinArcHeightMeters();
             if (minArcHeight > 0 && trajSim.maxHeight < input.getTargetZ() + minArcHeight) {
-                if (debugInfo != null) {
-                    debugInfo.recordRejected(pitchDeg, SolveDebugInfo.RejectionReason.ARC_TOO_LOW,
-                            trajSim.closestApproach, trajSim.maxHeight, trajSim.flightTime, trajSim.hitTarget, trajSim.trajectory);
-                }
-                continue;
+                return null;
             }
 
             double hoopTolerance = input.getTargetRadius() * config.getHoopToleranceMultiplier();
             boolean hitsTarget = trajSim.hitTarget
                     || (trajSim.descendingAtClosest && trajSim.closestApproach <= hoopTolerance
                     && trajSim.entryAngleDegrees >= SolverConstants.getMinEntryAngleDegrees());
+
             if (!hitsTarget) {
-                if (debugInfo != null) {
-                    debugInfo.recordRejected(pitchDeg, SolveDebugInfo.RejectionReason.MISSED_TARGET,
-                            trajSim.closestApproach, trajSim.maxHeight, trajSim.flightTime, trajSim.hitTarget, trajSim.trajectory);
-                }
-                continue;
+                return null;
             }
 
             if (isFlyover(trajSim.trajectory, iterTargetX, iterTargetY,
                     input.getTargetZ(), input.getTargetRadius())) {
-                if (debugInfo != null) {
-                    debugInfo.recordRejected(pitchDeg, SolveDebugInfo.RejectionReason.FLYOVER,
-                            trajSim.closestApproach, trajSim.maxHeight, trajSim.flightTime, trajSim.hitTarget, trajSim.trajectory);
-                }
-                continue;
+                return null;
             }
 
-            double missDistance = (trajSim.horizontalDistAtCrossing >= 0)
+            double missDistanceLocal = (trajSim.horizontalDistAtCrossing >= 0)
                     ? trajSim.horizontalDistAtCrossing : trajSim.closestApproach;
 
-            double qualityScore = computeSweepQualityScore(
-                    pitchDeg, missDistance, input.getTargetRadius(),
-                    trajSim.flightTime, trajSim.entryAngleDegrees);
+            double score = computeSweepQualityScore(pitchDeg, missDistanceLocal,
+                    input.getTargetRadius(), trajSim.flightTime, trajSim.entryAngleDegrees);
 
-            if (qualityScore > bestQualityScore) {
-                bestQualityScore = qualityScore;
-                bestPitch = pitchRad;
-                itX = iterTargetX;
-                itY = iterTargetY;
-                if (trajSim.flightTime > 0) {
-                    estimatedTof = trajSim.flightTime;
-                }
+            return new SweepCandidate(pitchRad, score, iterTargetX, iterTargetY, trajSim.flightTime);
+        }).filter(java.util.Objects::nonNull)
+                .max(java.util.Comparator.comparingDouble(c -> c.score))
+                .orElse(null);
 
-                if (debugInfo != null) {
-                    debugInfo.recordAccepted(pitchDeg, missDistance,
-                            trajSim.closestApproach, trajSim.maxHeight, trajSim.flightTime,
-                            trajSim.hitTarget, trajSim.trajectory);
-                }
-            } else {
-                if (debugInfo != null) {
-                    debugInfo.recordRejected(pitchDeg,
-                            SolveDebugInfo.RejectionReason.MISSED_TARGET,
-                            trajSim.closestApproach, trajSim.maxHeight, trajSim.flightTime,
-                            trajSim.hitTarget, trajSim.trajectory);
-                }
-            }
-        }
-
-        if (Double.isNaN(bestPitch)) {
+        if (best == null) {
             return null;
         }
 
-        if (moving && estimatedTof > 0) {
+        double outPitch = best.pitchRad;
+        double outItX = best.itX;
+        double outItY = best.itY;
+        double outTof = best.tof;
+
+        if (moving && outTof > 0) {
             for (int refine = 0; refine < 2; refine++) {
-                double refTargetX = input.getTargetX() - input.getRobotVx() * estimatedTof;
-                double refTargetY = input.getTargetY() - input.getRobotVy() * estimatedTof;
+                double refTargetX = input.getTargetX() - input.getRobotVx() * outTof;
+                double refTargetY = input.getTargetY() - input.getRobotVy() * outTof;
                 double rdx = refTargetX - input.getShooterX();
                 double rdy = refTargetY - input.getShooterY();
                 double refDist = Math.sqrt(rdx * rdx + rdy * rdy);
                 double refYaw = Math.atan2(rdy, rdx);
 
-                double refVacuumV = calculateRequiredVelocityForPitch(refDist, heightDiff, bestPitch);
-                if (Double.isNaN(refVacuumV) || refVacuumV <= 0) {
-                    break;
-                }
+                double refVacuumV = calculateRequiredVelocityForPitch(refDist, heightDiff, outPitch);
+                if (Double.isNaN(refVacuumV) || refVacuumV <= 0) break;
 
-                double refHoriz = refVacuumV * Math.cos(bestPitch);
+                double refHoriz = refVacuumV * Math.cos(outPitch);
                 double refCompHoriz = refHoriz * dragComp;
-                double refVert = refCompHoriz * Math.tan(bestPitch);
+                double refVert = refCompHoriz * Math.tan(outPitch);
                 double refTargetV = Math.sqrt(refCompHoriz * refCompHoriz + refVert * refVert);
-                FlywheelSimulator.SimulationResult refFw
-                        = flywheelSimForPitch.simulateForVelocity(refTargetV);
-                if (!refFw.isAchievable) {
-                    break;
-                }
+
+                FlywheelSimulator.SimulationResult refFw = flywheelSimForPitch.simulateForVelocity(refTargetV);
+                if (!refFw.isAchievable) break;
 
                 ProjectileMotion.TrajectoryResult refTraj = projectileMotion.simulate(
                         gp,
                         input.getShooterX(), input.getShooterY(), input.getShooterZ(),
-                        refFw.exitVelocityMps, bestPitch, refYaw, refFw.ballSpinRpm,
+                        refFw.exitVelocityMps, outPitch, refYaw, refFw.ballSpinRpm,
                         refTargetX, refTargetY, input.getTargetZ(), input.getTargetRadius()
                 );
 
-                if (!refTraj.hitTarget && refTraj.maxHeight > input.getTargetZ()) {
-                    ProjectileMotion.TrajectoryResult refined = refineVelocityForHit(
-                            gp,
-                            input.getShooterX(), input.getShooterY(), input.getShooterZ(),
-                            bestPitch, refYaw, refFw.ballSpinRpm,
-                            refTargetX, refTargetY, input.getTargetZ(),
-                            input.getTargetRadius(), refFw.exitVelocityMps);
-                    if (refined != null) {
-                        refTraj = refined;
-                        double rv = refFw.exitVelocityMps;
-                        if (refined.trajectory.length > 0) {
-                            ProjectileMotion.TrajectoryState s0 = refined.trajectory[0];
-                            rv = Math.sqrt(s0.vx * s0.vx + s0.vy * s0.vy + s0.vz * s0.vz);
-                        }
-                        refFw = flywheelSimForPitch.simulateForVelocity(rv);
-                        if (!refFw.isAchievable) {
-                            break;
-                        }
-                    }
-                }
-
                 if (refTraj.flightTime > 0) {
-                    estimatedTof = refTraj.flightTime;
+                    outTof = refTraj.flightTime;
                 }
-                itX = refTargetX;
-                itY = refTargetY;
+                outItX = refTargetX;
+                outItY = refTargetY;
             }
         }
 
-        return new double[]{bestPitch, itX, itY, estimatedTof};
+        return new double[]{outPitch, outItX, outItY, outTof};
     }
 
     private double[] solveBisectionCore(
@@ -1182,7 +1208,7 @@ public class TrajectorySolver {
 
         double lowPitchDeg = effectiveMinPitch;
         double highPitchDeg = effectiveMaxPitch;
-        
+
         double bestPitch = Double.NaN;
         double minMissDistance = Double.MAX_VALUE;
         double itX = effectiveTargetX, itY = effectiveTargetY;
@@ -1212,7 +1238,7 @@ public class TrajectorySolver {
                     debugInfo.recordRejected(midPitchDeg, SolveDebugInfo.RejectionReason.ARC_TOO_LOW,
                             Double.MAX_VALUE, 0, 0, false, new ProjectileMotion.TrajectoryState[0]);
                 }
-                lowPitchDeg = midPitchDeg; 
+                lowPitchDeg = midPitchDeg;
                 continue;
             }
 
@@ -1244,16 +1270,16 @@ public class TrajectorySolver {
                 if (refined.hitTarget) {
                     trajSim = refined;
                     actualVelocity = Math.sqrt(
-                            trajSim.trajectory[0].vx * trajSim.trajectory[0].vx + 
-                            trajSim.trajectory[0].vy * trajSim.trajectory[0].vy + 
-                            trajSim.trajectory[0].vz * trajSim.trajectory[0].vz);
+                            trajSim.trajectory[0].vx * trajSim.trajectory[0].vx
+                            + trajSim.trajectory[0].vy * trajSim.trajectory[0].vy
+                            + trajSim.trajectory[0].vz * trajSim.trajectory[0].vz);
                     pitchFw = flywheelSimForPitch.simulateForVelocity(actualVelocity);
                 }
             }
 
             double zAtTarget = Double.NaN;
             double targetHorizSq = iterDistance * iterDistance;
-            
+
             for (ProjectileMotion.TrajectoryState st : trajSim.trajectory) {
                 double hd2 = Math.pow(st.x - input.getShooterX(), 2) + Math.pow(st.y - input.getShooterY(), 2);
                 if (hd2 >= targetHorizSq) {
@@ -1263,7 +1289,7 @@ public class TrajectorySolver {
             }
 
             double missDistance = trajSim.closestApproach;
-            
+
             if (trajectoryCollides(trajSim, input, input.getShooterX(), input.getShooterY())) {
                 if (debugInfo != null) {
                     debugInfo.recordRejected(midPitchDeg, SolveDebugInfo.RejectionReason.COLLISION,
@@ -1277,8 +1303,8 @@ public class TrajectorySolver {
                 itY = iterTargetY;
                 if (debugInfo != null) {
                     debugInfo.recordAccepted(midPitchDeg, missDistance,
-                        trajSim.closestApproach, trajSim.maxHeight, trajSim.flightTime,
-                        trajSim.hitTarget, trajSim.trajectory);
+                            trajSim.closestApproach, trajSim.maxHeight, trajSim.flightTime,
+                            trajSim.hitTarget, trajSim.trajectory);
                 }
             } else {
                 if (debugInfo != null) {
@@ -1327,7 +1353,6 @@ public class TrajectorySolver {
      * @param entryAngleDeg entry angle into target in degrees
      * @return quality score in [0, 100]
      */
-
     private double computeSweepQualityScore(double pitchDeg, double missDistance,
             double targetRadius, double timeOfFlight,
             double entryAngleDeg) {
@@ -1353,9 +1378,29 @@ public class TrajectorySolver {
         return accuracyScore + stabilityScore + speedScore + entryScore;
     }
 
-    /** Creates a new trajectory solver builder. */
+    /**
+     * Creates a new trajectory solver builder.
+     */
     public static Builder builder() {
         return new Builder();
+    }
+
+    /**
+     * Internal candidate for sweep searches.
+     */
+    private static class SweepCandidate {
+
+        final double pitchRad;
+        final double score;
+        final double itX, itY, tof;
+
+        SweepCandidate(double pitchRad, double score, double itX, double itY, double tof) {
+            this.pitchRad = pitchRad;
+            this.score = score;
+            this.itX = itX;
+            this.itY = itY;
+            this.tof = tof;
+        }
     }
 
     /**
@@ -1366,19 +1411,25 @@ public class TrajectorySolver {
         private GamePiece gamePiece = GamePieces.getCurrent();
         private SolverConfig config = SolverConfig.defaults();
 
-        /** Sets the game piece for trajectory calculations. */
+        /**
+         * Sets the game piece for trajectory calculations.
+         */
         public Builder gamePiece(GamePiece val) {
             this.gamePiece = val;
             return this;
         }
 
-        /** Sets the solver configuration. */
+        /**
+         * Sets the solver configuration.
+         */
         public Builder config(SolverConfig val) {
             this.config = val;
             return this;
         }
 
-        /** Builds the {@link TrajectorySolver} instance. */
+        /**
+         * Builds the {@link TrajectorySolver} instance.
+         */
         public TrajectorySolver build() {
             return new TrajectorySolver(gamePiece, config);
         }
@@ -1387,7 +1438,6 @@ public class TrajectorySolver {
     /**
      * Creates a solver for the given game piece.
      */
-
     public TrajectorySolver(GamePiece gamePiece) {
         this(gamePiece, SolverConfig.defaults());
     }
@@ -1395,7 +1445,6 @@ public class TrajectorySolver {
     /**
      * Creates a solver with custom configuration.
      */
-
     public TrajectorySolver(GamePiece gamePiece, SolverConfig config) {
         this.gamePiece = gamePiece;
         this.config = config;
@@ -1412,7 +1461,6 @@ public class TrajectorySolver {
      *
      * @return A new TrajectorySolver configured for 2026 REBUILT
      */
-
     public static TrajectorySolver forGame2026() {
         return forGamePiece(GamePieces.REBUILT_2026_BALL);
     }
@@ -1423,7 +1471,6 @@ public class TrajectorySolver {
      * @param year The FRC game year
      * @return A new TrajectorySolver configured for that year's game piece
      */
-
     public static TrajectorySolver forYear(int year) {
         GamePiece piece = GamePieces.getByYear(year);
         if (piece == null) {
@@ -1438,7 +1485,6 @@ public class TrajectorySolver {
      * @param gamePiece The game piece to use
      * @return A new TrajectorySolver configured for that game piece
      */
-
     public static TrajectorySolver forGamePiece(GamePiece gamePiece) {
         return new TrajectorySolver(gamePiece);
     }
@@ -1449,7 +1495,6 @@ public class TrajectorySolver {
      * @param input shot parameters
      * @return result with recommended pitch, RPM, etc.
      */
-
     public TrajectoryResult solve(ShotInput input) {
         if (input == null) {
             return TrajectoryResult.failure(
@@ -1513,11 +1558,14 @@ public class TrajectorySolver {
                 ? SolverConstants.getCloseRangeVelocityMultiplier()
                 : SolverConstants.getVelocityBufferMultiplier() * dragComp;
         double representativeVelocity = minVelocity * velocityBuffer;
-
         double maxPitchV = calculateRequiredVelocityForPitch(distance, heightDiff,
                 Math.toRadians(effectiveMaxPitch));
         if (!Double.isNaN(maxPitchV) && maxPitchV > 0) {
-            representativeVelocity = Math.max(representativeVelocity, maxPitchV * dragComp);
+            representativeVelocity = Math.max(representativeVelocity, maxPitchV);
+        }
+        if (cachedFlywheel != null) {
+            double absoluteMinWithBuffer = minVelocity * (isCloseRange ? 1.1 : 1.15 * dragComp);
+            representativeVelocity = Math.min(representativeVelocity, absoluteMinWithBuffer);
         }
 
         FlywheelGenerator.GenerationResult genResult;
@@ -1587,6 +1635,35 @@ public class TrajectorySolver {
                     distance, heightDiff, dragComp,
                     effectiveMinPitch, effectiveMaxPitch,
                     requiredClearance, moving, debugInfo);
+        } else if (solveMode == SolveMode.HYBRID) {
+            ca.team4308.absolutelib.math.trajectories.shooter.ShotParameters precomputed = null;
+            if (input.getMap() != null) {
+                precomputed = input.getMap().lookup(distance);
+            }
+
+            if (precomputed != null && precomputed.valid) {
+                double seedPitch = precomputed.pitchDegrees;
+                double span = 2.0; // Search +/- 1 degree around the seed
+                coreResult = solveBisectionCore(
+                        input, flywheelSimForPitch, gamePiece,
+                        effectiveTargetX, effectiveTargetY, estimatedTof,
+                        distance, heightDiff, dragComp,
+                        seedPitch - span / 2.0, seedPitch + span / 2.0,
+                        requiredClearance, moving, debugInfo);
+                if (coreResult == null) {
+                    // Fallback to precomputed if bisection fails
+                    coreResult = new double[]{
+                        Math.toRadians(seedPitch), effectiveTargetX, effectiveTargetY, estimatedTof
+                    };
+                }
+            } else {
+                // Fallback to bisection if no map
+                coreResult = solveBisectionCore(input, flywheelSimForPitch, gamePiece,
+                        effectiveTargetX, effectiveTargetY, estimatedTof,
+                        distance, heightDiff, dragComp,
+                        effectiveMinPitch, effectiveMaxPitch,
+                        requiredClearance, moving, debugInfo);
+            }
         } else {
 
             coreResult = solveConstraintCore(input, flywheelSimForPitch, gamePiece,
@@ -1737,7 +1814,6 @@ public class TrajectorySolver {
      * @param velocitySteps Number of velocity steps to try
      * @return Array of trajectory results at different velocities
      */
-
     public TrajectoryResult[] solveRange(ShotInput input, int velocitySteps) {
         double distance = input.getHorizontalDistanceMeters();
         double heightDiff = input.getHeightDifferenceMeters();
@@ -1781,7 +1857,6 @@ public class TrajectorySolver {
     /**
      * Solves using a specific flywheel configuration.
      */
-
     public TrajectoryResult solveWithFlywheel(ShotInput input, FlywheelConfig flywheel) {
         FlywheelConfig previousCache = cachedFlywheel;
         cachedFlywheel = flywheel;
@@ -1796,7 +1871,6 @@ public class TrajectorySolver {
     /**
      * Evaluates an existing configuration against a shot.
      */
-
     public TrajectoryResult evaluate(ShotInput input, FlywheelConfig flywheel, double rpm, double pitchDegrees) {
         FlywheelSimulator simulator = new FlywheelSimulator(flywheel, gamePiece);
         FlywheelSimulator.SimulationResult simResult = simulator.simulateAtRpm(rpm);
@@ -1850,7 +1924,6 @@ public class TrajectorySolver {
      * @param currentRpm measured RPM from encoder
      * @return result at the given RPM, or failure if unreachable
      */
-
     public TrajectoryResult solveAtCurrentRpm(ShotInput input, FlywheelConfig flywheel, double currentRpm) {
         if (input == null) {
             return TrajectoryResult.failure(
@@ -2028,7 +2101,6 @@ public class TrajectorySolver {
     /**
      * Gets the optimal flywheel configuration for a velocity range.
      */
-
     public FlywheelConfig getOptimalFlywheel(double minVelocityMps, double maxVelocityMps) {
         FlywheelGenerator.GenerationResult result
                 = flywheelGenerator.generateForVelocityRange(minVelocityMps, maxVelocityMps);
@@ -2039,7 +2111,6 @@ public class TrajectorySolver {
     /**
      * Calculates confidence score for a solution.
      */
-
     private double calculateConfidence(double flywheelScore, boolean hitTarget,
             double marginOfError, double targetRadius,
             double crtScore) {
@@ -2065,7 +2136,6 @@ public class TrajectorySolver {
     /**
      * Clears the cached flywheel configuration.
      */
-
     public void clearCache() {
         cachedFlywheel = null;
     }
@@ -2073,32 +2143,41 @@ public class TrajectorySolver {
     /**
      * Sets a specific flywheel to use for all future solves.
      */
-
     public void setFlywheel(FlywheelConfig flywheel) {
         cachedFlywheel = flywheel;
     }
 
-    /** Returns the game piece this solver is configured for. */
+    /**
+     * Returns the game piece this solver is configured for.
+     */
     public GamePiece getGamePiece() {
         return gamePiece;
     }
 
-    /** Returns the solver configuration. */
+    /**
+     * Returns the solver configuration.
+     */
     public SolverConfig getConfig() {
         return config;
     }
 
-    /** Returns the underlying projectile motion simulator. */
+    /**
+     * Returns the underlying projectile motion simulator.
+     */
     public ProjectileMotion getProjectileMotion() {
         return projectileMotion;
     }
 
-    /** Returns the flywheel generator used by this solver. */
+    /**
+     * Returns the flywheel generator used by this solver.
+     */
     public FlywheelGenerator getFlywheelGenerator() {
         return flywheelGenerator;
     }
 
-    /** Returns the currently cached flywheel config, or null if none. */
+    /**
+     * Returns the currently cached flywheel config, or null if none.
+     */
     public FlywheelConfig getCachedFlywheel() {
         return cachedFlywheel;
     }
