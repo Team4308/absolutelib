@@ -15,8 +15,16 @@ import edu.wpi.first.util.sendable.Sendable;
 import edu.wpi.first.wpilibj.RobotBase;
 import edu.wpi.first.wpilibj2.command.Command;
 
+/**
+ * Elevator subsystem for controlling a linear elevator mechanism.
+ * Supports position and manual voltage control, simulation, and logging.
+ */
 public class Elevator extends AbsoluteSubsystem {
 
+    /**
+     * Configuration class for Elevator subsystem.
+     * Holds all tunable parameters and hardware references.
+     */
     public static class Config {
 
         // MOTORS AND ENCODER
@@ -145,6 +153,10 @@ public class Elevator extends AbsoluteSubsystem {
     // Simulation
     private ElevatorSimulation simulation;
 
+    /**
+     * Constructs an Elevator with the given configuration.
+     * @param config Elevator configuration object
+     */
     public Elevator(Config config) {
         this.cfg = config;
         this.leader = cfg.leader;
@@ -179,10 +191,16 @@ public class Elevator extends AbsoluteSubsystem {
         }
     }
 
+    /**
+     * Default constructor is not supported. Use Elevator(new Config().withLeader(...)).
+     */
     public Elevator() {
         throw new IllegalStateException("Use Elevator(new Config().withLeader(...)...)");
     }
 
+    /**
+     * Initializes the elevator subsystem, sets brake mode, and holds current position.
+     */
     @Override
     protected void onInitialize() {
         // Brake mode by default
@@ -197,6 +215,9 @@ public class Elevator extends AbsoluteSubsystem {
         }
     }
 
+    /**
+     * Periodic update for the elevator subsystem. Handles simulation and control.
+     */
     @Override
     public void periodic() {
         onPrePeriodic();
@@ -210,12 +231,21 @@ public class Elevator extends AbsoluteSubsystem {
         onPostPeriodic();
     }
 
+    /**
+     * Hook for logic before main periodic code.
+     */
     protected void onPrePeriodic() {
     }
 
+    /**
+     * Hook for logic after main periodic code.
+     */
     protected void onPostPeriodic() {
     }
 
+    /**
+     * Main periodic logic for elevator control and logging.
+     */
     protected void onPeriodic() {
         double currentMeters = getHeightMeters();
 
@@ -262,6 +292,7 @@ public class Elevator extends AbsoluteSubsystem {
     /**
      * Sets the target height in meters.
      *
+     * @param meters Target height in meters.
      * @return Command that waits until target is reached
      */
     public Command setPosition(double meters) {
@@ -271,11 +302,18 @@ public class Elevator extends AbsoluteSubsystem {
         }).until(this::atTarget);
     }
 
+    /**
+     * Sets the target height in meters (no command).
+     * @param meters Target height in meters.
+     */
     public void setTargetHeight(double meters) {
         targetHeightMeters = MathUtil.clamp(meters, cfg.minHeightMeters, cfg.maxHeightMeters);
         manualMode = false;
     }
 
+    /**
+     * Stops the elevator and holds its current position.
+     */
     @Override
     public void stop() {
         manualMode = false;
@@ -283,11 +321,19 @@ public class Elevator extends AbsoluteSubsystem {
         targetHeightMeters = getHeightMeters();
     }
 
+    /**
+     * Sets manual voltage control mode.
+     * @param volts Voltage to apply to the elevator motor.
+     */
     public void setManualVoltage(double volts) {
         manualMode = true;
         manualVoltage = volts;
     }
 
+    /**
+     * Gets the current elevator height in meters.
+     * @return Current height in meters.
+     */
     public double getHeightMeters() {
         if (cfg.encoder == null) {
             return 0.0;
@@ -306,10 +352,18 @@ public class Elevator extends AbsoluteSubsystem {
         return meters;
     }
 
+    /**
+     * Checks if the elevator is at the target height.
+     * @return True if at target, false otherwise.
+     */
     public boolean atTarget() {
         return Math.abs(getHeightMeters() - targetHeightMeters) <= cfg.toleranceMeters;
     }
 
+    /**
+     * Sets brake mode for the elevator motors.
+     * @param brake True to enable brake mode, false for coast.
+     */
     public void setBrakeMode(boolean brake) {
         leader.setBrakeMode(brake);
         for (var f : followers) {

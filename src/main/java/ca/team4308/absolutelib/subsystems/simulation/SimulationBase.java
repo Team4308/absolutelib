@@ -136,23 +136,18 @@ public abstract class SimulationBase extends AbsoluteSubsystem {
             return;
         }
 
-        // Core mechanical state (LOW)
         logSim(LogLevel.LOW, "positionMeters", state.positionMeters);
 
-        // Standard state (MEDIUM)
         logSim(LogLevel.MEDIUM, "velocityMPS", state.velocityMetersPerSec);
         logSim(LogLevel.MEDIUM, "accelerationMPSS", state.accelerationMetersPerSecSq);
 
-        // Electrical state (MEDIUM/HIGH)
         logSim(LogLevel.MEDIUM, "voltage", state.appliedVoltage);
         logSim(LogLevel.MEDIUM, "currentAmps", state.currentDrawAmps);
         logSim(LogLevel.HIGH, "temperatureC", state.temperatureCelsius);
 
-        // Power consumption (HIGH)
         double powerWatts = state.appliedVoltage * state.currentDrawAmps;
         logSim(LogLevel.HIGH, "powerWatts", powerWatts);
 
-        // Custom data (HIGH)
         if (state.customData != null && state.customDataKeys != null) {
             int n = Math.min(state.customData.length, state.customDataKeys.length);
             for (int i = 0; i < n; i++) {
@@ -160,7 +155,6 @@ public abstract class SimulationBase extends AbsoluteSubsystem {
             }
         }
 
-        // Battery effects (optional)
         if (shouldSimulateBatteryEffects()) {
             simulateBatteryDraw(state.currentDrawAmps);
         }
@@ -241,10 +235,16 @@ public abstract class SimulationBase extends AbsoluteSubsystem {
 
     // Helpers for common simulation patterns
     /**
-     * Create a simple 1-DOF state for rotational mechanisms
+     * Create a simple 1-DOF state for rotational mechanisms.
+     *
+     * @param angleRad Angle in radians
+     * @param velocityRadPerSec Velocity in radians per second
+     * @param voltage Applied voltage
+     * @param current Current draw in amps
+     * @return SimState representing the rotational mechanism
      */
     protected SimState createRotationalState(double angleRad, double velocityRadPerSec,
-            double voltage, double current) {
+        double voltage, double current) {
         SimState state = new SimState();
         state.positionMeters = angleRad; // treat as radians
         state.velocityMetersPerSec = velocityRadPerSec;
@@ -254,10 +254,16 @@ public abstract class SimulationBase extends AbsoluteSubsystem {
     }
 
     /**
-     * Create a simple 1-DOF state for linear mechanisms
+     * Create a simple 1-DOF state for linear mechanisms.
+     *
+     * @param positionM Position in meters
+     * @param velocityMPS Velocity in meters per second
+     * @param voltage Applied voltage
+     * @param current Current draw in amps
+     * @return SimState representing the linear mechanism
      */
     protected SimState createLinearState(double positionM, double velocityMPS,
-            double voltage, double current) {
+        double voltage, double current) {
         SimState state = new SimState();
         state.positionMeters = positionM;
         state.velocityMetersPerSec = velocityMPS;
