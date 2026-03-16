@@ -20,32 +20,66 @@ public class AbsoluteCommand extends Command {
     private final Timer timer = new Timer();
     private DoubleSupplier secondsSupplier; 
 
+    /**
+     * Creates an AbsoluteCommand without a timeout.
+     * @param inner the command to wrap
+     */
     public AbsoluteCommand(Command inner) {
         this(inner, (DoubleSupplier) null);
     }
 
+    /**
+     * Creates an AbsoluteCommand with a static timeout.
+     * @param inner the command to wrap
+     * @param seconds time in seconds
+     */
     public AbsoluteCommand(Command inner, double seconds) {
         this(inner, () -> seconds);
     }
 
+    /**
+     * Creates an AbsoluteCommand with a dynamic timeout.
+     * @param inner the command to wrap
+     * @param secondsSupplier provider for the time in seconds
+     */
     public AbsoluteCommand(Command inner, DoubleSupplier secondsSupplier) {
         this.inner = inner;
         this.secondsSupplier = secondsSupplier;
     }
 
+    /**
+     * Helper to wrap an existing command.
+     * @param inner the command to wrap
+     * @return the wrapped command
+     */
     public static AbsoluteCommand of(Command inner) {
         return new AbsoluteCommand(inner);
     }
 
+    /**
+     * Helper to wrap an existing command with a timeout.
+     * @param inner the command to wrap
+     * @param seconds time in seconds
+     * @return the wrapped command
+     */
     public static AbsoluteCommand withTimeout(Command inner, double seconds) {
         return new AbsoluteCommand(inner, seconds);
     }
 
+    /**
+     * Sets the dynamic timeout on this command.
+     * @param supplier provider for the time in seconds
+     * @return this command
+     */
     public AbsoluteCommand withTimeout(DoubleSupplier supplier) {
         this.secondsSupplier = supplier;
         return this;
     }
 
+    /**
+     * Removes the timeout from this command.
+     * @return this command
+     */
     public AbsoluteCommand withoutTimeout() {
         this.secondsSupplier = null;
         return this;

@@ -23,7 +23,7 @@ import ca.team4308.absolutelib.math.trajectories.physics.ProjectileMotion;
  * <h2>Configuration Hierarchy</h2>
  * <p>The system is split into two distinct configuration layers:</p>
  * <ul>
- *   <li><b>SolverConfig (This Class):</b> Governs the <i>Physics & Math</i> logic. 
+ *   <li><b>SolverConfig (This Class):</b> Governs the <i>Physics &amp; Math</i> logic. 
  *       Includes simulation timesteps, search tolerances, and solve modes. Change these for performance or accuracy tuning.</li>
  *   <li><b>ShooterConfig (ShooterSystem):</b> Governs the <i>Mechanical/Electronic</i> hardware.
  *       Includes physical hard-stops, gear ratios, and conversion factors. Change these to match your robot's build.</li>

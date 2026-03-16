@@ -10,7 +10,7 @@ package ca.team4308.absolutelib.math.trajectories.shooter;
  * <ul>
  *   <li><b>ShooterConfig (This Class):</b> Governs the <i>Mechanical/Electronic</i> hardware.
  *       Includes physical hard-stops, gear ratios, and conversion factors. Change these to match your robot's build.</li>
- *   <li><b>SolverConfig (TrajectorySolver):</b> Governs the <i>Physics & Math</i> logic. 
+ *   <li><b>SolverConfig (TrajectorySolver):</b> Governs the <i>Physics &amp; Math</i> logic. 
  *       Includes simulation timesteps, search tolerances, and solve modes. Change these for performance or accuracy tuning.</li>
  * </ul>
  * 

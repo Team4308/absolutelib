@@ -28,30 +28,47 @@ public class Elevator extends AbsoluteSubsystem {
     public static class Config {
 
         // MOTORS AND ENCODER
+        /** The leader motor wrapper. */
         public MotorWrapper leader;
+        /** The follower motor wrappers. */
         public MotorWrapper[] followers = new MotorWrapper[0];
+        /** The encoder wrapper. */
         public EncoderWrapper encoder;
+        /** Whether the encoder is inverted. */
         public boolean encoderInverted = false;
 
         // MECHANICAL
+        /** The gear ratio of the mechanism. */
         public double gearRatio = 1.0;
+        /** The radius of the drum in meters. */
         public double drumRadiusMeters = 0.05;
+        /** The minimum height in meters. */
         public double minHeightMeters = 0.0;
+        /** The maximum height in meters. */
         public double maxHeightMeters = 1.0;
+        /** The tolerated error in meters. */
         public double toleranceMeters = 0.02;
+        /** The mass of the carriage in kg. */
         public double carriageMassKg = 5.0;
 
         // PID FF
+        /** Proportional gain, Integral gain, Derivative gain. */
         public double kP = 0.0, kI = 0.0, kD = 0.0;
+        /** Static gain, Gravity gain, Velocity gain, Acceleration gain. */
         public double kS = 0.0, kG = 0.0, kV = 0.0, kA = 0.0;
 
         // MOTION PROFILE
+        /** The maximum velocity in meters per second. */
         public double maxVelocityMetersPerSec = 1.0;
+        /** The maximum acceleration in meters per second squared. */
         public double maxAccelerationMetersPerSecSq = 2.0;
 
         // CONFIG
+        /** The simulation configuration. */
         public ElevatorSimulation.ElevatorSimulationConfig simulationConfig = null;
+        /** Whether simulation is enabled. */
         public boolean enableSimulation = true;
+        /** Whether to use smart motion. */
         public boolean useSmartMotion = false;
 
         public Config withLeader(MotorWrapper m) {
@@ -79,6 +96,11 @@ public class Elevator extends AbsoluteSubsystem {
             return this;
         }
 
+        /**
+         * Sets the drum radius.
+         * @param meters the drum radius in meters
+         * @return this config
+         */
         public Config drumRadius(double meters) {
             drumRadiusMeters = meters;
             return this;
@@ -383,18 +405,35 @@ public class Elevator extends AbsoluteSubsystem {
     }
 
     // Getters for Simulation and external access
+
+    /** 
+     * Gets the leader motor.
+     * @return the leader motor
+     */
     public MotorWrapper getLeaderMotor() {
         return leader;
     }
 
+    /** 
+     * Gets the encoder.
+     * @return the encoder
+     */
     public EncoderWrapper getEncoder() {
         return cfg.encoder;
     }
 
+    /** 
+     * Gets the configuration used by this elevator.
+     * @return the config
+     */
     public Config getConfig() {
         return cfg;
     }
 
+    /**
+     * Gets the current target height in meters.
+     * @return the target height in meters
+     */
     public double getTargetHeightMeters() {
         return targetHeightMeters;
     }

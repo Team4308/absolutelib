@@ -45,6 +45,9 @@ public abstract class SimulationBase extends AbsoluteSubsystem {
 
     /**
      * Log simulation data with level filtering.
+     * @param level the verbosity level
+     * @param key the data key
+     * @param value the data value
      */
     protected void logSim(LogLevel level, String key, Object value) {
         if (level.ordinal() <= logLevel.ordinal()) {
@@ -54,6 +57,8 @@ public abstract class SimulationBase extends AbsoluteSubsystem {
 
     /**
      * Record simulation output. Automatically prefixes with "simulation/".
+     * @param key the output key
+     * @param value the output value
      */
     protected void recordSimOutput(String key, Object value) {
         recordOutput(SIM_PREFIX + key, value);
@@ -98,6 +103,7 @@ public abstract class SimulationBase extends AbsoluteSubsystem {
     /**
      * Update the simulation with a specific delta time.
      * Use this if driving the simulation manually from a subsystem.
+     * @param dtSeconds time step
      */
     public void update(double dtSeconds) {
         updateSimulation(dtSeconds);
@@ -107,11 +113,13 @@ public abstract class SimulationBase extends AbsoluteSubsystem {
 
     /**
      * Override to provide simulation state for logging
+     * @return the simulation state
      */
     protected abstract SimState getSimulationState();
 
     /**
      * Override to update physics simulation each cycle
+     * @param dtSeconds time step
      */
     protected abstract void updateSimulation(double dtSeconds);
 
@@ -123,6 +131,7 @@ public abstract class SimulationBase extends AbsoluteSubsystem {
 
     /**
      * Hook: called every periodic cycle with delta time
+     * @param dtSeconds time step
      */
     protected void onSimulationPeriodic(double dtSeconds) {
     }
@@ -162,6 +171,7 @@ public abstract class SimulationBase extends AbsoluteSubsystem {
 
     /**
      * Helper: apply input voltage to simulation (override for custom behavior)
+     * @param volts the input voltage
      */
     protected void applyInputVoltage(double volts) {
         // Subclasses implement motor/mechanism response
@@ -169,6 +179,7 @@ public abstract class SimulationBase extends AbsoluteSubsystem {
 
     /**
      * Helper: set simulation position directly (for testing/init)
+     * @param meters the simulation position in meters
      */
     protected void setSimulationPosition(double meters) {
         // Subclasses implement
@@ -176,6 +187,7 @@ public abstract class SimulationBase extends AbsoluteSubsystem {
 
     /**
      * Helper: set simulation velocity directly (for testing/init)
+     * @param metersPerSec the simulation velocity
      */
     protected void setSimulationVelocity(double metersPerSec) {
         // Subclasses implement
@@ -183,6 +195,7 @@ public abstract class SimulationBase extends AbsoluteSubsystem {
 
     /**
      * Override to enable battery voltage simulation (default: false in sim)
+     * @return boolean if simulated battery affects should be utilized
      */
     protected boolean shouldSimulateBatteryEffects() {
         return false;
@@ -203,6 +216,7 @@ public abstract class SimulationBase extends AbsoluteSubsystem {
 
     /**
      * Get current simulation time in seconds
+     * @return current time in seconds
      */
     protected double getCurrentTimeSeconds() {
         return RobotController.getFPGATime() / 1_000_000.0;
@@ -210,6 +224,10 @@ public abstract class SimulationBase extends AbsoluteSubsystem {
 
     /**
      * Helper: clamp value to range
+     * @param value value to clamp
+     * @param min min val
+     * @param max max val
+     * @return clamped value
      */
     protected double clamp(double value, double min, double max) {
         return Math.max(min, Math.min(max, value));
@@ -217,6 +235,7 @@ public abstract class SimulationBase extends AbsoluteSubsystem {
 
     /**
      * Log a simulation event (throttled to avoid spam)
+     * @param event the event string
      */
     protected void logSimEvent(String event) {
         logThrottle("sim_event_" + event, 1000, "Sim event: " + event);

@@ -26,6 +26,7 @@ public abstract class AbsoluteSubsystem extends SubsystemBase {
 
     /**
      * Provide a Sendable for telemetry/logging; may return null if unused.
+     * @return the Sendable associated with this subsystem
      */
     public abstract Sendable log();
 
@@ -33,6 +34,9 @@ public abstract class AbsoluteSubsystem extends SubsystemBase {
     private final Map<String, Long> lastLogMs = new HashMap<>();
     private final Set<String> loggedOnce = new HashSet<>();
 
+    /**
+     * Constructs a new AbsoluteSubsystem.
+     */
     public AbsoluteSubsystem() {
         this.backend = new DriverStationBackend();
     }
@@ -62,6 +66,10 @@ public abstract class AbsoluteSubsystem extends SubsystemBase {
         return loggerAvailable;
     }
 
+    /**
+     * Gets the base log channel for this subsystem.
+     * @return the log channel string
+     */
     protected String getLogChannelBase() {
         String n = getName();
         if (n == null || n.isEmpty()) {
@@ -73,6 +81,8 @@ public abstract class AbsoluteSubsystem extends SubsystemBase {
     /**
      * Record an output value for logging/telemetry. Uses AdvantageKit's Logger
      * if available, otherwise falls back to SmartDashboard.
+     * @param name Key for the output
+     * @param value The value to record
      */
     protected void recordOutput(String name, Object value) {
         String fullKey = getLogChannelBase() + "/" + name;
@@ -133,7 +143,7 @@ public abstract class AbsoluteSubsystem extends SubsystemBase {
 
     /**
      * Log info.
-     *
+     * @param message the message to log
      */
     protected void logInfo(String message) {
         backend.info(getLogChannelBase(), message);
@@ -141,7 +151,7 @@ public abstract class AbsoluteSubsystem extends SubsystemBase {
 
     /**
      * Log a warning.
-     *
+     * @param message the message to log
      */
     protected void logWarn(String message) {
         backend.warn(getLogChannelBase(), message);
@@ -149,7 +159,7 @@ public abstract class AbsoluteSubsystem extends SubsystemBase {
 
     /**
      * Log an error.
-     *
+     * @param message the message to log
      */
     protected void logError(String message) {
         backend.error(getLogChannelBase(), message, null);
@@ -157,21 +167,35 @@ public abstract class AbsoluteSubsystem extends SubsystemBase {
 
     /**
      * Log an error with throwable
+     * @param message the message to log
+     * @param t the throwable
      */
     protected void logError(String message, Throwable t) {
         backend.error(getLogChannelBase(), message, t);
     }
 
+    /**
+     * Log a number value.
+     * @param key the key
+     * @param value the number
+     */
     protected void logNumber(String key, double value) {
         backend.info(getLogChannelBase() + "/" + key, Double.toString(value));
     }
 
+    /**
+     * Log a boolean value.
+     * @param key the key
+     * @param value the boolean
+     */
     protected void logBoolean(String key, boolean value) {
         backend.info(getLogChannelBase() + "/" + key, Boolean.toString(value));
     }
 
     /**
      * Log a message only the first time for the given key.
+     * @param key the unique key for this log
+     * @param message the message
      */
     protected void logOnce(String key, String message) {
         if (loggedOnce.add(key)) {
@@ -182,6 +206,9 @@ public abstract class AbsoluteSubsystem extends SubsystemBase {
     /**
      * Throttled log: only logs if at least minIntervalMs since last time for
      * the key.
+     * @param key the identifier
+     * @param minIntervalMs the min interval
+     * @param message the message
      */
     protected void logThrottle(String key, long minIntervalMs, String message) {
         long now = nowMs();
@@ -194,6 +221,8 @@ public abstract class AbsoluteSubsystem extends SubsystemBase {
 
     /**
      * Wrap a runnable and log any thrown exception with a label.
+     * @param label the log label
+     * @param body the runnable action
      */
     protected void runSafely(String label, Runnable body) {
         try {
@@ -273,6 +302,7 @@ public abstract class AbsoluteSubsystem extends SubsystemBase {
 
     /**
      * Allows external code to supply a custom backend implementation.
+     * @param custom the custom backend
      */
     public void setCustomLoggingBackend(LoggingBackend custom) {
         if (custom != null) {
@@ -280,23 +310,36 @@ public abstract class AbsoluteSubsystem extends SubsystemBase {
     
         }}
 
+    /**
+     * Initializes the subsystem.
+     */
     public void initialize() {
         onInitialize();
     }
 
+    /**
+     * Called during initialization.
+     */
     protected void onInitialize() {
     }
 
     // Hoesntly unused but whatever have them for ltr
+    /**
+     * Called before periodic execution.
+     */
     protected void onPrePeriodic() {
     }
 
+    /**
+     * Called after periodic execution.
+     */
     protected void onPostPeriodic() {
     }
 
     /**
      * Helper to run a periodic body surrounded by pre/post hooks. Subclasses
      * may call this from {@link #periodic()}.
+     * @param body the executable logic
      */
     protected final void runPeriodicWithHooks(Runnable body) {
         onPrePeriodic();

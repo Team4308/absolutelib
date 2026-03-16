@@ -66,16 +66,29 @@ public final class ChineseRemainderSolver {
             this.modulus = modulus;
         }
 
-        /** Returns the constraint name. */
+        /** 
+         * Returns the constraint name.
+         * @return the name 
+         */
         public String getName() { return name; }
 
-        /** Returns the normalized remainder (always in {@code [0, modulus)}). */
+        /** 
+         * Returns the normalized remainder (always in {@code [0, modulus)}).
+         * @return the remainder
+         */
         public long getRemainder() { return remainder; }
 
-        /** Returns the modulus. */
+        /** 
+         * Returns the modulus.
+         * @return the modulus
+         */
         public long getModulus() { return modulus; }
 
-        /** Returns {@code true} if the given value satisfies this constraint. */
+        /** 
+         * Returns {@code true} if the given value satisfies this constraint.
+         * @param value the value to check
+         * @return true if satisfied
+         */
         public boolean isSatisfiedBy(long value) {
             return ((value % modulus) + modulus) % modulus == remainder;
         }
@@ -106,13 +119,22 @@ public final class ChineseRemainderSolver {
             this.constraints = constraints;
         }
 
-        /** Returns the smallest non-negative solution. */
+        /** 
+         * Returns the smallest non-negative solution.
+         * @return the value
+         */
         public long getValue() { return value; }
 
-        /** Returns the period — solutions repeat every this many units. */
+        /** 
+         * Returns the period — solutions repeat every this many units.
+         * @return the period
+         */
         public long getPeriod() { return period; }
 
-        /** Returns the constraints this solution satisfies. */
+        /** 
+         * Returns the constraints this solution satisfies.
+         * @return the constraints
+         */
         public List<Constraint> getConstraints() { return constraints; }
 
         /**
@@ -162,7 +184,12 @@ public final class ChineseRemainderSolver {
      * Kept for backward compatibility with code using the original name.
      */
     public static class ModularConstraint extends Constraint {
-        /** Creates a named modular constraint. */
+        /** 
+         * Creates a named modular constraint.
+         * @param name human-readable label
+         * @param remainder the required remainder
+         * @param modulus the modulus
+         */
         public ModularConstraint(String name, long remainder, long modulus) {
             super(name, remainder, modulus);
         }
@@ -173,7 +200,12 @@ public final class ChineseRemainderSolver {
      * Kept for backward compatibility with code using the original name.
      */
     public static class CRTSolution extends Solution {
-        /** Creates a CRT solution. */
+        /** 
+         * Creates a CRT solution.
+         * @param value smallest non-negative solution
+         * @param period the period
+         * @param constraints constraints satisfied
+         */
         public CRTSolution(long value, long period, List<Constraint> constraints) {
             super(value, period, constraints);
         }
@@ -181,6 +213,9 @@ public final class ChineseRemainderSolver {
         /**
          * Gets all solutions within a range.
          * Legacy alias for {@link Solution#solutionsInRange(long, long)}.
+         * @param minValue minimum value
+         * @param maxValue maximum value
+         * @return list of solutions
          */
         public List<Long> getSolutionsInRange(long minValue, long maxValue) {
             return solutionsInRange(minValue, maxValue);
@@ -192,6 +227,10 @@ public final class ChineseRemainderSolver {
     /**
      * Solves two congruences: {@code x ≡ a1 (mod m1)} and {@code x ≡ a2 (mod m2)}.
      *
+     * @param a1 remainder 1
+     * @param m1 modulus 1
+     * @param a2 remainder 2
+     * @param m2 modulus 2
      * @return {@code [solution, lcm]} or {@code null} if no solution exists
      *         (i.e., gcd(m1,m2) does not divide a2−a1)
      */

@@ -21,6 +21,8 @@ import ca.team4308.absolutelib.math.trajectories.TrajectorySolver;
  * physics math to find the necessary angle/velocity. {@code ShooterSystem} is
  * the <i>Manager</i> that uses that calculation to control the robot.
  * <p>
+ * This class provides methods to utilize these results in real time.
+ * </p>
  * <h2>Usage</h2>
  * <pre>{@code
  * ShooterSystem system = new ShooterSystem(config, table, solver);
