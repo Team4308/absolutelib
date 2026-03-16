@@ -38,6 +38,10 @@ public class AirResistance {
     /**
      * Creates disabled air resistance model (vacuum conditions).
      */
+    /**
+     * Creates disabled air resistance model (vacuum conditions).
+     * @return AirResistance instance with drag disabled
+     */
     public static AirResistance disabled() {
         return new AirResistance(false, 0, 0, false);
     }
@@ -45,12 +49,20 @@ public class AirResistance {
     /**
      * Creates air resistance model optimized for indoor FRC competition.
      */
+    /**
+     * Creates air resistance model optimized for indoor FRC competition.
+     * @return AirResistance instance for indoor FRC
+     */
     public static AirResistance indoorFRC() {
         return new AirResistance(true, 1.225, PhysicsConstants.FOAM_BALL_DRAG_COEFFICIENT, false);
     }
     
     /**
      * Creates air resistance model with Magnus effect for backspin shots.
+     */
+    /**
+     * Creates air resistance model with Magnus effect for backspin shots.
+     * @return AirResistance instance with Magnus effect enabled
      */
     public static AirResistance withMagnus() {
         return new AirResistance(true, PhysicsConstants.AIR_DENSITY, 
@@ -174,18 +186,34 @@ public class AirResistance {
         return Math.sqrt(2 * mass * PhysicsConstants.GRAVITY / (airDensity * dragCoefficient * area));
     }
     
+    /**
+     * Returns whether air resistance is enabled.
+     * @return true if enabled
+     */
     public boolean isEnabled() {
         return enabled;
     }
     
+    /**
+     * Returns the air density used in the model.
+     * @return air density in kg/m^3
+     */
     public double getAirDensity() {
         return airDensity;
     }
     
+    /**
+     * Returns the drag coefficient used in the model.
+     * @return drag coefficient (Cd)
+     */
     public double getDragCoefficient() {
         return dragCoefficient;
     }
     
+    /**
+     * Returns whether Magnus effect is enabled.
+     * @return true if Magnus effect is included
+     */
     public boolean isMagnusEffectEnabled() {
         return includeMagnusEffect;
     }

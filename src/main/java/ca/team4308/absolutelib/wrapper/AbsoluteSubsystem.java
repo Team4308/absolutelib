@@ -222,12 +222,30 @@ public abstract class AbsoluteSubsystem extends SubsystemBase {
         }
     }
 
+    /**
+     * Interface for custom logging backends.
+     */
     protected interface LoggingBackend {
-
+        /**
+         * Log an info message.
+         * @param channel Log channel name
+         * @param message Info message
+         */
         void info(String channel, String message);
 
+        /**
+         * Log a warning message.
+         * @param channel Log channel name
+         * @param message Warning message
+         */
         void warn(String channel, String message);
 
+        /**
+         * Log an error message.
+         * @param channel Log channel name
+         * @param message Error message
+         * @param t Throwable (optional)
+         */
         void error(String channel, String message, Throwable t);
     }
 

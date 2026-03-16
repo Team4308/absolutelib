@@ -55,14 +55,11 @@ public class ExampleShooter extends AbsoluteSubsystem {
     private boolean trackingEnabled = true;
     private boolean loggingEnabled = true;
 
-
     public ExampleShooter() {
         super();
 
         flywheelLeader = new TalonFX(40);
 
-        // --- 1. Mechanical Setup ---
-        // (ShooterConfig defines hardware limits and electronics)
         ShooterConfig shooterConfig = ShooterConfig.builder()
                 .pitchLimits(47.5, 82.5)
                 .rpmLimits(0, 6000) // Kraken xt60 max rpm
@@ -109,7 +106,7 @@ public class ExampleShooter extends AbsoluteSubsystem {
                 .compressionRatio(0.10)
                 .motor(FRCMotors.KRAKEN_X60)
                 .motorsPerWheel(2)
-                .gearRatio(1.0) 
+                .gearRatio(1.0)
                 .build();
         solver.setFlywheel(flywheelConfig);
 
@@ -179,7 +176,7 @@ public class ExampleShooter extends AbsoluteSubsystem {
 
     @Override
     public void periodic() {
-        double measuredRpm = RobotBase.isReal() ? flywheelLeader.getVelocity().getValueAsDouble() * 60.0 : currentShot.rpm; 
+        double measuredRpm = RobotBase.isReal() ? flywheelLeader.getVelocity().getValueAsDouble() * 60.0 : currentShot.rpm;
 
         if (trackingEnabled && poseSupplier != null) {
             updateShot();
@@ -191,7 +188,7 @@ public class ExampleShooter extends AbsoluteSubsystem {
 
         if (loggingEnabled) {
             ShooterSystem.ShooterTelemetry telemetry = shooterSystem.getSystemTelemetry(measuredRpm);
-            
+
             recordOutput("Shooter/Mode", telemetry.mode.name());
             recordOutput("Shooter/Source", telemetry.source.name());
             recordOutput("Shooter/SourceDetail", telemetry.sourceDetail);
@@ -200,7 +197,7 @@ public class ExampleShooter extends AbsoluteSubsystem {
             recordOutput("Shooter/TargetPitchDeg", telemetry.targetPitchDegrees);
             recordOutput("Shooter/IsValid", telemetry.isValid);
             recordOutput("Shooter/IsReady", telemetry.isReady);
-            
+
             if (telemetry.safetyResult != null) {
                 recordOutput("Shooter/Safety/Safe", telemetry.safetyResult.safe);
                 recordOutput("Shooter/Safety/Reason", telemetry.safetyResult.reason);
@@ -208,7 +205,7 @@ public class ExampleShooter extends AbsoluteSubsystem {
 
             Pose3d goalPose = new Pose3d(targetPosition, new Rotation3d());
             Logger.recordOutput("ExampleShooter/GoalPose3d", goalPose);
-            
+
             recordOutput("TargetYawDeg", targetYawDegrees);
             recordOutput("MeasuredRPM", measuredRpm);
             recordOutput("RpmDeficit", telemetry.targetRpm - measuredRpm);
@@ -218,7 +215,9 @@ public class ExampleShooter extends AbsoluteSubsystem {
     }
 
     private void logTrajectoryDebug() {
-        if (!loggingEnabled) return;
+        if (!loggingEnabled) {
+            return;
+        }
         TrajectoryResult trajResult = shooterSystem.getLastTrajectoryResult();
         if (trajResult == null) {
             return;
