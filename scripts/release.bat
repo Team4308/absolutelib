@@ -178,7 +178,6 @@ echo       Backup saved to %CACHE_PATH%
 :: ========================================================
 echo [4/7] Committing and pushing master ...
 git add -A
-git restore --staged site >nul 2>&1
 git commit -m "!COMMIT_MSG!"
 if errorlevel 1 (
     echo [WARNING] Nothing to commit on master, or commit failed.
