@@ -248,7 +248,10 @@ public class TrajectorySolver {
             private double minPitchDegrees = 0;
             private double maxPitchDegrees = 90;
             private double minRpm = 0;
-            private double maxRpm = 10_000;
+            // Cap RPM for typical FRC shooters so solver does not request unrealistically high speeds.
+            // This is also used during precompute generation to ensure lookup tables stay within
+            // mechanism limits.
+            private double maxRpm = 6000;
 
             private double rpmTolerance = 100;
             private double angleTolerance = 1.0;
@@ -1084,6 +1087,11 @@ public class TrajectorySolver {
             double targetV = Math.sqrt(compensatedHoriz * compensatedHoriz + vVert * vVert);
 
             FlywheelSimulator.SimulationResult pitchFw = flywheelSimForPitch.simulateForVelocity(targetV);
+            // Enforce solver max RPM constraint so precompute and runtime avoid
+            // requesting unrealistically high wheel speeds.
+            if (pitchFw.requiredWheelRpm > config.getMaxRpm()) {
+                return null;
+            }
             if (!pitchFw.isAchievable) {
                 return null;
             }
@@ -1144,8 +1152,11 @@ public class TrajectorySolver {
             double missDistanceLocal = (trajSim.horizontalDistAtCrossing >= 0)
                     ? trajSim.horizontalDistAtCrossing : trajSim.closestApproach;
 
-            double score = computeSweepQualityScore(pitchDeg, missDistanceLocal,
-                    input.getTargetRadius(), trajSim.flightTime, trajSim.entryAngleDegrees);
+        double distanceMeters = Math.hypot(iterTargetX - input.getShooterX(),
+                iterTargetY - input.getShooterY());
+        double score = computeSweepQualityScore(pitchDeg, missDistanceLocal,
+            input.getTargetRadius(), trajSim.flightTime,
+            trajSim.entryAngleDegrees, pitchFw.requiredWheelRpm, distanceMeters);
 
             return new SweepCandidate(pitchRad, score, iterTargetX, iterTargetY, trajSim.flightTime);
         }).filter(java.util.Objects::nonNull)
@@ -1354,8 +1365,9 @@ public class TrajectorySolver {
      * @return quality score in [0, 100]
      */
     private double computeSweepQualityScore(double pitchDeg, double missDistance,
-            double targetRadius, double timeOfFlight,
-            double entryAngleDeg) {
+        double targetRadius, double timeOfFlight,
+        double entryAngleDeg, double requiredWheelRpm,
+        double distanceMeters) {
         double accuracyScore;
         if (targetRadius > 0) {
             double relMiss = missDistance / targetRadius;
@@ -1364,7 +1376,9 @@ public class TrajectorySolver {
             accuracyScore = missDistance < 0.01 ? 40.0 : 0.0;
         }
 
-        double optimalPitch = 45.0;
+        // Favor flatter trajectories for long passes. This encourages the solver to
+        // pick higher velocity (higher RPM) shots at long range.
+        double optimalPitch = 45.0 - Math.min(15.0, Math.max(0.0, (distanceMeters - 2.0) * 1.5));
         double deviation = Math.abs(pitchDeg - optimalPitch);
         double stabilityScore = Math.max(0, 30.0 * (1.0 - deviation / 45.0));
         if (pitchDeg > 70.0) {
@@ -1373,9 +1387,43 @@ public class TrajectorySolver {
 
         double speedScore = Math.max(0, 20.0 * (1.0 - timeOfFlight / 3.0));
 
+        // Prefer RPMs that roughly match the required distance for short shots.
+        // For longer pass shots, bias toward a moderate “pass RPM” target (around 3.5k)
+        // instead of pushing all entries toward the absolute max.
+        double rpmScore = 0;
+        if (requiredWheelRpm > 0) {
+            // Target RPM for short and medium shots. Keeps hub shots near ~3k.
+            double idealRpm;
+            if (distanceMeters < 2.5) {
+                idealRpm = 2800.0;
+            } else if (distanceMeters < 5.0) {
+                idealRpm = 2800.0 + (distanceMeters - 2.5) * 400.0; // 2800 -> 3800
+            } else {
+                idealRpm = 3800.0 + Math.min(700.0, (distanceMeters - 5.0) * 150.0); // up to ~4500
+            }
+
+            double rpmOffset = Math.abs(requiredWheelRpm - idealRpm);
+            double rpmScoreFromIdeal = Math.max(0, 25.0 * (1.0 - rpmOffset / 1200.0));
+
+            // For long distances, blend toward an absolute “pass RPM target” instead of
+            // the max possible RPM (which pushes average too high).
+            double longDistanceFactor = Math.min(1.0, Math.max(0.0, (distanceMeters - 4.0) / 4.0));
+            double passRpmTarget = 3400.0;
+            double absOffset = Math.abs(requiredWheelRpm - passRpmTarget);
+            double rpmScoreAbsolute = Math.max(0, 25.0 * (1.0 - absOffset / 1500.0));
+
+            rpmScore = (1 - longDistanceFactor) * rpmScoreFromIdeal + longDistanceFactor * rpmScoreAbsolute;
+
+            // Gently penalize trajectories that require wheel speeds substantially
+            // above the nominal pass target, to keep the overall table mean RPM closer
+            // to ~3.5k without completely prohibiting higher RPM options.
+            double over = Math.max(0.0, requiredWheelRpm - 3500.0);
+            rpmScore -= Math.min(12.0, over / 250.0);
+        }
+
         double entryScore = Math.min(10.0, entryAngleDeg / 9.0);
 
-        return accuracyScore + stabilityScore + speedScore + entryScore;
+        return accuracyScore + stabilityScore + speedScore + rpmScore + entryScore;
     }
 
     /**
@@ -1506,6 +1554,10 @@ public class TrajectorySolver {
 
         boolean moving = Math.abs(input.getRobotVx()) > SolverConstants.getMovementThresholdMps()
                 || Math.abs(input.getRobotVy()) > SolverConstants.getMovementThresholdMps();
+
+        // Cache the flywheel in a local variable so parallel precompute runs don't
+        // race on the shared solver state.
+        FlywheelConfig cachedFlywheelSnapshot = cachedFlywheel;
         int convergenceIterations = moving
                 ? SolverConstants.getMovingConvergenceIterations()
                 : SolverConstants.getStationaryIterations();
@@ -1563,24 +1615,25 @@ public class TrajectorySolver {
         if (!Double.isNaN(maxPitchV) && maxPitchV > 0) {
             representativeVelocity = Math.max(representativeVelocity, maxPitchV);
         }
-        if (cachedFlywheel != null) {
+        if (cachedFlywheelSnapshot != null) {
             double absoluteMinWithBuffer = minVelocity * (isCloseRange ? 1.1 : 1.15 * dragComp);
             representativeVelocity = Math.min(representativeVelocity, absoluteMinWithBuffer);
         }
 
         FlywheelGenerator.GenerationResult genResult;
-        if (cachedFlywheel != null) {
-            FlywheelSimulator simulator = new FlywheelSimulator(cachedFlywheel, gamePiece);
+        if (cachedFlywheelSnapshot != null) {
+            FlywheelSimulator simulator = new FlywheelSimulator(cachedFlywheelSnapshot, gamePiece);
             FlywheelSimulator.SimulationResult simResult = simulator.simulateForVelocity(representativeVelocity);
 
             if (simResult.isAchievable) {
                 genResult = new FlywheelGenerator.GenerationResult(
                         List.of(new FlywheelGenerator.ScoredConfig(
-                                cachedFlywheel, simResult,
+                                cachedFlywheelSnapshot, simResult,
                                 simulator.scoreConfiguration(representativeVelocity)
                         )), 1
                 );
             } else {
+                cachedFlywheelSnapshot = null;
                 cachedFlywheel = null;
                 genResult = flywheelGenerator.generateAndEvaluate(representativeVelocity);
             }
@@ -1608,10 +1661,12 @@ public class TrajectorySolver {
             );
         }
 
-        FlywheelGenerator.ScoredConfig bestFlywheel = genResult.bestConfig;
-        FlywheelConfig flywheel = bestFlywheel.config;
+    FlywheelGenerator.ScoredConfig bestFlywheel = genResult.bestConfig;
+    FlywheelConfig flywheel = bestFlywheel.config;
 
-        cachedFlywheel = flywheel;
+    // Update the shared cache once the best config is known. Using a local
+    // snapshot above avoids races during the solve sweep.
+    cachedFlywheel = flywheel;
 
         FlywheelSimulator flywheelSimForPitch = new FlywheelSimulator(flywheel, gamePiece);
 
@@ -1785,13 +1840,15 @@ public class TrajectorySolver {
                 50.0
         );
 
-        double confidence = calculateConfidence(
-                bestFlywheel.score,
-                bestTrajSim.hitTarget,
-                marginOfError,
-                input.getTargetRadius(),
-                discreteSolution.score
-        );
+    double confidence = calculateConfidence(
+        bestFlywheel.score,
+        bestTrajSim.hitTarget,
+        marginOfError,
+        input.getTargetRadius(),
+        discreteSolution.score,
+        requiredRpm,
+        distance
+    );
 
         TrajectoryResult successResult = new TrajectoryResult(
                 input, gamePiece,
@@ -2081,13 +2138,15 @@ public class TrajectorySolver {
                 50.0
         );
 
-        double confidence = calculateConfidence(
-                simulator.scoreConfiguration(actualVelocity),
-                bestTrajSim.hitTarget,
-                bestTrajSim.closestApproach,
-                input.getTargetRadius(),
-                discreteSolution.score
-        );
+    double confidence = calculateConfidence(
+        simulator.scoreConfiguration(actualVelocity),
+        bestTrajSim.hitTarget,
+        bestTrajSim.closestApproach,
+        input.getTargetRadius(),
+        discreteSolution.score,
+        currentRpm,
+        distance
+    );
 
         return new TrajectoryResult(
                 input, gamePiece,
@@ -2112,8 +2171,9 @@ public class TrajectorySolver {
      * Calculates confidence score for a solution.
      */
     private double calculateConfidence(double flywheelScore, boolean hitTarget,
-            double marginOfError, double targetRadius,
-            double crtScore) {
+        double marginOfError, double targetRadius,
+        double crtScore, double requiredWheelRpm,
+        double distanceMeters) {
         double confidence = 0;
 
         confidence += Math.min(30, flywheelScore / 5);
@@ -2127,6 +2187,14 @@ public class TrajectorySolver {
         }
 
         confidence += Math.min(20, crtScore / 5);
+
+        // Penalize high RPM primarily for short shots; allow higher RPM for long-distance passes.
+        if (requiredWheelRpm > 0) {
+            double rpmPenalty = Math.max(0.0, requiredWheelRpm - 3000.0) / 1000.0;
+            // Fade penalty linearly from 1.0 at ~2m to 0.0 at ~6m.
+            double distanceFactor = Math.max(0.0, Math.min(1.0, 1.0 - (distanceMeters - 2.0) / 4.0));
+            confidence -= Math.min(20.0, rpmPenalty * 10.0) * distanceFactor;
+        }
 
         confidence += 10;
 

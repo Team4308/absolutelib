@@ -82,35 +82,40 @@ public final class ShotTablePrecomputeRunner {
         void update(int current, int total, int success, int skipped, String details,
                 double robotX, double robotY, double shooterX, double shooterY,
                 TrajectoryResult result) {
-            progressBar.setValue(current);
-            progressBar.setString(String.format("%d / %d", current, total));
-            statusLabel.setText(String.format(" Progress: %d/%d  |  Success: %d  |  Skipped: %d",
-                    current, total, success, skipped));
+            SwingUtilities.invokeLater(() -> {
+                progressBar.setValue(current);
+                progressBar.setString(String.format("%d / %d", current, total));
+                statusLabel.setText(String.format(" Progress: %d/%d  |  Success: %d  |  Skipped: %d",
+                        current, total, success, skipped));
 
-            if (details != null && !details.isEmpty()) {
-                logArea.append(details + "\n");
-                logArea.setCaretPosition(logArea.getDocument().getLength());
-            }
+                if (details != null && !details.isEmpty()) {
+                    logArea.append(details + "\n");
+                    int len = logArea.getDocument().getLength();
+                    logArea.setCaretPosition(Math.max(0, Math.min(len, len)));
+                }
 
-            // Extract real flight path from the TrajectoryResult
-            List<double[]> trajPoints = null;
-            if (result != null && result.isSuccess()) {
-                List<Pose3d> flight = result.getFlightPath();
-                if (flight != null && !flight.isEmpty()) {
-                    trajPoints = new ArrayList<>(flight.size());
-                    for (Pose3d p : flight) {
-                        trajPoints.add(new double[]{p.getX(), p.getY()});
+                // Extract real flight path from the TrajectoryResult
+                List<double[]> trajPoints = null;
+                if (result != null && result.isSuccess()) {
+                    List<Pose3d> flight = result.getFlightPath();
+                    if (flight != null && !flight.isEmpty()) {
+                        trajPoints = new ArrayList<>(flight.size());
+                        for (Pose3d p : flight) {
+                            trajPoints.add(new double[]{p.getX(), p.getY()});
+                        }
                     }
                 }
-            }
 
-            boolean wasSuccess = result != null && result.isSuccess();
-            fieldPanel.pushSample(robotX, robotY, wasSuccess);
-            fieldPanel.setRobotAndShooter(robotX, robotY, shooterX, shooterY);
-            fieldPanel.setTrajectory(trajPoints);
-            fieldPanel.repaint();
+                // These are not used in this scope; real lists are stored on FieldPanel.
 
-            infoPanel.update(result, robotX, robotY, shooterX, shooterY);
+                boolean wasSuccess = result != null && result.isSuccess();
+                fieldPanel.pushSample(robotX, robotY, wasSuccess);
+                fieldPanel.setRobotAndShooter(robotX, robotY, shooterX, shooterY);
+                fieldPanel.setTrajectory(trajPoints);
+                fieldPanel.repaint();
+
+                infoPanel.update(result, robotX, robotY, shooterX, shooterY);
+            });
         }
     }
 
@@ -194,9 +199,11 @@ public final class ShotTablePrecomputeRunner {
         double robotX, robotY, shooterX, shooterY;
         List<double[]> trajectory;
 
-        // History of sampled points for the heatmap underlay
-        final List<double[]> successPoints = new ArrayList<>();
-        final List<double[]> failPoints = new ArrayList<>();
+    // History of sampled points for the heatmap underlay. These are updated from the
+    // worker thread while the GUI may paint them; use a synchronized list to avoid
+    // ConcurrentModificationExceptions.
+    final List<double[]> successPoints = java.util.Collections.synchronizedList(new java.util.ArrayList<>());
+    final List<double[]> failPoints = java.util.Collections.synchronizedList(new java.util.ArrayList<>());
 
         private java.awt.Image backgroundImage = null;
 
@@ -301,15 +308,19 @@ public final class ShotTablePrecomputeRunner {
             g2.drawRect(FIELD_PAD, FIELD_PAD, w - 2 * FIELD_PAD, h - 2 * FIELD_PAD);
 
             // ── Sample heatmap dots ──
-            for (double[] pt : successPoints) {
-                int px = toPixelX(pt[0]), py = toPixelY(pt[1]);
-                g2.setColor(SUCCESS_DOT);
-                g2.fill(new Ellipse2D.Double(px - 2, py - 2, 4, 4));
+            synchronized (successPoints) {
+                for (double[] pt : successPoints) {
+                    int px = toPixelX(pt[0]), py = toPixelY(pt[1]);
+                    g2.setColor(SUCCESS_DOT);
+                    g2.fill(new Ellipse2D.Double(px - 2, py - 2, 4, 4));
+                }
             }
-            for (double[] pt : failPoints) {
-                int px = toPixelX(pt[0]), py = toPixelY(pt[1]);
-                g2.setColor(SKIP_DOT);
-                g2.fill(new Ellipse2D.Double(px - 2, py - 2, 4, 4));
+            synchronized (failPoints) {
+                for (double[] pt : failPoints) {
+                    int px = toPixelX(pt[0]), py = toPixelY(pt[1]);
+                    g2.setColor(SKIP_DOT);
+                    g2.fill(new Ellipse2D.Double(px - 2, py - 2, 4, 4));
+                }
             }
 
             // ── Target crosshair ──
@@ -323,15 +334,18 @@ public final class ShotTablePrecomputeRunner {
             g2.drawString("TARGET", tx + 12, ty - 2);
 
             // ── Trajectory path (real multi-segment) ──
-            if (trajectory != null && trajectory.size() > 1) {
+            // Make a local reference to avoid concurrent modification between
+            // the worker thread updating the trajectory and the EDT painting.
+            List<double[]> traj = trajectory;
+            if (traj != null && traj.size() > 1) {
                 g2.setStroke(new BasicStroke(2.5f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
-                int n = trajectory.size();
+                int n = traj.size();
                 for (int i = 1; i < n; i++) {
                     float t = (float) i / (n - 1);
                     Color c = blendColor(TRAJ_START, TRAJ_END, t);
                     g2.setColor(c);
-                    double[] p0 = trajectory.get(i - 1);
-                    double[] p1 = trajectory.get(i);
+                    double[] p0 = traj.get(i - 1);
+                    double[] p1 = traj.get(i);
                     g2.draw(new Line2D.Double(
                             toPixelX(p0[0]), toPixelY(p0[1]),
                             toPixelX(p1[0]), toPixelY(p1[1])));

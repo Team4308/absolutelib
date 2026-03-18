@@ -582,6 +582,7 @@ public final class ShotTablePrecompute {
                         shooterYaw,
                         result.getPitchAngleDegrees(),
                         result.getRecommendedRpm(),
+                        result.getConfidenceScore(),
                         result.getRequiredVelocityMps(),
                         result.getTimeOfFlightSeconds()));
             } else {
@@ -594,6 +595,17 @@ public final class ShotTablePrecompute {
                         robotX, robotY, shooterX, shooterY, result);
             }
         });
+
+            // Optionally prune the table to keep only the highest-quality shots.
+            // This helps control output size while ensuring the remaining entries
+            // represent the best overall trajectories.
+            int maxEntries = 4700;
+            if (entries.size() > maxEntries) {
+                entries.sort((a, b) -> Double.compare(b.confidenceScore, a.confidenceScore));
+                int pruned = entries.size() - maxEntries;
+                entries.subList(maxEntries, entries.size()).clear();
+                skipped.addAndGet(pruned);
+            }
 
         return new ShotTable(bounds, outline, gridStepMeters, new ArrayList<>(entries), skipped.get());
     }
@@ -648,6 +660,7 @@ public final class ShotTablePrecompute {
                         e.get("shooterX").asDouble(), e.get("shooterY").asDouble(),
                         e.get("distanceMeters").asDouble(), e.get("yawRadians").asDouble(),
                         e.get("pitchDegrees").asDouble(), e.get("rpm").asDouble(),
+                        e.has("confidenceScore") ? e.get("confidenceScore").asDouble() : 0.0,
                         e.get("exitVelocityMps").asDouble(), e.get("timeOfFlightSeconds").asDouble()
                 ));
             }
@@ -857,6 +870,7 @@ public final class ShotTablePrecompute {
                 sb.append(String.format(Locale.US, "\"yawRadians\": %.5f, ", entry.yawRadians));
                 sb.append(String.format(Locale.US, "\"pitchDegrees\": %.3f, ", entry.pitchDegrees));
                 sb.append(String.format(Locale.US, "\"rpm\": %.1f, ", entry.rpm));
+                sb.append(String.format(Locale.US, "\"confidenceScore\": %.1f, ", entry.confidenceScore));
                 sb.append(String.format(Locale.US, "\"exitVelocityMps\": %.3f, ", entry.exitVelocityMps));
                 sb.append(String.format(Locale.US, "\"timeOfFlightSeconds\": %.3f", entry.timeOfFlightSeconds));
                 sb.append("}");
@@ -885,6 +899,7 @@ public final class ShotTablePrecompute {
         public final double yawRadians;
         public final double pitchDegrees;
         public final double rpm;
+        public final double confidenceScore;
         public final double exitVelocityMps;
         public final double timeOfFlightSeconds;
 
@@ -892,6 +907,7 @@ public final class ShotTablePrecompute {
                 double shooterX, double shooterY,
                 double distanceMeters, double yawRadians,
                 double pitchDegrees, double rpm,
+                double confidenceScore,
                 double exitVelocityMps, double timeOfFlightSeconds) {
             this.robotX = robotX;
             this.robotY = robotY;
@@ -901,6 +917,7 @@ public final class ShotTablePrecompute {
             this.yawRadians = yawRadians;
             this.pitchDegrees = pitchDegrees;
             this.rpm = rpm;
+            this.confidenceScore = confidenceScore;
             this.exitVelocityMps = exitVelocityMps;
             this.timeOfFlightSeconds = timeOfFlightSeconds;
         }

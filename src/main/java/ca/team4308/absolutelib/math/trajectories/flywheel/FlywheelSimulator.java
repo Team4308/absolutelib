@@ -91,6 +91,11 @@ public class FlywheelSimulator {
         double slip = estimateSlip(targetExitVelocityMps);
         
         double effectiveTransfer = efficiency * (1.0 - slip * 0.5);
+        // In practice, even a moderately efficient flywheel setup can transfer
+        // a good fraction of the surface velocity to the ball. Prevent the
+        // model from dropping transfer efficiency too low (which would force
+        // unrealistically high RPMs and cause the solver to skip many shots).
+        effectiveTransfer = Math.max(effectiveTransfer, 0.50);
         if (effectiveTransfer < 0.1) {
             return SimulationResult.unachievable("Energy transfer too low");
         }
