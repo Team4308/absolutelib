@@ -1087,8 +1087,6 @@ public class TrajectorySolver {
             double targetV = Math.sqrt(compensatedHoriz * compensatedHoriz + vVert * vVert);
 
             FlywheelSimulator.SimulationResult pitchFw = flywheelSimForPitch.simulateForVelocity(targetV);
-            // Enforce solver max RPM constraint so precompute and runtime avoid
-            // requesting unrealistically high wheel speeds.
             if (pitchFw.requiredWheelRpm > config.getMaxRpm()) {
                 return null;
             }
@@ -1376,8 +1374,6 @@ public class TrajectorySolver {
             accuracyScore = missDistance < 0.01 ? 40.0 : 0.0;
         }
 
-        // Favor flatter trajectories for long passes. This encourages the solver to
-        // pick higher velocity (higher RPM) shots at long range.
         double optimalPitch = 45.0 - Math.min(15.0, Math.max(0.0, (distanceMeters - 2.0) * 1.5));
         double deviation = Math.abs(pitchDeg - optimalPitch);
         double stabilityScore = Math.max(0, 30.0 * (1.0 - deviation / 45.0));
@@ -1387,26 +1383,21 @@ public class TrajectorySolver {
 
         double speedScore = Math.max(0, 20.0 * (1.0 - timeOfFlight / 3.0));
 
-        // Prefer RPMs that roughly match the required distance for short shots.
-        // For longer pass shots, bias toward a moderate “pass RPM” target (around 3.5k)
-        // instead of pushing all entries toward the absolute max.
         double rpmScore = 0;
         if (requiredWheelRpm > 0) {
-            // Target RPM for short and medium shots. Keeps hub shots near ~3k.
             double idealRpm;
             if (distanceMeters < 2.5) {
                 idealRpm = 2800.0;
             } else if (distanceMeters < 5.0) {
-                idealRpm = 2800.0 + (distanceMeters - 2.5) * 400.0; // 2800 -> 3800
+                idealRpm = 2800.0 + (distanceMeters - 2.5) * 400.0; 
             } else {
-                idealRpm = 3800.0 + Math.min(700.0, (distanceMeters - 5.0) * 150.0); // up to ~4500
+                idealRpm = 3800.0 + Math.min(700.0, (distanceMeters - 5.0) * 150.0); 
             }
 
             double rpmOffset = Math.abs(requiredWheelRpm - idealRpm);
             double rpmScoreFromIdeal = Math.max(0, 25.0 * (1.0 - rpmOffset / 1200.0));
 
-            // For long distances, blend toward an absolute “pass RPM target” instead of
-            // the max possible RPM (which pushes average too high).
+   
             double longDistanceFactor = Math.min(1.0, Math.max(0.0, (distanceMeters - 4.0) / 4.0));
             double passRpmTarget = 3400.0;
             double absOffset = Math.abs(requiredWheelRpm - passRpmTarget);
@@ -1414,9 +1405,6 @@ public class TrajectorySolver {
 
             rpmScore = (1 - longDistanceFactor) * rpmScoreFromIdeal + longDistanceFactor * rpmScoreAbsolute;
 
-            // Gently penalize trajectories that require wheel speeds substantially
-            // above the nominal pass target, to keep the overall table mean RPM closer
-            // to ~3.5k without completely prohibiting higher RPM options.
             double over = Math.max(0.0, requiredWheelRpm - 3500.0);
             rpmScore -= Math.min(12.0, over / 250.0);
         }

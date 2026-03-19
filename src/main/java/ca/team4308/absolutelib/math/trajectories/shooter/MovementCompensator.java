@@ -77,14 +77,20 @@ public final class MovementCompensator {
 
         double yawLead = Math.atan2(-lateralVelocity * tof, base.distanceMeters);
 
+        double gain = config.getMovingCompensationGain();
+        if (gain <= 0.0) {
+            return base;
+        }
+
+        yawLead *= gain;
+
         if (base.source == ShotParameters.Source.SOLVER) {
             double combinedYaw = base.yawAdjustmentRadians + yawLead;
             return new ShotParameters(base.pitchDegrees, base.rpm, base.exitVelocityMps,
                     base.distanceMeters, combinedYaw, ShotParameters.Source.MOVING_COMPENSATED);
         }
 
-        double gain = config.getMovingCompensationGain();
-        int iterations = config.getMovingIterations();
+    int iterations = config.getMovingIterations();
 
         double radialVelocity = robotVxMps * Math.cos(yawToTargetRad)
                               + robotVyMps * Math.sin(yawToTargetRad);
@@ -103,7 +109,8 @@ public final class MovementCompensator {
             tof = newTof;
         }
 
-        yawLead = Math.atan2(-lateralVelocity * tof, effectiveDistance);
+    yawLead = Math.atan2(-lateralVelocity * tof, effectiveDistance);
+    yawLead *= gain;
 
         double rpmAdjustment = -radialVelocity * (base.rpm / exitVelocity) * gain;
         double newRpm = base.rpm + rpmAdjustment;
