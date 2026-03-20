@@ -1387,11 +1387,11 @@ public class TrajectorySolver {
         if (requiredWheelRpm > 0) {
             double idealRpm;
             if (distanceMeters < 2.5) {
-                idealRpm = 2800.0;
+                idealRpm = 2300.0;
             } else if (distanceMeters < 5.0) {
-                idealRpm = 2800.0 + (distanceMeters - 2.5) * 400.0; 
+                idealRpm = 2300.0 + (distanceMeters - 2.5) * 300.0;
             } else {
-                idealRpm = 3800.0 + Math.min(700.0, (distanceMeters - 5.0) * 150.0); 
+                idealRpm = 3300.0 + Math.min(400.0, (distanceMeters - 5.0) * 100.0);
             }
 
             double rpmOffset = Math.abs(requiredWheelRpm - idealRpm);
@@ -1399,7 +1399,7 @@ public class TrajectorySolver {
 
    
             double longDistanceFactor = Math.min(1.0, Math.max(0.0, (distanceMeters - 4.0) / 4.0));
-            double passRpmTarget = 3400.0;
+            double passRpmTarget = 2300.0; 
             double absOffset = Math.abs(requiredWheelRpm - passRpmTarget);
             double rpmScoreAbsolute = Math.max(0, 25.0 * (1.0 - absOffset / 1500.0));
 
