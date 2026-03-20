@@ -511,9 +511,35 @@ public class TrajectorySolver {
     private final ProjectileMotion projectileMotion;
     private final FlywheelGenerator flywheelGenerator;
 
+    private final edu.wpi.first.math.interpolation.InterpolatingDoubleTreeMap tuningPitchMap = new edu.wpi.first.math.interpolation.InterpolatingDoubleTreeMap();
+    private final edu.wpi.first.math.interpolation.InterpolatingDoubleTreeMap tuningRpmMap = new edu.wpi.first.math.interpolation.InterpolatingDoubleTreeMap();
+
+    private boolean hasTuningPitch = false;
+    private boolean hasTuningRpm = false;
+
+    /**
+     * Provide empirical tuning points so the solver biases toward specific RPM/Pitch combinations at known distances.
+     */
+    public void addTuningPoint(double distanceMeters, double pitchDegrees, double rpm) {
+        if (pitchDegrees >= 0) {
+            tuningPitchMap.put(distanceMeters, pitchDegrees);
+            hasTuningPitch = true;
+        }
+        if (rpm >= 0) {
+            tuningRpmMap.put(distanceMeters, rpm);
+            hasTuningRpm = true;
+        }
+    }
+
     private FlywheelConfig cachedFlywheel;
     private boolean debugEnabled = false;
     private SolveMode solveMode = SolveMode.CONSTRAINT;
+
+    // Last successful solution state used to dampen close-range jitter between
+    // successive solves.
+    private double previousPitchAngleRadians = Double.NaN;
+    private double previousYawAdjustmentRadians = Double.NaN;
+    private double previousRpm = Double.NaN;
 
     /**
      * Sets the solve strategy.
@@ -555,6 +581,9 @@ public class TrajectorySolver {
      * interpolated below this.
      */
     private static final double DRAG_COMP_FULL_RANGE_METERS = 8.0;
+
+    /** Hard minimum allowed wheel RPM for close-range shots. */
+    private static final double CLOSE_RANGE_MIN_RPM = 1900.0;
 
     /**
      * Vacuum launch velocity for a given pitch, distance, and height
@@ -804,6 +833,7 @@ public class TrajectorySolver {
 
         double bestPitch = Double.NaN;
         ProjectileMotion.TrajectoryResult bestTraj = null;
+    double bestScore = -Double.MAX_VALUE;
         double itX = effectiveTargetX, itY = effectiveTargetY;
 
         while (currentClearance <= rimClearance + 3.0) {
@@ -940,23 +970,29 @@ public class TrajectorySolver {
                     debugInfo.recordRejected(pitchDeg, SolveDebugInfo.RejectionReason.FLYOVER,
                             trajSim.closestApproach, trajSim.maxHeight, trajSim.flightTime, trajSim.hitTarget, trajSim.trajectory);
                 }
-                currentClearance += 0.25;
-                continue;
+        currentClearance += 0.25;
+        continue;
             }
 
-            bestPitch = pitchRad;
-            bestTraj = trajSim;
-            itX = iterTargetX;
-            itY = iterTargetY;
+        double missDistance = (trajSim.horizontalDistAtCrossing >= 0)
+            ? trajSim.horizontalDistAtCrossing : trajSim.closestApproach;
+        double score = computeTrajectoryCandidateScore(input, pitchDeg, trajSim,
+            missDistance, pitchFw.requiredWheelRpm, iterDistance, requiredYaw);
+        if (score > bestScore) {
+        bestScore = score;
+        bestPitch = pitchRad;
+        bestTraj = trajSim;
+        itX = iterTargetX;
+        itY = iterTargetY;
+        if (debugInfo != null) {
+            debugInfo.recordAccepted(pitchDeg, missDistance,
+                trajSim.closestApproach, trajSim.maxHeight, trajSim.flightTime,
+                trajSim.hitTarget, trajSim.trajectory);
+        }
+        }
 
-            double missDistance = (trajSim.horizontalDistAtCrossing >= 0)
-                    ? trajSim.horizontalDistAtCrossing : trajSim.closestApproach;
-            if (debugInfo != null) {
-                debugInfo.recordAccepted(pitchDeg, missDistance,
-                        trajSim.closestApproach, trajSim.maxHeight, trajSim.flightTime,
-                        trajSim.hitTarget, trajSim.trajectory);
-            }
-            break;
+        currentClearance += 0.25;
+        continue;
         }
 
         if (Double.isNaN(bestPitch) || bestTraj == null) {
@@ -1087,7 +1123,20 @@ public class TrajectorySolver {
             double targetV = Math.sqrt(compensatedHoriz * compensatedHoriz + vVert * vVert);
 
             FlywheelSimulator.SimulationResult pitchFw = flywheelSimForPitch.simulateForVelocity(targetV);
-            if (pitchFw.requiredWheelRpm > config.getMaxRpm()) {
+            
+            // double dynamicMaxRpm = config.getMaxRpm();
+            // User requested to put a hard cap in solveSweepCore to prevent 3k-4k rpm for mid-range (around 5m)
+            // and let it pick high rpm when distance > something.
+            // But strict limits cause precompute failure. We will let the score function guide it.
+            // if (iterDistance > 1.0 && iterDistance <= 4.0) {
+            //     dynamicMaxRpm = 3000.0;
+            // } else if (iterDistance > 4.0 && iterDistance <= 5.5) {
+            //    dynamicMaxRpm = 3200.0;
+            // } else if (iterDistance > 5.5 && iterDistance <= 6.5) {
+            //    dynamicMaxRpm = 3800.0;
+            // }
+            double dynamicMaxRpm = config.getMaxRpm(); // Keep using the max hardware RPM to find *A* solution, but penalize bad ones.
+            if (pitchFw.requiredWheelRpm > dynamicMaxRpm) {
                 return null;
             }
             if (!pitchFw.isAchievable) {
@@ -1147,14 +1196,13 @@ public class TrajectorySolver {
                 return null;
             }
 
-            double missDistanceLocal = (trajSim.horizontalDistAtCrossing >= 0)
-                    ? trajSim.horizontalDistAtCrossing : trajSim.closestApproach;
+        double missDistanceLocal = (trajSim.horizontalDistAtCrossing >= 0)
+            ? trajSim.horizontalDistAtCrossing : trajSim.closestApproach;
 
-        double distanceMeters = Math.hypot(iterTargetX - input.getShooterX(),
-                iterTargetY - input.getShooterY());
-        double score = computeSweepQualityScore(pitchDeg, missDistanceLocal,
-            input.getTargetRadius(), trajSim.flightTime,
-            trajSim.entryAngleDegrees, pitchFw.requiredWheelRpm, distanceMeters);
+    double distanceMeters = Math.hypot(iterTargetX - input.getShooterX(),
+        iterTargetY - input.getShooterY());
+        double score = computeTrajectoryCandidateScore(input, pitchDeg, trajSim,
+            missDistanceLocal, pitchFw.requiredWheelRpm, distanceMeters, requiredYaw);
 
             return new SweepCandidate(pitchRad, score, iterTargetX, iterTargetY, trajSim.flightTime);
         }).filter(java.util.Objects::nonNull)
@@ -1218,9 +1266,10 @@ public class TrajectorySolver {
         double lowPitchDeg = effectiveMinPitch;
         double highPitchDeg = effectiveMaxPitch;
 
-        double bestPitch = Double.NaN;
-        double minMissDistance = Double.MAX_VALUE;
+    double bestPitch = Double.NaN;
+    double bestScore = -Double.MAX_VALUE;
         double itX = effectiveTargetX, itY = effectiveTargetY;
+    double bestTof = estimatedTof;
 
         int maxIterations = 8; // log2(~45 degree spread / ~0.5 degree res)
 
@@ -1276,7 +1325,7 @@ public class TrajectorySolver {
                         pitchRad, requiredYaw, pitchFw.ballSpinRpm,
                         iterTargetX, iterTargetY, input.getTargetZ(),
                         input.getTargetRadius(), actualVelocity);
-                if (refined.hitTarget) {
+                if (refined != null && refined.hitTarget) {
                     trajSim = refined;
                     actualVelocity = Math.sqrt(
                             trajSim.trajectory[0].vx * trajSim.trajectory[0].vx
@@ -1305,15 +1354,22 @@ public class TrajectorySolver {
                             trajSim.closestApproach, trajSim.maxHeight, trajSim.flightTime, trajSim.hitTarget, trajSim.trajectory);
                 }
                 lowPitchDeg = midPitchDeg;
-            } else if (missDistance < minMissDistance && trajSim.maxHeight > input.getTargetZ()) {
-                minMissDistance = missDistance;
-                bestPitch = pitchRad;
-                itX = iterTargetX;
-                itY = iterTargetY;
-                if (debugInfo != null) {
-                    debugInfo.recordAccepted(midPitchDeg, missDistance,
-                            trajSim.closestApproach, trajSim.maxHeight, trajSim.flightTime,
-                            trajSim.hitTarget, trajSim.trajectory);
+            } else if (trajSim.maxHeight > input.getTargetZ()) {
+                // Candidate may be acceptable; apply stable scoring to reduce rapid switching.
+            double score = computeTrajectoryCandidateScore(input,
+                midPitchDeg, trajSim, missDistance,
+                pitchFw.requiredWheelRpm, iterDistance, requiredYaw);
+                if (score > bestScore) {
+                    bestScore = score;
+                    bestPitch = pitchRad;
+                    itX = iterTargetX;
+                    itY = iterTargetY;
+                    bestTof = trajSim.flightTime > 0 ? trajSim.flightTime : bestTof;
+                    if (debugInfo != null) {
+                        debugInfo.recordAccepted(midPitchDeg, missDistance,
+                                trajSim.closestApproach, trajSim.maxHeight, trajSim.flightTime,
+                                trajSim.hitTarget, trajSim.trajectory);
+                    }
                 }
             } else {
                 if (debugInfo != null) {
@@ -1337,7 +1393,7 @@ public class TrajectorySolver {
             return null;
         }
 
-        return new double[]{bestPitch, itX, itY};
+        return new double[]{bestPitch, itX, itY, bestTof};
     }
 
     /**
@@ -1362,10 +1418,10 @@ public class TrajectorySolver {
      * @param entryAngleDeg entry angle into target in degrees
      * @return quality score in [0, 100]
      */
-    private double computeSweepQualityScore(double pitchDeg, double missDistance,
+    private double computeSweepQualityScore(ShotInput input, double pitchDeg, double missDistance,
         double targetRadius, double timeOfFlight,
         double entryAngleDeg, double requiredWheelRpm,
-        double distanceMeters) {
+        double distanceMeters, double maxHeight) {
         double accuracyScore;
         if (targetRadius > 0) {
             double relMiss = missDistance / targetRadius;
@@ -1374,7 +1430,26 @@ public class TrajectorySolver {
             accuracyScore = missDistance < 0.01 ? 40.0 : 0.0;
         }
 
-        double optimalPitch = 45.0 - Math.min(15.0, Math.max(0.0, (distanceMeters - 2.0) * 1.5));
+        double optimalPitch;
+        if (hasTuningPitch) {
+            Double val = tuningPitchMap.get(distanceMeters);
+            if (val != null) {
+                optimalPitch = val;
+            } else {
+                if (distanceMeters <= 3.5) {
+                    optimalPitch = 15.0;
+                } else {
+                    optimalPitch = 45.0 - Math.min(15.0, Math.max(0.0, (distanceMeters - 3.5) * 1.5));
+                }
+            }
+        } else {
+            if (distanceMeters <= 3.5) {
+                // Favor shallow angles observed in physical testing (10-22 deg)
+                optimalPitch = 15.0;
+            } else {
+                optimalPitch = 45.0 - Math.min(15.0, Math.max(0.0, (distanceMeters - 3.5) * 1.5));
+            }
+        }
         double deviation = Math.abs(pitchDeg - optimalPitch);
         double stabilityScore = Math.max(0, 30.0 * (1.0 - deviation / 45.0));
         if (pitchDeg > 70.0) {
@@ -1385,33 +1460,124 @@ public class TrajectorySolver {
 
         double rpmScore = 0;
         if (requiredWheelRpm > 0) {
+            if (distanceMeters <= SolverConstants.getCloseRangeThresholdMeters()
+                    && requiredWheelRpm < CLOSE_RANGE_MIN_RPM) {
+                return -1000.0;
+            }
             double idealRpm;
-            if (distanceMeters < 2.5) {
-                idealRpm = 2300.0;
-            } else if (distanceMeters < 5.0) {
-                idealRpm = 2300.0 + (distanceMeters - 2.5) * 300.0;
+            if (hasTuningRpm) {
+                Double val = tuningRpmMap.get(distanceMeters);
+                if (val != null) {
+                    idealRpm = val;
+                } else {
+                    if (distanceMeters <= 3.5) {
+                        idealRpm = 2100.0;
+                    } else if (distanceMeters <= 5.0) {
+                        idealRpm = 2100.0 + (distanceMeters - 3.5) * 100.0;
+                    } else if (distanceMeters <= 8.0) {
+                        idealRpm = 2250.0 + (distanceMeters - 5.0) * 120.0;
+                    } else {
+                        idealRpm = 2610.0 + (distanceMeters - 8.0) * 120.0;
+                    }
+                    idealRpm = Math.min(idealRpm, 3400.0);
+                }
             } else {
-                idealRpm = 3300.0 + Math.min(400.0, (distanceMeters - 5.0) * 100.0);
+                if (distanceMeters <= 3.5) {
+                    // Strong preference to keep RPM low in close/mid-range shots.
+                    // Matches the real-world behavior: a 2100 RPM shot at 1-3m is highly stable.
+                    idealRpm = 2100.0;
+                } else if (distanceMeters <= 5.0) {
+                    idealRpm = 2100.0 + (distanceMeters - 3.5) * 100.0; // 2250 at 5m.
+                } else if (distanceMeters <= 8.0) {
+                    // Gradual ramp for medium range as distance increases.
+                    idealRpm = 2250.0 + (distanceMeters - 5.0) * 120.0; // 2610 at 8m.
+                } else {
+                    // Higher range shots require more energy; allow further increase.
+                    idealRpm = 2610.0 + (distanceMeters - 8.0) * 120.0;
+                }
+                idealRpm = Math.min(idealRpm, 3400.0);
             }
 
             double rpmOffset = Math.abs(requiredWheelRpm - idealRpm);
             double rpmScoreFromIdeal = Math.max(0, 25.0 * (1.0 - rpmOffset / 1200.0));
 
    
-            double longDistanceFactor = Math.min(1.0, Math.max(0.0, (distanceMeters - 4.0) / 4.0));
-            double passRpmTarget = 2300.0; 
-            double absOffset = Math.abs(requiredWheelRpm - passRpmTarget);
-            double rpmScoreAbsolute = Math.max(0, 25.0 * (1.0 - absOffset / 1500.0));
+            // For medium and long ranges, prefer the computed ideal rpm curve.
+            // Previously we transitioned to a fixed 2300 setpoint for far shots,
+            // which caused long-range candidates to be biased toward lower RPM.
+            rpmScore = rpmScoreFromIdeal;
 
-            rpmScore = (1 - longDistanceFactor) * rpmScoreFromIdeal + longDistanceFactor * rpmScoreAbsolute;
+            // Discourage excessive RPM even when feasibility allows it; helps avoid high-RPM 5m solutions.
+            if (requiredWheelRpm > 2400.0) {
+                double over = requiredWheelRpm - 2400.0;
+                rpmScore -= Math.min(30.0, over / 60.0); // -30 max penalty for >4200.
+            }
 
-            double over = Math.max(0.0, requiredWheelRpm - 3500.0);
-            rpmScore -= Math.min(12.0, over / 250.0);
+            if (distanceMeters <= 6.5 && requiredWheelRpm > 2600.0) {
+                double over = requiredWheelRpm - 2600.0;
+                rpmScore -= Math.min(40.0, over * 0.2);
+            }
+
+            // Aggressively discourage mid-range shots from settling in 3k+ RPM zones,
+            // but allow them when no lower-RPM solution exists.
+            if (distanceMeters <= 6.5) {
+                if (requiredWheelRpm > 3200.0) {
+                    rpmScore -= 120.0;
+                } else if (requiredWheelRpm > 3000.0) {
+                    rpmScore -= 80.0;
+                }
+            }
         }
 
         double entryScore = Math.min(10.0, entryAngleDeg / 9.0);
 
         return accuracyScore + stabilityScore + speedScore + rpmScore + entryScore;
+    }
+
+    private double computeTrajectoryCandidateScore(ShotInput input,
+        double pitchDeg,
+        ProjectileMotion.TrajectoryResult trajSim,
+        double missDistance,
+        double requiredWheelRpm,
+        double distanceMeters,
+        double candidateYawRadians) {
+        double score = computeSweepQualityScore(input, pitchDeg,
+                missDistance, input.getTargetRadius(),
+                trajSim.flightTime, trajSim.entryAngleDegrees,
+                requiredWheelRpm, distanceMeters, trajSim.maxHeight);
+
+        // Prefer a user-specified arc preference; this keeps close-range behavior
+        // from swapping between low/high arcs.
+        if (input != null && input.getPreferredArcHeightMeters() > 0) {
+            double preferredHeight = input.getPreferredArcHeightMeters();
+            double delta = Math.abs(trajSim.maxHeight - preferredHeight);
+            double arcScore = Math.max(0.0, 15.0 * (1.0 - delta / Math.max(preferredHeight, 0.1)));
+            score += input.getArcBiasStrength() * arcScore;
+        }
+
+        // Add a small continuity bias to reduce shot-to-shot jitter when close.
+        if (input != null && distanceMeters <= SolverConstants.getCloseRangeThresholdMeters() * 1.5
+            && !Double.isNaN(previousPitchAngleRadians)) {
+            double prevPitchDeg = Math.toDegrees(previousPitchAngleRadians);
+            double pitchDelta = Math.abs(pitchDeg - prevPitchDeg);
+            double continuityBonus = Math.max(0.0, 10.0 * (1.0 - Math.min(pitchDelta, 30.0) / 30.0));
+            score += continuityBonus;
+        }
+
+        if (!Double.isNaN(previousYawAdjustmentRadians)) {
+            double yawDiff = Math.abs(candidateYawRadians - previousYawAdjustmentRadians);
+            double yawDeltaDeg = Math.toDegrees(Math.atan2(Math.sin(yawDiff), Math.cos(yawDiff)));
+            double yawBonus = Math.max(0.0, 5.0 * (1.0 - Math.min(Math.abs(yawDeltaDeg), 20.0) / 20.0));
+            score += yawBonus;
+        }
+
+        if (!Double.isNaN(previousRpm)) {
+            double rpmDelta = Math.abs(requiredWheelRpm - previousRpm);
+            double rpmBonus = Math.max(0.0, 8.0 * (1.0 - Math.min(rpmDelta, 500.0) / 500.0));
+            score += rpmBonus;
+        }
+
+        return score;
     }
 
     /**
@@ -1821,6 +1987,18 @@ public class TrajectorySolver {
         double maxHeight = bestTrajSim.maxHeight;
         double marginOfError = bestTrajSim.closestApproach;
 
+    // Guard against degenerate outputs that can look like a "tweaking" steady state
+    // for very close targets. A zero or near-zero pitch/RPM is usually invalid.
+    double enforcedMinRpm = Math.max(CLOSE_RANGE_MIN_RPM, config.getMinRpm());
+    if (Double.isNaN(pitchDegrees) || pitchDegrees < Math.max(1.0, input.getMinPitchDegrees())
+        || Double.isNaN(requiredRpm) || requiredRpm <= Math.max(100.0, enforcedMinRpm)) {
+        return TrajectoryResult.failure(
+            TrajectoryResult.Status.OUT_OF_RANGE,
+            "Trajectory solution is not valid under system constraints (likely oscillatory near target)",
+            input
+        );
+    }
+
         TrajectoryResult.DiscreteShot discreteSolution = new TrajectoryResult.DiscreteShot(
                 requiredRpm, pitchDegrees,
                 (int) (requiredRpm / config.getCrtRpmResolution()),
@@ -1845,6 +2023,9 @@ public class TrajectorySolver {
                 timeOfFlight, maxHeight, marginOfError,
                 discreteSolution, confidence
         );
+    previousPitchAngleRadians = bestPitchAngle;
+    previousYawAdjustmentRadians = yawAdjustment;
+    previousRpm = requiredRpm;
         if (debugInfo != null) {
             successResult.setDebugInfo(debugInfo);
         }

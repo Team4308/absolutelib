@@ -432,6 +432,7 @@ public final class ShotTablePrecomputeRunner {
             spec.preferredArcHeightMeters = config.preferredArcHeightMeters;
             spec.arcBiasStrength = config.arcBiasStrength;
             spec.collisionCheckEnabled = config.collisionCheckEnabled;
+            spec.tuningPoints = config.tuningPoints;
 
             // Robot-specific config from JSON
             spec.flywheelConfig = config.buildFlywheelConfig();

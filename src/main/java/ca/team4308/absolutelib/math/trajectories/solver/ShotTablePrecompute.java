@@ -71,6 +71,8 @@ public final class ShotTablePrecompute {
         public double arcBiasStrength = 0.5;
         public boolean collisionCheckEnabled = false;
 
+        public List<PrecomputeConfig.TuningPoint> tuningPoints = new ArrayList<>();
+
         public TrajectorySolver.SolverConfig solverConfig = TrajectorySolver.SolverConfig.defaults();
         public TrajectorySolver.SolveMode solveMode = TrajectorySolver.SolveMode.SWEEP;
         public FlywheelConfig flywheelConfig = null;
@@ -111,6 +113,11 @@ public final class ShotTablePrecompute {
                 solverConstantsApplier.run();
             }
             TrajectorySolver solver = new TrajectorySolver(gamePiece, solverConfig);
+            if (tuningPoints != null) {
+                for (PrecomputeConfig.TuningPoint tp : tuningPoints) {
+                    solver.addTuningPoint(tp.distanceMeters, tp.pitchDegrees, tp.rpm);
+                }
+            }
             solver.setSolveMode(solveMode);
             solver.setDebugEnabled(debugEnabled);
             if (flywheelConfig != null) {
@@ -150,6 +157,14 @@ public final class ShotTablePrecompute {
         public double preferredArcHeightMeters = 0.0;
         public double arcBiasStrength = 0.5;
         public boolean collisionCheckEnabled = false;
+
+        public List<TuningPoint> tuningPoints = new ArrayList<>();
+
+        public static class TuningPoint {
+            public double distanceMeters;
+            public double pitchDegrees = -1;
+            public double rpm = -1;
+        }
 
         // ── Robot-specific flywheel/motor config ──
         /**
