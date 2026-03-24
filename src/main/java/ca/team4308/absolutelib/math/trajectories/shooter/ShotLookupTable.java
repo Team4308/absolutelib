@@ -1,6 +1,6 @@
 package ca.team4308.absolutelib.math.trajectories.shooter;
 
-import edu.wpi.first.math.interpolation.InterpolatingDoubleTreeMap;
+import ca.team4308.absolutelib.math.trajectories.impl.InterpolatingDoubleTreeMap;
 
 /**
  * Distance-indexed lookup table for pre-tuned shot parameters using WPILib's

@@ -1,0 +1,2 @@
+These files are not required, these are so you can run this code without the need for WPILIB, allowing for them to easily be run on co-processers.
+if this doesnt apply to you, you can use the WPILIB impl of all of these classes

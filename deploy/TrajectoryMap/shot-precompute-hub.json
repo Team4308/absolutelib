@@ -9,7 +9,17 @@
   "targetRadiusMeters": 1,
   "includeAirResistance": true,
   "maxCandidates": 250,
+  "minPitchDegrees": 0.0,
+  "maxPitchDegrees": 85.0,
   "angleStepDegrees": 0.1,
-  "outputPath": "deploy/TrajectoryMap/shot-table-hub.json"
+  "outputPath": "deploy/TrajectoryMap/shot-table-hub.json",
+  "tuningPoints": [
+    { "distanceMeters": 1.264, "pitchDegrees": 7.5, "rpm": 2100 },
+    { "distanceMeters": 1.3, "pitchDegrees": 7.5, "rpm": 2150 },
+    { "distanceMeters": 1.5, "pitchDegrees": 10.0, "rpm": 2250 },
+    { "distanceMeters": 1.71, "pitchDegrees": 22.24, "rpm": 2100 },
+    { "distanceMeters": 2.0, "pitchDegrees": 17.4, "rpm": 2100 },
+    { "distanceMeters": 3.0, "pitchDegrees": 12.5, "rpm": 2100 }
+  ]
 }
 

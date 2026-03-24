@@ -48,6 +48,7 @@ public final class ShooterConfig {
     private final int movingIterations;
 
     private final double safetyMaxExitVelocity;
+    private final double rpmDropRecoveryBoost;
 
     private ShooterConfig(Builder b) {
         this.minPitchDegrees = b.minPitchDegrees;
@@ -63,6 +64,7 @@ public final class ShooterConfig {
         this.movingCompensationGain = b.movingCompensationGain;
         this.movingIterations = b.movingIterations;
         this.safetyMaxExitVelocity = b.safetyMaxExitVelocity;
+        this.rpmDropRecoveryBoost = b.rpmDropRecoveryBoost;
     }
 
     public double getMinPitchDegrees() { return minPitchDegrees; }
@@ -78,6 +80,7 @@ public final class ShooterConfig {
     public double getMovingCompensationGain() { return movingCompensationGain; }
     public int getMovingIterations() { return movingIterations; }
     public double getSafetyMaxExitVelocity() { return safetyMaxExitVelocity; }
+    public double getRpmDropRecoveryBoost() { return rpmDropRecoveryBoost; }
 
     /** Converts RPM to approximate exit velocity using the configured factor. */
     public double rpmToVelocity(double rpm) {
@@ -107,6 +110,7 @@ public final class ShooterConfig {
                 .movingCompensationGain(1.0)
                 .movingIterations(5)
                 .safetyMaxExitVelocity(30.0)
+                .rpmDropRecoveryBoost(0.0)
                 .build();
     }
 
@@ -124,6 +128,7 @@ public final class ShooterConfig {
         private double movingCompensationGain = 1.0;
         private int movingIterations = 5;
         private double safetyMaxExitVelocity = 30.0;
+        private double rpmDropRecoveryBoost = 0.0;
 
         /** Set min and max pitch in degrees. */
         public Builder pitchLimits(double minDeg, double maxDeg) {
@@ -185,6 +190,12 @@ public final class ShooterConfig {
         /** Maximum allowed exit velocity for safety validation. */
         public Builder safetyMaxExitVelocity(double maxMps) {
             this.safetyMaxExitVelocity = maxMps;
+            return this;
+        }
+
+        /** Flat RPM boost applied to the final output to compensate for the wheels dropping speed upon ball contact. */
+        public Builder rpmDropRecoveryBoost(double boostRpm) {
+            this.rpmDropRecoveryBoost = boostRpm;
             return this;
         }
 

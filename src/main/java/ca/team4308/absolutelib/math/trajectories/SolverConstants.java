@@ -125,9 +125,9 @@ public final class SolverConstants {
 
     /**
      * Drag compensation multiplier for velocity estimates. Vacuum formulas
-     * underestimate needed speed. Default: 1.8
+     * underestimate needed speed. Default: 1.3
      */
-    private static double dragCompensationMultiplier = 1.8;
+    private static double dragCompensationMultiplier = 1.3;
 
     /**
      * Min entry angle (deg) for a hit. Steeper = more likely to go in. 90 =

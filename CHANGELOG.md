@@ -1,5 +1,16 @@
 # Changelog for AbsoluteLib v2
 
+
+
+# 2.1.6
+
+# 2.1.2 - 2.1.5 - Mapping overhall
+
+- Improved the trajectory mapping generator to produce more accurate shot predictions by refining the underlying calculation algorithms and adjusting for edge-case scenarios. This enhancement results in better alignment between generated trajectories and real-world shot outcomes.
+
+- Removed minor bugs cuasing a 0 to be returned when a shot is viabal 
+
+
 ## 2.1.1 — Precompute System Upgrade
 
 ### Full Robot Config in JSON

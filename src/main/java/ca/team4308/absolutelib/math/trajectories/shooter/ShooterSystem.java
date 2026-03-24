@@ -292,6 +292,11 @@ public final class ShooterSystem {
             if (result.isSuccess()) {
                 double pitch = result.getPitchAngleDegrees();
                 double rpm = result.getRecommendedRpm();
+                
+                // RPM Drop Recovery: recover RPM lost due to physical compression of the ball upon firing
+                rpm += config.getRpmDropRecoveryBoost();
+                rpm = Math.min(rpm, config.getMaxRpm());
+
                 double vel = result.getRequiredVelocityMps();
                 double yawAdj = result.getYawAdjustmentRadians();
                 return new ShotParameters(pitch, rpm, vel, distanceMeters,

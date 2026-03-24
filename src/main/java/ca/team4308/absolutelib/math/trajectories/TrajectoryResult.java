@@ -51,6 +51,7 @@ public class TrajectoryResult {
                     effectivePitch,
                     effectiveYaw,
                     flywheelSimulation != null ? flywheelSimulation.ballSpinRpm : 0,
+                    input.getRobotVx(), input.getRobotVy(),
                     input.getTargetX(), input.getTargetY(), input.getTargetZ(),
                     input.getTargetRadius()
             );

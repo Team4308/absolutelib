@@ -9,6 +9,7 @@ import ca.team4308.absolutelib.math.trajectories.gamepiece.GamePiece;
 import ca.team4308.absolutelib.math.trajectories.gamepiece.GamePieces;
 import ca.team4308.absolutelib.math.trajectories.physics.AirResistance;
 import ca.team4308.absolutelib.math.trajectories.physics.ProjectileMotion;
+import ca.team4308.absolutelib.math.trajectories.shooter.EmpiricalShotMap;
 
 /**
  * Trajectory solver for FRC shooting. Handles projectile physics, flywheel
@@ -511,14 +512,58 @@ public class TrajectorySolver {
     private final ProjectileMotion projectileMotion;
     private final FlywheelGenerator flywheelGenerator;
 
-    private final edu.wpi.first.math.interpolation.InterpolatingDoubleTreeMap tuningPitchMap = new edu.wpi.first.math.interpolation.InterpolatingDoubleTreeMap();
-    private final edu.wpi.first.math.interpolation.InterpolatingDoubleTreeMap tuningRpmMap = new edu.wpi.first.math.interpolation.InterpolatingDoubleTreeMap();
+    private final ca.team4308.absolutelib.math.trajectories.impl.InterpolatingDoubleTreeMap tuningPitchMap = new ca.team4308.absolutelib.math.trajectories.impl.InterpolatingDoubleTreeMap();
+    private final ca.team4308.absolutelib.math.trajectories.impl.InterpolatingDoubleTreeMap tuningRpmMap = new ca.team4308.absolutelib.math.trajectories.impl.InterpolatingDoubleTreeMap();
 
     private boolean hasTuningPitch = false;
     private boolean hasTuningRpm = false;
 
     /**
+     * Empirical shot map built from real measured robot data.
+     * When set, the solver uses interpolated RPM and pitch from this map
+     * instead of deriving RPM from flywheel physics simulation.
+     */
+    private EmpiricalShotMap empiricalMap = null;
+
+    /**
+     * Sets the empirical shot map for calibration-based solving.
+     * When an empirical map is loaded and the query distance is within its range,
+     * {@link #solve(ShotInput)} will return interpolated RPM and pitch from
+     * the map instead of computing RPM through the flywheel physics model.
+     *
+     * <p>This is the recommended approach for competition robots that have been
+     * calibrated with real shot data.
+     *
+     * @param map the empirical map, or null to disable
+     * @see EmpiricalShotMap
+     */
+    public void setEmpiricalMap(EmpiricalShotMap map) {
+        this.empiricalMap = map;
+        // Feed empirical data points into the internal tuning maps so that
+        // scoring functions (computeSweepQualityScore, etc.) bias angle
+        // selection toward measured values.
+        if (map != null && map.hasData()) {
+            for (EmpiricalShotMap.DataPoint pt : map.getDataPoints()) {
+                tuningPitchMap.put(pt.distanceMeters, pt.pitchDegrees);
+                tuningRpmMap.put(pt.distanceMeters, pt.rpm);
+            }
+            hasTuningPitch = true;
+            hasTuningRpm = true;
+        }
+    }
+
+    /**
+     * Returns the currently loaded empirical map, or null if none.
+     */
+    public EmpiricalShotMap getEmpiricalMap() {
+        return empiricalMap;
+    }
+
+    /**
      * Provide empirical tuning points so the solver biases toward specific RPM/Pitch combinations at known distances.
+     * <p>If an {@link EmpiricalShotMap} has been set via {@link #setEmpiricalMap(EmpiricalShotMap)},
+     * this method also adds the point to that map. Otherwise, points are stored in internal
+     * interpolation maps for scoring bias.
      */
     public void addTuningPoint(double distanceMeters, double pitchDegrees, double rpm) {
         if (pitchDegrees >= 0) {
@@ -528,6 +573,10 @@ public class TrajectorySolver {
         if (rpm >= 0) {
             tuningRpmMap.put(distanceMeters, rpm);
             hasTuningRpm = true;
+        }
+        // Also route to the empirical map if one is set
+        if (empiricalMap != null && pitchDegrees >= 0 && rpm >= 0) {
+            empiricalMap.addPoint(distanceMeters, pitchDegrees, rpm);
         }
     }
 
@@ -583,7 +632,7 @@ public class TrajectorySolver {
     private static final double DRAG_COMP_FULL_RANGE_METERS = 8.0;
 
     /** Hard minimum allowed wheel RPM for close-range shots. */
-    private static final double CLOSE_RANGE_MIN_RPM = 1900.0;
+    private static final double CLOSE_RANGE_MIN_RPM = 1700.0;
 
     /**
      * Vacuum launch velocity for a given pitch, distance, and height
@@ -675,6 +724,7 @@ public class TrajectorySolver {
             GamePiece gp,
             double shooterX, double shooterY, double shooterZ,
             double pitchRad, double yawRad, double spinRpm,
+            double robotVx, double robotVy,
             double targetX, double targetY, double targetZ, double targetRadius,
             double initialVelocity) {
 
@@ -689,6 +739,7 @@ public class TrajectorySolver {
             ProjectileMotion.TrajectoryResult result = projectileMotion.simulateFast(
                     gp, shooterX, shooterY, shooterZ,
                     vMid, pitchRad, yawRad, spinRpm,
+                    robotVx, robotVy,
                     targetX, targetY, targetZ, targetRadius);
 
             if (result.hitTarget) {
@@ -706,6 +757,7 @@ public class TrajectorySolver {
             bestHit = projectileMotion.simulate(
                     gp, shooterX, shooterY, shooterZ,
                     bestV, pitchRad, yawRad, spinRpm,
+                    robotVx, robotVy,
                     targetX, targetY, targetZ, targetRadius);
         }
 
@@ -837,16 +889,8 @@ public class TrajectorySolver {
         double itX = effectiveTargetX, itY = effectiveTargetY;
 
         while (currentClearance <= rimClearance + 3.0) {
-            double iterTargetX = itX;
-            double iterTargetY = itY;
-
-            if (moving && bestTraj != null && bestTraj.flightTime > 0) {
-                iterTargetX = input.getTargetX() - input.getRobotVx() * estimatedTof;
-                iterTargetY = input.getTargetY() - input.getRobotVy() * estimatedTof;
-            }
-
-            double dx = iterTargetX - input.getShooterX();
-            double dy = iterTargetY - input.getShooterY();
+            double dx = effectiveTargetX - input.getShooterX();
+            double dy = effectiveTargetY - input.getShooterY();
             double iterDistance = Math.sqrt(dx * dx + dy * dy);
             double requiredYaw = Math.atan2(dy, dx);
 
@@ -904,7 +948,8 @@ public class TrajectorySolver {
                     input.getShooterX(), input.getShooterY(), input.getShooterZ(),
                     actualVelocity, pitchRad, requiredYaw,
                     pitchFw.ballSpinRpm,
-                    iterTargetX, iterTargetY, input.getTargetZ(),
+                    input.getRobotVx(), input.getRobotVy(),
+                    effectiveTargetX, effectiveTargetY, input.getTargetZ(),
                     input.getTargetRadius()
             );
 
@@ -913,7 +958,8 @@ public class TrajectorySolver {
                         gp,
                         input.getShooterX(), input.getShooterY(), input.getShooterZ(),
                         pitchRad, requiredYaw, pitchFw.ballSpinRpm,
-                        iterTargetX, iterTargetY, input.getTargetZ(),
+                        input.getRobotVx(), input.getRobotVy(),
+                        effectiveTargetX, effectiveTargetY, input.getTargetZ(),
                         input.getTargetRadius(), actualVelocity);
                 if (refined != null) {
                     trajSim = refined;
@@ -964,113 +1010,40 @@ public class TrajectorySolver {
                 currentClearance += 0.25;
                 continue;
             }
-            if (isFlyover(trajSim.trajectory, iterTargetX, iterTargetY,
+            if (isFlyover(trajSim.trajectory, effectiveTargetX, effectiveTargetY,
                     input.getTargetZ(), input.getTargetRadius())) {
                 if (debugInfo != null) {
                     debugInfo.recordRejected(pitchDeg, SolveDebugInfo.RejectionReason.FLYOVER,
                             trajSim.closestApproach, trajSim.maxHeight, trajSim.flightTime, trajSim.hitTarget, trajSim.trajectory);
                 }
-        currentClearance += 0.25;
-        continue;
+                currentClearance += 0.25;
+                continue;
             }
 
-        double missDistance = (trajSim.horizontalDistAtCrossing >= 0)
-            ? trajSim.horizontalDistAtCrossing : trajSim.closestApproach;
-        double score = computeTrajectoryCandidateScore(input, pitchDeg, trajSim,
-            missDistance, pitchFw.requiredWheelRpm, iterDistance, requiredYaw);
-        if (score > bestScore) {
-        bestScore = score;
-        bestPitch = pitchRad;
-        bestTraj = trajSim;
-        itX = iterTargetX;
-        itY = iterTargetY;
-        if (debugInfo != null) {
-            debugInfo.recordAccepted(pitchDeg, missDistance,
-                trajSim.closestApproach, trajSim.maxHeight, trajSim.flightTime,
-                trajSim.hitTarget, trajSim.trajectory);
-        }
-        }
+            double missDistance = (trajSim.horizontalDistAtCrossing >= 0)
+                ? trajSim.horizontalDistAtCrossing : trajSim.closestApproach;
+            double score = computeTrajectoryCandidateScore(input, pitchDeg, trajSim,
+                missDistance, pitchFw.requiredWheelRpm, iterDistance, requiredYaw);
+            if (score > bestScore) {
+                bestScore = score;
+                bestPitch = pitchRad;
+                bestTraj = trajSim;
+                if (debugInfo != null) {
+                    debugInfo.recordAccepted(pitchDeg, missDistance,
+                        trajSim.closestApproach, trajSim.maxHeight, trajSim.flightTime,
+                        trajSim.hitTarget, trajSim.trajectory);
+                }
+            }
 
-        currentClearance += 0.25;
-        continue;
+            currentClearance += 0.25;
+            continue;
         }
 
         if (Double.isNaN(bestPitch) || bestTraj == null) {
             return null;
         }
 
-        if (moving && bestTraj.flightTime > 0) {
-            for (int refine = 0; refine < 2; refine++) {
-                double refTargetX = input.getTargetX() - input.getRobotVx() * estimatedTof;
-                double refTargetY = input.getTargetY() - input.getRobotVy() * estimatedTof;
-                double rdx = refTargetX - input.getShooterX();
-                double rdy = refTargetY - input.getShooterY();
-                double refDist = Math.sqrt(rdx * rdx + rdy * rdy);
-                double refYaw = Math.atan2(rdy, rdx);
-
-                double[] refSol = computeConstraintSolution(
-                        refDist, heightDiff, input.getTargetRadius(), currentClearance);
-                if (refSol == null) {
-                    break;
-                }
-
-                double refPitch = Math.max(Math.toRadians(effectiveMinPitch),
-                        Math.min(Math.toRadians(effectiveMaxPitch), refSol[0]));
-                double refVacuumV;
-                if (Math.abs(refPitch - refSol[0]) > 1e-6) {
-                    refVacuumV = calculateRequiredVelocityForPitch(refDist, heightDiff, refPitch);
-                    if (Double.isNaN(refVacuumV) || refVacuumV <= 0) {
-                        break;
-                    }
-                } else {
-                    refVacuumV = refSol[1];
-                }
-
-                double refDragComp = 1.0 + (dragComp - 1.0) * Math.cos(refPitch);
-                FlywheelSimulator.SimulationResult refFw
-                        = flywheelSimForPitch.simulateForVelocity(refVacuumV * refDragComp);
-                if (!refFw.isAchievable) {
-                    break;
-                }
-
-                ProjectileMotion.TrajectoryResult refTraj = projectileMotion.simulate(
-                        gp,
-                        input.getShooterX(), input.getShooterY(), input.getShooterZ(),
-                        refFw.exitVelocityMps, refPitch, refYaw, refFw.ballSpinRpm,
-                        refTargetX, refTargetY, input.getTargetZ(), input.getTargetRadius()
-                );
-
-                if (!refTraj.hitTarget && refTraj.maxHeight > input.getTargetZ()) {
-                    ProjectileMotion.TrajectoryResult refined = refineVelocityForHit(
-                            gp,
-                            input.getShooterX(), input.getShooterY(), input.getShooterZ(),
-                            refPitch, refYaw, refFw.ballSpinRpm,
-                            refTargetX, refTargetY, input.getTargetZ(),
-                            input.getTargetRadius(), refFw.exitVelocityMps);
-                    if (refined != null) {
-                        refTraj = refined;
-                        double rv = refFw.exitVelocityMps;
-                        if (refined.trajectory.length > 0) {
-                            ProjectileMotion.TrajectoryState s0 = refined.trajectory[0];
-                            rv = Math.sqrt(s0.vx * s0.vx + s0.vy * s0.vy + s0.vz * s0.vz);
-                        }
-                        refFw = flywheelSimForPitch.simulateForVelocity(rv);
-                        if (!refFw.isAchievable) {
-                            break;
-                        }
-                    }
-                }
-
-                if (refTraj.flightTime > 0) {
-                    estimatedTof = refTraj.flightTime;
-                }
-                bestPitch = refPitch;
-                itX = refTargetX;
-                itY = refTargetY;
-            }
-        }
-
-        return new double[]{bestPitch, itX, itY, estimatedTof};
+        return new double[]{bestPitch, effectiveTargetX, effectiveTargetY, estimatedTof};
     }
 
     /**
@@ -1101,11 +1074,6 @@ public class TrajectorySolver {
 
             double iterTargetX = effectiveTargetX;
             double iterTargetY = effectiveTargetY;
-
-            if (moving && finalEstimatedTof > 0) {
-                iterTargetX = input.getTargetX() - input.getRobotVx() * finalEstimatedTof;
-                iterTargetY = input.getTargetY() - input.getRobotVy() * finalEstimatedTof;
-            }
 
             double dx = iterTargetX - input.getShooterX();
             double dy = iterTargetY - input.getShooterY();
@@ -1150,6 +1118,7 @@ public class TrajectorySolver {
                     input.getShooterX(), input.getShooterY(), input.getShooterZ(),
                     actualVelocity, pitchRad, requiredYaw,
                     pitchFw.ballSpinRpm,
+                    input.getRobotVx(), input.getRobotVy(),
                     iterTargetX, iterTargetY, input.getTargetZ(),
                     input.getTargetRadius()
             );
@@ -1159,6 +1128,7 @@ public class TrajectorySolver {
                         gp,
                         input.getShooterX(), input.getShooterY(), input.getShooterZ(),
                         pitchRad, requiredYaw, pitchFw.ballSpinRpm,
+                        input.getRobotVx(), input.getRobotVy(),
                         iterTargetX, iterTargetY, input.getTargetZ(),
                         input.getTargetRadius(), actualVelocity);
                 if (refined != null) {
@@ -1218,41 +1188,6 @@ public class TrajectorySolver {
         double outItY = best.itY;
         double outTof = best.tof;
 
-        if (moving && outTof > 0) {
-            for (int refine = 0; refine < 2; refine++) {
-                double refTargetX = input.getTargetX() - input.getRobotVx() * outTof;
-                double refTargetY = input.getTargetY() - input.getRobotVy() * outTof;
-                double rdx = refTargetX - input.getShooterX();
-                double rdy = refTargetY - input.getShooterY();
-                double refDist = Math.sqrt(rdx * rdx + rdy * rdy);
-                double refYaw = Math.atan2(rdy, rdx);
-
-                double refVacuumV = calculateRequiredVelocityForPitch(refDist, heightDiff, outPitch);
-                if (Double.isNaN(refVacuumV) || refVacuumV <= 0) break;
-
-                double refHoriz = refVacuumV * Math.cos(outPitch);
-                double refCompHoriz = refHoriz * dragComp;
-                double refVert = refCompHoriz * Math.tan(outPitch);
-                double refTargetV = Math.sqrt(refCompHoriz * refCompHoriz + refVert * refVert);
-
-                FlywheelSimulator.SimulationResult refFw = flywheelSimForPitch.simulateForVelocity(refTargetV);
-                if (!refFw.isAchievable) break;
-
-                ProjectileMotion.TrajectoryResult refTraj = projectileMotion.simulate(
-                        gp,
-                        input.getShooterX(), input.getShooterY(), input.getShooterZ(),
-                        refFw.exitVelocityMps, outPitch, refYaw, refFw.ballSpinRpm,
-                        refTargetX, refTargetY, input.getTargetZ(), input.getTargetRadius()
-                );
-
-                if (refTraj.flightTime > 0) {
-                    outTof = refTraj.flightTime;
-                }
-                outItX = refTargetX;
-                outItY = refTargetY;
-            }
-        }
-
         return new double[]{outPitch, outItX, outItY, outTof};
     }
 
@@ -1279,11 +1214,6 @@ public class TrajectorySolver {
 
             double iterTargetX = effectiveTargetX;
             double iterTargetY = effectiveTargetY;
-
-            if (moving && estimatedTof > 0) {
-                iterTargetX = input.getTargetX() - input.getRobotVx() * estimatedTof;
-                iterTargetY = input.getTargetY() - input.getRobotVy() * estimatedTof;
-            }
 
             double dx = iterTargetX - input.getShooterX();
             double dy = iterTargetY - input.getShooterY();
@@ -1313,6 +1243,7 @@ public class TrajectorySolver {
                     input.getShooterX(), input.getShooterY(), input.getShooterZ(),
                     actualVelocity, pitchRad, requiredYaw,
                     pitchFw.ballSpinRpm,
+                    input.getRobotVx(), input.getRobotVy(),
                     iterTargetX, iterTargetY, input.getTargetZ(),
                     input.getTargetRadius()
             );
@@ -1323,6 +1254,7 @@ public class TrajectorySolver {
                         gp,
                         input.getShooterX(), input.getShooterY(), input.getShooterZ(),
                         pitchRad, requiredYaw, pitchFw.ballSpinRpm,
+                        input.getRobotVx(), input.getRobotVy(),
                         iterTargetX, iterTargetY, input.getTargetZ(),
                         input.getTargetRadius(), actualVelocity);
                 if (refined != null && refined.hitTarget) {
@@ -1452,7 +1384,11 @@ public class TrajectorySolver {
         }
         double deviation = Math.abs(pitchDeg - optimalPitch);
         double stabilityScore = Math.max(0, 30.0 * (1.0 - deviation / 45.0));
-        if (pitchDeg > 70.0) {
+        
+        // EMPIRICAL OVERRIDE
+        if (hasTuningPitch) {
+             stabilityScore = Math.max(0, 1000.0 * (1.0 - deviation / 5.0)); // Huge bonus for matching mapped pitch
+        } else if (pitchDeg > 70.0) {
             stabilityScore *= 0.5;
         }
 
@@ -1482,49 +1418,49 @@ public class TrajectorySolver {
                     idealRpm = Math.min(idealRpm, 3400.0);
                 }
             } else {
-                if (distanceMeters <= 3.5) {
-                    // Strong preference to keep RPM low in close/mid-range shots.
-                    // Matches the real-world behavior: a 2100 RPM shot at 1-3m is highly stable.
-                    idealRpm = 2100.0;
-                } else if (distanceMeters <= 5.0) {
-                    idealRpm = 2100.0 + (distanceMeters - 3.5) * 100.0; // 2250 at 5m.
-                } else if (distanceMeters <= 8.0) {
-                    // Gradual ramp for medium range as distance increases.
-                    idealRpm = 2250.0 + (distanceMeters - 5.0) * 120.0; // 2610 at 8m.
+                if (distanceMeters <= 1.5) {
+                    idealRpm = 1750.0;
+                } else if (distanceMeters <= 3.5) {
+                    idealRpm = 1750.0 + (distanceMeters - 1.5) * 325.0;
+                } else if (distanceMeters <= 6.0) {
+                    idealRpm = 2400.0 + (distanceMeters - 3.5) * 100.0; // 2650 at 6m
                 } else {
-                    // Higher range shots require more energy; allow further increase.
-                    idealRpm = 2610.0 + (distanceMeters - 8.0) * 120.0;
+                    idealRpm = 2650.0 + (distanceMeters - 6.0) * 80.0;
                 }
-                idealRpm = Math.min(idealRpm, 3400.0);
+                idealRpm = Math.min(idealRpm, 3000.0);
             }
 
             double rpmOffset = Math.abs(requiredWheelRpm - idealRpm);
             double rpmScoreFromIdeal = Math.max(0, 25.0 * (1.0 - rpmOffset / 1200.0));
 
-   
-            // For medium and long ranges, prefer the computed ideal rpm curve.
-            // Previously we transitioned to a fixed 2300 setpoint for far shots,
-            // which caused long-range candidates to be biased toward lower RPM.
+            // EMPIRICAL OVERRIDE
+            if (hasTuningRpm) {
+                 rpmScoreFromIdeal = Math.max(0, 1000.0 * (1.0 - rpmOffset / 100.0)); // Huge bonus for matching mapped rpm
+            }
             rpmScore = rpmScoreFromIdeal;
 
-            // Discourage excessive RPM even when feasibility allows it; helps avoid high-RPM 5m solutions.
-            if (requiredWheelRpm > 2400.0) {
-                double over = requiredWheelRpm - 2400.0;
-                rpmScore -= Math.min(30.0, over / 60.0); // -30 max penalty for >4200.
-            }
+            if (!hasTuningRpm) {
+                // Discourage excessive RPM even when feasibility allows it.
+                // Penalty kicks in earlier and is steeper to keep shots in the 2-2.5k range.
+                if (requiredWheelRpm > 2500.0) {
+                    double over = requiredWheelRpm - 2500.0;
+                    rpmScore -= Math.min(50.0, over / 30.0); // -50 max penalty for >4000.
+                }
 
-            if (distanceMeters <= 6.5 && requiredWheelRpm > 2600.0) {
-                double over = requiredWheelRpm - 2600.0;
-                rpmScore -= Math.min(40.0, over * 0.2);
-            }
+                if (distanceMeters <= 6.5 && requiredWheelRpm > 2600.0) {
+                    double over = requiredWheelRpm - 2600.0;
+                    rpmScore -= Math.min(60.0, over * 0.3);
+                }
 
-            // Aggressively discourage mid-range shots from settling in 3k+ RPM zones,
-            // but allow them when no lower-RPM solution exists.
-            if (distanceMeters <= 6.5) {
-                if (requiredWheelRpm > 3200.0) {
-                    rpmScore -= 120.0;
-                } else if (requiredWheelRpm > 3000.0) {
-                    rpmScore -= 80.0;
+                // Aggressively discourage mid-range shots from settling in 3k+ RPM zones.
+                if (distanceMeters <= 6.5) {
+                    if (requiredWheelRpm > 3200.0) {
+                        rpmScore -= 150.0;
+                    } else if (requiredWheelRpm > 3000.0) {
+                        rpmScore -= 100.0;
+                    } else if (requiredWheelRpm > 2800.0) {
+                        rpmScore -= 50.0;
+                    }
                 }
             }
         }
@@ -1706,6 +1642,40 @@ public class TrajectorySolver {
             );
         }
 
+        double fixedDistance = input.getHorizontalDistanceMeters();
+
+        // EMPIRICAL CALIBRATION: When a calibrated shot map is loaded, its data
+        // points feed into the scoring functions (via addTuningPoint) to bias
+        // angle selection, and the map's interpolated RPM is applied as a
+        // post-correction after the full physics solve completes. This lets
+        // all solver modes (SWEEP, BISECTION, CONSTRAINT, etc.) run their
+        // complete trajectory math while producing RPM values that match
+        // real measured data.
+
+        // Legacy tuning map override (backward compatibility for addTuningPoint())
+        if (empiricalMap == null && hasTuningPitch && hasTuningRpm) {
+            double reqPitch = tuningPitchMap.get(fixedDistance);
+            double reqRpm = tuningRpmMap.get(fixedDistance);
+
+            FlywheelConfig fwConfig = cachedFlywheel;
+            double exitV = reqRpm / 60.0 * 0.1;
+            FlywheelSimulator.SimulationResult simResult = null;
+            
+            if (fwConfig != null) {
+                simResult = new FlywheelSimulator(fwConfig, gamePiece).simulateAtRpm(reqRpm);
+                exitV = simResult != null && simResult.isAchievable ? simResult.exitVelocityMps : exitV;
+            }
+
+            return new TrajectoryResult(
+                    input, gamePiece,
+                    Math.toRadians(reqPitch), 0.0,
+                    exitV,
+                    fwConfig, simResult,
+                    reqRpm,
+                    1.2, 2.5, 0.0, null, 100.0
+            );
+        }
+
         boolean moving = Math.abs(input.getRobotVx()) > SolverConstants.getMovementThresholdMps()
                 || Math.abs(input.getRobotVy()) > SolverConstants.getMovementThresholdMps();
 
@@ -1716,10 +1686,8 @@ public class TrajectorySolver {
                 ? SolverConstants.getMovingConvergenceIterations()
                 : SolverConstants.getStationaryIterations();
 
-        double distance = input.getHorizontalDistanceMeters();
-        double estimatedTof = distance / SolverConstants.getInitialVelocityEstimateMps();
-
-        double effectiveTargetX = input.getTargetX();
+        double distance = fixedDistance;
+        double estimatedTof = distance / SolverConstants.getInitialVelocityEstimateMps();        double effectiveTargetX = input.getTargetX();
         double effectiveTargetY = input.getTargetY();
 
         for (int i = 0; i < convergenceIterations; i++) {
@@ -1912,6 +1880,7 @@ public class TrajectorySolver {
                             gamePiece,
                             input.getShooterX(), input.getShooterY(), input.getShooterZ(),
                             fw.exitVelocityMps, bestPitchAngle, bestYaw, fw.ballSpinRpm,
+                            input.getRobotVx(), input.getRobotVy(),
                             effectiveTargetX, effectiveTargetY, input.getTargetZ(),
                             input.getTargetRadius());
 
@@ -1920,6 +1889,7 @@ public class TrajectorySolver {
                                 gamePiece,
                                 input.getShooterX(), input.getShooterY(), input.getShooterZ(),
                                 bestPitchAngle, bestYaw, fw.ballSpinRpm,
+                                input.getRobotVx(), input.getRobotVy(),
                                 effectiveTargetX, effectiveTargetY, input.getTargetZ(),
                                 input.getTargetRadius(), fw.exitVelocityMps);
                         if (refined != null) {
@@ -1982,6 +1952,48 @@ public class TrajectorySolver {
         }
 
         double requiredRpm = bestFlywheelSim.requiredWheelRpm;
+        // EMPIRICAL RPM CALIBRATION: After the physics solver has found the
+        // best trajectory (angle, velocity, flight path), correct the RPM
+        // using real measured data. The physics solver is good at finding the
+        // right trajectory shape, but the flywheel model overestimates RPM
+        // because it idealizes energy transfer. The empirical map provides
+        // the actual RPM that works on the real robot.
+        if (empiricalMap != null && empiricalMap.hasData()) {
+            EmpiricalShotMap.QueryResult mapRpmResult = empiricalMap.query(distance);
+            if (mapRpmResult.inRange) {
+                // In range: use the measured RPM directly
+                requiredRpm = mapRpmResult.rpm;
+            } else {
+                // Out of range: compute a correction factor from the nearest
+                // map edge and apply it to the physics-derived RPM.
+                // This smoothly extends the calibration beyond measured data.
+                double edgeDist = distance < empiricalMap.getMinDistance()
+                        ? empiricalMap.getMinDistance()
+                        : empiricalMap.getMaxDistance();
+                EmpiricalShotMap.QueryResult edgeResult = empiricalMap.query(edgeDist);
+
+                // Compute the physics RPM at the edge distance for comparison
+                double edgeVacV = calculateRequiredVelocityForPitch(
+                        edgeDist, heightDiff, bestPitchAngle);
+                if (!Double.isNaN(edgeVacV) && edgeVacV > 0) {
+                    double edgeDragComp = 1.0 + (dragComp - 1.0) * Math.cos(bestPitchAngle);
+                    FlywheelSimulator.SimulationResult edgeFw =
+                            flywheelSimForPitch.simulateForVelocity(edgeVacV * edgeDragComp);
+                    if (edgeFw.isAchievable && edgeFw.requiredWheelRpm > 0) {
+                        double correctionFactor = edgeResult.rpm / edgeFw.requiredWheelRpm;
+                        // Blend correction toward 1.0 as distance moves further from
+                        // the map edge (correction becomes less reliable further away)
+                        double extrapolationDist = Math.abs(distance - edgeDist);
+                        double blendRange = 3.0; // correction fades over 3m beyond map edge
+                        double blend = Math.max(0.0, 1.0 - extrapolationDist / blendRange);
+                        double blendedFactor = 1.0 + blend * (correctionFactor - 1.0);
+                        requiredRpm = requiredRpm * blendedFactor;
+                    }
+                }
+            }
+        }
+        // Final clamp: keep RPM within hardware bounds regardless of source.
+        requiredRpm = Math.max(config.getMinRpm(), Math.min(config.getMaxRpm(), requiredRpm));
         double actualVelocity = bestFlywheelSim.exitVelocityMps;
         double timeOfFlight = bestTrajSim.flightTime;
         double maxHeight = bestTrajSim.maxHeight;
@@ -2117,6 +2129,7 @@ public class TrajectorySolver {
                 input.getShooterX(), input.getShooterY(), input.getShooterZ(),
                 velocity, pitchRadians, input.getRequiredYawRadians(),
                 simResult.ballSpinRpm,
+                input.getRobotVx(), input.getRobotVy(),
                 input.getTargetX(), input.getTargetY(), input.getTargetZ(),
                 input.getTargetRadius()
         );
@@ -2185,16 +2198,8 @@ public class TrajectorySolver {
         double effectiveTargetX = input.getTargetX();
         double effectiveTargetY = input.getTargetY();
 
-        for (int i = 0; i < convergenceIterations; i++) {
-            if (moving) {
-                effectiveTargetX = input.getTargetX() - input.getRobotVx() * estimatedTof;
-                effectiveTargetY = input.getTargetY() - input.getRobotVy() * estimatedTof;
-                double ddx = effectiveTargetX - input.getShooterX();
-                double ddy = effectiveTargetY - input.getShooterY();
-                distance = Math.sqrt(ddx * ddx + ddy * ddy);
-                estimatedTof = distance / SolverConstants.getInitialVelocityEstimateMps();
-            }
-        }
+        // Removed iterative moving blocks due to vector injection
+
 
         if (distance < SolverConstants.getMinTargetDistanceMeters()) {
             return TrajectoryResult.failure(
@@ -2240,6 +2245,7 @@ public class TrajectorySolver {
                     gamePiece,
                     input.getShooterX(), input.getShooterY(), input.getShooterZ(),
                     actualVelocity, pitchRad, requiredYaw, ballSpin,
+                    input.getRobotVx(), input.getRobotVy(),
                     effectiveTargetX, effectiveTargetY, input.getTargetZ(),
                     input.getTargetRadius()
             );

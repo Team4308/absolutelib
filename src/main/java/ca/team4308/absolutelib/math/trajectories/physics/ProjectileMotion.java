@@ -163,12 +163,12 @@ public class ProjectileMotion {
     public TrajectoryResult simulate(GamePiece gamePiece,
             double x0, double y0, double z0,
             double velocity, double pitchAngle, double yawAngle,
-            double spinRpm,
+            double spinRpm, double robotVx, double robotVy,
             double targetX, double targetY, double targetZ, double targetRadius) {
 
         double horizontalVelocity = velocity * Math.cos(pitchAngle);
-        double vx = horizontalVelocity * Math.cos(yawAngle);
-        double vy = horizontalVelocity * Math.sin(yawAngle);
+        double vx = horizontalVelocity * Math.cos(yawAngle) + robotVx;
+        double vy = horizontalVelocity * Math.sin(yawAngle) + robotVy;
         double vz = velocity * Math.sin(pitchAngle);
         TrajectoryState state = new TrajectoryState(x0, y0, z0, vx, vy, vz, 0);
 
@@ -266,8 +266,9 @@ public class ProjectileMotion {
     public TrajectoryResult simulate(GamePiece gamePiece,
             double x0, double y0, double z0,
             double velocity, double pitchAngle, double yawAngle,
+            double robotVx, double robotVy,
             double targetX, double targetY, double targetZ, double targetRadius) {
-        return simulate(gamePiece, x0, y0, z0, velocity, pitchAngle, yawAngle, 0, targetX, targetY, targetZ, targetRadius);
+        return simulate(gamePiece, x0, y0, z0, velocity, pitchAngle, yawAngle, 0, robotVx, robotVy, targetX, targetY, targetZ, targetRadius);
     }
 
     /**
@@ -294,14 +295,14 @@ public class ProjectileMotion {
     public TrajectoryResult simulateFast(GamePiece gamePiece,
             double x0, double y0, double z0,
             double velocity, double pitchAngle, double yawAngle,
-            double spinRpm,
+            double spinRpm, double robotVx, double robotVy,
             double targetX, double targetY, double targetZ, double targetRadius) {
 
         double dt = fastTimeStep;
 
         double horizontalVelocity = velocity * Math.cos(pitchAngle);
-        double vx = horizontalVelocity * Math.cos(yawAngle);
-        double vy = horizontalVelocity * Math.sin(yawAngle);
+        double vx = horizontalVelocity * Math.cos(yawAngle) + robotVx;
+        double vy = horizontalVelocity * Math.sin(yawAngle) + robotVy;
         double vz = velocity * Math.sin(pitchAngle);
 
         double spinAxisX = -Math.sin(yawAngle);
@@ -413,8 +414,9 @@ public class ProjectileMotion {
     public TrajectoryResult simulateFast(GamePiece gamePiece,
             double x0, double y0, double z0,
             double velocity, double pitchAngle, double yawAngle,
+            double robotVx, double robotVy,
             double targetX, double targetY, double targetZ, double targetRadius) {
-        return simulateFast(gamePiece, x0, y0, z0, velocity, pitchAngle, yawAngle, 0, targetX, targetY, targetZ, targetRadius);
+        return simulateFast(gamePiece, x0, y0, z0, velocity, pitchAngle, yawAngle, 0, robotVx, robotVy, targetX, targetY, targetZ, targetRadius);
     }
 
     /**
@@ -592,7 +594,8 @@ public class ProjectileMotion {
             double x0, double y0, double z0, double velocity,
             double targetX, double targetY, double targetZ,
             double targetRadius,
-            boolean preferHighArc, double spinRpm) {
+            boolean preferHighArc, double spinRpm,
+            double robotVx, double robotVy) {
 
         double horizontalDistance = Math.sqrt(
                 Math.pow(targetX - x0, 2) + Math.pow(targetY - y0, 2));
@@ -615,7 +618,7 @@ public class ProjectileMotion {
 
             for (double testAngle = sweepMin; testAngle < sweepMax; testAngle += sweepStep) {
                 TrajectoryResult result = simulate(gamePiece, x0, y0, z0,
-                        velocity, testAngle, yawAngle, spinRpm, targetX, targetY, targetZ, targetRadius);
+                        velocity, testAngle, yawAngle, spinRpm, robotVx, robotVy, targetX, targetY, targetZ, targetRadius);
 
                 if (result.hitTarget) {
                     return testAngle;
@@ -654,7 +657,7 @@ public class ProjectileMotion {
             angle = (angleLow + angleHigh) / 2.0;
 
             TrajectoryResult result = simulate(gamePiece, x0, y0, z0,
-                    velocity, angle, yawAngle, spinRpm, targetX, targetY, targetZ, targetRadius);
+                    velocity, angle, yawAngle, spinRpm, robotVx, robotVy, targetX, targetY, targetZ, targetRadius);
 
             if (result.hitTarget) {
                 return angle;
@@ -696,8 +699,8 @@ public class ProjectileMotion {
     public double solveForAngle(GamePiece gamePiece,
             double x0, double y0, double z0, double velocity,
             double targetX, double targetY, double targetZ,
-            boolean preferHighArc) {
-        return solveForAngle(gamePiece, x0, y0, z0, velocity, targetX, targetY, targetZ, 0.05, preferHighArc, 0);
+            boolean preferHighArc, double robotVx, double robotVy) {
+        return solveForAngle(gamePiece, x0, y0, z0, velocity, targetX, targetY, targetZ, 0.05, preferHighArc, 0, robotVx, robotVy);
     }
 
     /**
@@ -752,6 +755,7 @@ public class ProjectileMotion {
             double x0, double y0, double z0, double velocity,
             double targetX, double targetY, double targetZ,
             double targetRadius, double spinRpm,
+            double robotVx, double robotVy,
             double minAngleDegrees, double maxAngleDegrees, double angleStepDegrees) {
 
         double yawAngle = Math.atan2(targetY - y0, targetX - x0);
@@ -764,7 +768,7 @@ public class ProjectileMotion {
             double angleRad = Math.toRadians(angleDeg);
 
             TrajectoryResult trajResult = simulate(gamePiece, x0, y0, z0,
-                    velocity, angleRad, yawAngle, spinRpm,
+                    velocity, angleRad, yawAngle, spinRpm, robotVx, robotVy,
                     targetX, targetY, targetZ, targetRadius);
 
             results[count++] = new AngleEvaluation(angleRad, velocity, trajResult);
@@ -821,6 +825,8 @@ public class ProjectileMotion {
      * @param targetZ Target Z (m)
      * @param targetRadius Hit acceptance radius (m)
      * @param spinRpm Backspin RPM (0 for no spin)
+     * @param robotVx Robot x-velocity (m/s)
+     * @param robotVy Robot y-velocity (m/s)
      * @param minAngleDegrees Minimum pitch angle to try
      * @param maxAngleDegrees Maximum pitch angle to try
      * @param angleStepDegrees Step size for angle iteration
@@ -832,6 +838,7 @@ public class ProjectileMotion {
             double x0, double y0, double z0,
             double targetX, double targetY, double targetZ,
             double targetRadius, double spinRpm,
+            double robotVx, double robotVy,
             double minAngleDegrees, double maxAngleDegrees, double angleStepDegrees,
             double minVelocity, double maxVelocity) {
 
@@ -861,7 +868,7 @@ public class ProjectileMotion {
             }
 
             TrajectoryResult trajResult = simulate(gamePiece, x0, y0, z0,
-                    velocity, angleRad, yawAngle, spinRpm,
+                    velocity, angleRad, yawAngle, spinRpm, robotVx, robotVy,
                     targetX, targetY, targetZ, targetRadius);
 
             tempResults[validCount++] = new AngleEvaluation(angleRad, velocity, trajResult);
