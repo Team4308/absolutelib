@@ -146,7 +146,7 @@ public class AirResistance {
         }
         
         double radius = gamePiece.getRadiusMeters();
-        double area = Math.PI * radius * radius;
+        double area = Math.PI * radius * radius; // R^2
         double angularVelocity = PhysicsConstants.rpmToRadPerSec(spinRpm);
         double spinParameter = Math.abs(angularVelocity * radius / speed);
         double clMagnus = PhysicsConstants.MAGNUS_COEFFICIENT * spinParameter;

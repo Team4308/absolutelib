@@ -580,6 +580,24 @@ public class TrajectorySolver {
         }
     }
 
+    /**
+     * Imports all points from a {@link ca.team4308.absolutelib.math.trajectories.shooter.ShotLookupTable} as tuning points.
+     * 
+     * @param table the table to import tuning points from
+     */
+    public void addTuningPoint(ca.team4308.absolutelib.math.trajectories.shooter.ShotLookupTable table) {
+        if (table == null || !table.hasEntries()) {
+            return;
+        }
+        for (Double distance : table.getPitchMap().keySet()) {
+            Double pitch = table.getPitchMap().get(distance);
+            Double rpm = table.getRpmMap().get(distance);
+            if (pitch != null && rpm != null) {
+                addTuningPoint(distance, pitch, rpm);
+            }
+        }
+    }
+
     private FlywheelConfig cachedFlywheel;
     private boolean debugEnabled = false;
     private SolveMode solveMode = SolveMode.CONSTRAINT;
@@ -728,8 +746,8 @@ public class TrajectorySolver {
             double targetX, double targetY, double targetZ, double targetRadius,
             double initialVelocity) {
 
-        double vLow = initialVelocity * 0.50;
-        double vHigh = initialVelocity * 1.05;
+        double vLow = initialVelocity * 0.50; // 
+        double vHigh = initialVelocity * 1.05; // 
 
         ProjectileMotion.TrajectoryResult bestHit = null;
         int iterations = config.getVelocityRefineIterations();
@@ -1644,15 +1662,6 @@ public class TrajectorySolver {
 
         double fixedDistance = input.getHorizontalDistanceMeters();
 
-        // EMPIRICAL CALIBRATION: When a calibrated shot map is loaded, its data
-        // points feed into the scoring functions (via addTuningPoint) to bias
-        // angle selection, and the map's interpolated RPM is applied as a
-        // post-correction after the full physics solve completes. This lets
-        // all solver modes (SWEEP, BISECTION, CONSTRAINT, etc.) run their
-        // complete trajectory math while producing RPM values that match
-        // real measured data.
-
-        // Legacy tuning map override (backward compatibility for addTuningPoint())
         if (empiricalMap == null && hasTuningPitch && hasTuningRpm) {
             double reqPitch = tuningPitchMap.get(fixedDistance);
             double reqRpm = tuningRpmMap.get(fixedDistance);
@@ -1952,27 +1961,17 @@ public class TrajectorySolver {
         }
 
         double requiredRpm = bestFlywheelSim.requiredWheelRpm;
-        // EMPIRICAL RPM CALIBRATION: After the physics solver has found the
-        // best trajectory (angle, velocity, flight path), correct the RPM
-        // using real measured data. The physics solver is good at finding the
-        // right trajectory shape, but the flywheel model overestimates RPM
-        // because it idealizes energy transfer. The empirical map provides
-        // the actual RPM that works on the real robot.
+    
         if (empiricalMap != null && empiricalMap.hasData()) {
             EmpiricalShotMap.QueryResult mapRpmResult = empiricalMap.query(distance);
             if (mapRpmResult.inRange) {
-                // In range: use the measured RPM directly
                 requiredRpm = mapRpmResult.rpm;
             } else {
-                // Out of range: compute a correction factor from the nearest
-                // map edge and apply it to the physics-derived RPM.
-                // This smoothly extends the calibration beyond measured data.
                 double edgeDist = distance < empiricalMap.getMinDistance()
                         ? empiricalMap.getMinDistance()
                         : empiricalMap.getMaxDistance();
                 EmpiricalShotMap.QueryResult edgeResult = empiricalMap.query(edgeDist);
 
-                // Compute the physics RPM at the edge distance for comparison
                 double edgeVacV = calculateRequiredVelocityForPitch(
                         edgeDist, heightDiff, bestPitchAngle);
                 if (!Double.isNaN(edgeVacV) && edgeVacV > 0) {
@@ -1981,10 +1980,8 @@ public class TrajectorySolver {
                             flywheelSimForPitch.simulateForVelocity(edgeVacV * edgeDragComp);
                     if (edgeFw.isAchievable && edgeFw.requiredWheelRpm > 0) {
                         double correctionFactor = edgeResult.rpm / edgeFw.requiredWheelRpm;
-                        // Blend correction toward 1.0 as distance moves further from
-                        // the map edge (correction becomes less reliable further away)
                         double extrapolationDist = Math.abs(distance - edgeDist);
-                        double blendRange = 3.0; // correction fades over 3m beyond map edge
+                        double blendRange = 3.0;
                         double blend = Math.max(0.0, 1.0 - extrapolationDist / blendRange);
                         double blendedFactor = 1.0 + blend * (correctionFactor - 1.0);
                         requiredRpm = requiredRpm * blendedFactor;
@@ -1992,15 +1989,13 @@ public class TrajectorySolver {
                 }
             }
         }
-        // Final clamp: keep RPM within hardware bounds regardless of source.
         requiredRpm = Math.max(config.getMinRpm(), Math.min(config.getMaxRpm(), requiredRpm));
         double actualVelocity = bestFlywheelSim.exitVelocityMps;
         double timeOfFlight = bestTrajSim.flightTime;
         double maxHeight = bestTrajSim.maxHeight;
         double marginOfError = bestTrajSim.closestApproach;
 
-    // Guard against degenerate outputs that can look like a "tweaking" steady state
-    // for very close targets. A zero or near-zero pitch/RPM is usually invalid.
+        // Stop tweakin pls
     double enforcedMinRpm = Math.max(CLOSE_RANGE_MIN_RPM, config.getMinRpm());
     if (Double.isNaN(pitchDegrees) || pitchDegrees < Math.max(1.0, input.getMinPitchDegrees())
         || Double.isNaN(requiredRpm) || requiredRpm <= Math.max(100.0, enforcedMinRpm)) {

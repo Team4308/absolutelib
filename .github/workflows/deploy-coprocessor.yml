@@ -1,0 +1,53 @@
+name: Deploy Trajectory Coprocessor
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up JDK 17
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+        cache: gradle
+
+    - name: Grant execute permission for gradlew
+      run: chmod +x gradlew
+
+    - name: Build with Gradle
+      run: ./gradlew :coprocessor:shadowJar
+
+    - name: Deploy to Coprocessor
+      # This step requires setting up SSH keys in GitHub Secrets: COPROCESSOR_HOST, COPROCESSOR_USER, COPROCESSOR_SSH_KEY
+      # If not set, this step evaluates safely but doesn't deploy.
+      env:
+        HOST: ${{ secrets.COPROCESSOR_HOST }}
+        USER: ${{ secrets.COPROCESSOR_USER }}
+        KEY: ${{ secrets.COPROCESSOR_SSH_KEY }}
+      run: |
+        if [ -z "$HOST" ] || [ -z "$USER" ] || [ -z "$KEY" ]; then
+          echo "SSH credentials not set in secrets. Skipping automatic deployment."
+          exit 0
+        fi
+        
+        echo "Setting up SSH key..."
+        mkdir -p ~/.ssh
+        echo "$KEY" > ~/.ssh/id_rsa
+        chmod 600 ~/.ssh/id_rsa
+        ssh-keyscan -H $HOST >> ~/.ssh/known_hosts
+
+        echo "Transferring jar to coprocessor..."
+        scp coprocessor/build/libs/coprocessor.jar $USER@$HOST:/home/$USER/trajectory-coprocessor/coprocessor.jar
+        
+        echo "Restarting service..."
+        ssh $USER@$HOST "sudo systemctl restart trajectory-coprocessor"
+        
+        echo "Deployed successfully to $HOST"

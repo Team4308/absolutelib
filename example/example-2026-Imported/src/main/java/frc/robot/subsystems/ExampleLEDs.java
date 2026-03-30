@@ -104,21 +104,6 @@ public class ExampleLEDs extends AbsoluteSubsystem {
         currentPatternName = "Rainbow";
     }
 
-    /**
-     * Set alliance-based pattern (red or blue based on driver station).
-     */
-    public void setAlliance() {
-        currentPattern = Patterns.getAlliancePattern();
-        currentPatternName = "Alliance";
-    }
-
-    /**
-     * Set alliance-based breathing pattern.
-     */
-    public void setAllianceBreathing() {
-        currentPattern = Patterns.getAllianceBreathing(2.0);
-        currentPatternName = "Alliance Breathing";
-    }
 
     /**
      * Set a solid color.

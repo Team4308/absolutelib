@@ -4,6 +4,9 @@
 
 # 2.1.6
 
+- **TrajectorySolver Enhancement**: Added `addTuningPoint(ShotLookupTable table)` to bulk-load tuning constraints directly from an existing lookup table map.
+- **Coprocessor Build Fixes**: Removed the Gradle `application` plugin to resolve Gradle 9 incompatibility. Safely inherits required WPILib NetworkTables dependencies and upstream Maven repositories.
+
 # 2.1.2 - 2.1.5 - Mapping overhall
 
 - Improved the trajectory mapping generator to produce more accurate shot predictions by refining the underlying calculation algorithms and adjusting for edge-case scenarios. This enhancement results in better alignment between generated trajectories and real-world shot outcomes.

@@ -459,14 +459,12 @@ public class TrajectorySolverTest {
             void solverFallsBackWhenOutOfMapRange() {
                 ca.team4308.absolutelib.math.trajectories.shooter.EmpiricalShotMap map =
                     new ca.team4308.absolutelib.math.trajectories.shooter.EmpiricalShotMap();
-                // Map only covers 1-3m
                 map.addPoint(1.0, 7.5, 2100);
                 map.addPoint(3.0, 12.5, 2100);
 
                 solver.setEmpiricalMap(map);
                 solver.setSolveMode(TrajectorySolver.SolveMode.SWEEP);
 
-                // Query at 8.0m — way outside the map range
                 ShotInput input = ShotInput.builder()
                         .shooterPositionMeters(0, 0, 0.5)
                         .targetPositionMeters(8.0, 0, 2.1)
@@ -475,12 +473,9 @@ public class TrajectorySolverTest {
                         .build();
 
                 TrajectoryResult result = solver.solve(input);
-                // Should fall through to physics solver (may succeed or fail depending on
-                // flywheel config, but should NOT return map values)
+
                 assertNotNull(result, "Solver should return a non-null result for out-of-range");
                 if (result.isSuccess()) {
-                    // If physics solved it, RPM will likely differ from the map's 2100
-                    // The important thing is that it didn't crash
                     assertTrue(result.getRecommendedRpm() > 0, "RPM should be positive");
                 }
             }

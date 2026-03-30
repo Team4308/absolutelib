@@ -72,6 +72,10 @@ public class InterpolatingDoubleTreeMap {
 		return map.size();
 	}
 
+	public java.util.Set<Double> keySet() {
+		return map.keySet();
+	}
+
 	public boolean isEmpty() {
 		return map.isEmpty();
 	}

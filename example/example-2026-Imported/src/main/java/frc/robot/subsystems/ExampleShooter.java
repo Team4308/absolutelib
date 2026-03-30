@@ -11,6 +11,8 @@ import ca.team4308.absolutelib.math.trajectories.motor.FRCMotors;
 import ca.team4308.absolutelib.wrapper.AbsoluteSubsystem;
 import ca.team4308.absolutelib.wrapper.MotorWrapper;
 import ca.team4308.absolutelib.wrapper.MotorWrapper.MotorType;
+import ca.team4308.absolutelib.math.trajectories.network.TrajectoryRequest;
+import ca.team4308.absolutelib.math.trajectories.network.TrajectoryResponse;
 
 import org.littletonrobotics.junction.Logger;
 
@@ -39,6 +41,11 @@ public class ExampleShooter extends AbsoluteSubsystem {
 
     private final ShooterSystem shooterSystem;
     private final TrajectorySolver solver;
+    
+    // Coprocessor connection
+    private final ca.team4308.absolutelib.network.task.client.CoprocessorClient coprocessorClient;
+    private final Thread coprocessorThread;
+    private ca.team4308.absolutelib.network.task.client.TaskHandle<TrajectoryResponse> currentTaskHandle;
 
     private ShotParameters currentShot = ShotParameters.invalid("Not yet calculated");
     private double targetYawDegrees = 0.0;
@@ -69,35 +76,32 @@ public class ExampleShooter extends AbsoluteSubsystem {
                 .rpmAbortThreshold(500.0)
                 .pitchCorrectionPerRpmDeficit(0.005)
                 .movingCompensationGain(1)
-                .movingIterations(5)
+                .movingIterations(999) 
                 .safetyMaxExitVelocity(30.0)
                 .build();
 
         ShotLookupTable table = new ShotLookupTable()
-                .addEntry(1.0, 78.0, 1000)
-                .addEntry(1.5, 75.0, 1100)
-                .addEntry(2.0, 72.0, 1300)
-                .addEntry(2.5, 68.0, 1500)
-                .addEntry(3.0, 65.0, 1700)
-                .addEntry(3.5, 62.0, 1900)
-                .addEntry(4.0, 59.0, 2100)
-                .addEntry(5.0, 55.0, 2400)
-                .addEntry(6.0, 52.0, 2700)
-                .addEntry(7.0, 50.0, 3000)
-                .addEntry(8.0, 48.0, 3300);
+                .addEntry(1.3, 81.5,1700.0 )
+                .addEntry(1.6, 90-12.5, 1750)
+                .addEntry(1.9,90-13.5, 1780)
+                .addEntry(2.3, 90-14.5, 1830.0)
+                .addEntry(2.6, 90-15.5, 1890.0)
+                .addEntry(3.3, 90-16.5,  1980.0)
+                .addEntry(3.9, 90-17, 2080.0)
+                .addEntry(4.3, 90-18, 2160.0)
+                .addEntry(4.6, 90-19,  2300.0);
 
-        // --- 2. Trajectory Logic Setup ---
-        // (SolverConfig defines physics simulation and search algorithms)
+
+    
         GamePiece gamePiece = GamePieces.REBUILT_2026_BALL;
-        TrajectorySolver.SolverConfig solverConfig = TrajectorySolver.SolverConfig.coProcessor()
+        TrajectorySolver.SolverConfig solverConfig = TrajectorySolver.SolverConfig.highAccuracy()
                 .toBuilder()
                 .minPitchDegrees(47.5)
                 .maxPitchDegrees(82.5)
                 .build();
 
         solver = new TrajectorySolver(gamePiece, solverConfig);
-        solver.setSolveMode(TrajectorySolver.SolveMode.HYBRID); // Seed bisection with lookup table
-
+        solver.setSolveMode(TrajectorySolver.SolveMode.SWEEP);
         FlywheelConfig flywheelConfig = FlywheelConfig.builder()
                 .name("Example 2026 Shooter")
                 .arrangement(WheelArrangement.SINGLE)
@@ -109,12 +113,16 @@ public class ExampleShooter extends AbsoluteSubsystem {
                 .gearRatio(1.0)
                 .build();
         solver.setFlywheel(flywheelConfig);
-
-        // --- 3. System Integration ---
         shooterSystem = new ShooterSystem(shooterConfig, table, solver);
-        shooterSystem.setMode(ShotMode.SOLVER_WITH_LOOKUP_FALLBACK);
+        shooterSystem.setMode(ShotMode.LOOKUP_ONLY);
 
         solver.setDebugEnabled(true);
+        
+        String coprocessorIp = RobotBase.isSimulation() ? "127.0.0.1" : "10.43.8.77";
+        coprocessorClient = new ca.team4308.absolutelib.network.task.client.CoprocessorClient(coprocessorIp, 5802);
+        coprocessorThread = new Thread(coprocessorClient);
+        coprocessorThread.setDaemon(true);
+        coprocessorThread.start();
     }
 
     public void setPoseSupplier(Supplier<Pose2d> supplier) {
@@ -353,21 +361,69 @@ public class ExampleShooter extends AbsoluteSubsystem {
 
         double measuredRpm = currentRpmSupplier != null ? currentRpmSupplier.get() : 0;
 
-        shooterSystem.setSolverInput(
-                ShotInput.builder()
-                        .shooterPositionMeters(shooterX, shooterY, shooterHeightMeters)
-                        .shooterYawRadians(yawRad)
-                        .targetPositionMeters(targetPosition.getX(), targetPosition.getY(), targetPosition.getZ())
-                        .targetRadiusMeters(0.45)
-                        .includeAirResistance(true)
-                        .robotVelocity(vx, vy)
-                        .build()
-        );
+        TrajectoryRequest req = new TrajectoryRequest();
+        req.timestamp = edu.wpi.first.wpilibj.Timer.getFPGATimestamp();
+        req.robotX = shooterX;
+        req.robotY = shooterY;
+        req.robotHeadingRad = yawRad;
+        req.vxMps = vx;
+        req.vyMps = vy;
+        req.omegaRadPerSecond = chassisSpeedsSupplier != null ? chassisSpeedsSupplier.get().omegaRadiansPerSecond : 0.0;
+        req.targetX = targetPosition.getX();
+        req.targetY = targetPosition.getY();
+        req.targetZ = targetPosition.getZ();
+        req.currentRpm = measuredRpm;
 
         long startTime = System.nanoTime();
-        currentShot = shooterSystem.calculate(lastDistanceMeters, measuredRpm, vx, vy, yawRad);
+        double now = edu.wpi.first.wpilibj.Timer.getFPGATimestamp();
+        coprocessorClient.pruneStaleTasks(now, 1.0);
+
+        if (currentTaskHandle == null || currentTaskHandle.isDone() || currentTaskHandle.isStale(now, 0.5)) {
+            currentTaskHandle = coprocessorClient.submitTask("TRAJECTORY_SOLVE", req, TrajectoryResponse.class, now);
+        }
+
+        TrajectoryResponse res = null;
+        boolean isFreshAndValid = false;
+
+        if (currentTaskHandle != null && currentTaskHandle.isDone() && currentTaskHandle.isSuccess()) {
+            res = currentTaskHandle.get();
+            if (res != null) {
+                isFreshAndValid = (now - res.timestamp) < 0.5;
+            }
+        }
+
+        // Check if coprocessor has a fresh valid response
+        if (isFreshAndValid) {
+            currentShot = new ShotParameters(res.yawDegrees, res.pitchDegrees, res.rpm, res.timeOfFlightSec, res.valid, shooterSystem.getMode());
+            // Sync fallback system 
+            shooterSystem.setManualOverride(res.pitchDegrees, res.rpm);
+            if (loggingEnabled) recordOutput("Shooter/FallbackActive", false);
+        } else {
+            if (loggingEnabled) {
+                recordOutput("Shooter/FallbackActive", true);
+                if (res != null) {
+                    recordOutput("Shooter/FallbackReason_StaleTime", edu.wpi.first.wpilibj.Timer.getFPGATimestamp() - res.timestamp);
+                }
+            }
+            // Fallback to RoboRIO solving
+            shooterSystem.setSolverInput(
+                    ShotInput.builder()
+                            .shooterPositionMeters(shooterX, shooterY, shooterHeightMeters)
+                            .shooterYawRadians(yawRad)
+                            .targetPositionMeters(targetPosition.getX(), targetPosition.getY(), targetPosition.getZ())
+                            .targetRadiusMeters(0.45)
+                            .includeAirResistance(true)
+                            .robotVelocity(vx, vy)
+                            .build()
+            );
+            currentShot = shooterSystem.calculate(lastDistanceMeters, measuredRpm, vx, vy, yawRad);
+        }
         long endTime = System.nanoTime();
         lastComputationTimeMs = (endTime - startTime) / 1_000_000.0;
+
+        if (loggingEnabled && res != null) {
+            recordOutput("Shooter/CoprocessorRTT_ms", (edu.wpi.first.wpilibj.Timer.getFPGATimestamp() - res.timestamp) * 1000.0);
+        }
 
         if (loggingEnabled) {
             recordOutput("RobotX", pose.getX());

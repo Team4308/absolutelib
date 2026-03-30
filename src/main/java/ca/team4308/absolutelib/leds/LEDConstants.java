@@ -4,11 +4,6 @@ import edu.wpi.first.wpilibj.util.Color;
 
 
 public final class LEDConstants {
-    // Default Hardware Configuration
-
-    private static int ELEVATOR_LENGTH = 0;
-    private static int FUNNEL_VERT_LENGTH = 0;
-    private static int FUNNEL_HORI_LENGTH = 0;
 
     // Pattern Configuration
     private static int PATTERN_LENGTH = 30;
@@ -34,9 +29,6 @@ public final class LEDConstants {
     public static final double DEFAULT_CHASE_SPEED = 1.0;
 
     // Getters
-    public static int getElevatorLength() { return ELEVATOR_LENGTH; }
-    public static int getFunnelVertLength() { return FUNNEL_VERT_LENGTH; }
-    public static int getFunnelHoriLength() { return FUNNEL_HORI_LENGTH; }
     public static int getPatternLength() { return PATTERN_LENGTH; }
     public static int getScrollSpeed() { return SCROLL_SPEED; }
     public static double getBreathePeriod() { return BREATHE_PERIOD; }
@@ -46,17 +38,7 @@ public final class LEDConstants {
     public static double getLowBrightness() { return LOW_BRIGHTNESS; }
 
     // Setters with validation
-    public static void setElevatorLength(int length) {
-        ELEVATOR_LENGTH = Math.max(1, length);
-    }
-    
-    public static void setFunnelVertLength(int length) {
-        FUNNEL_VERT_LENGTH = Math.max(1, length);
-    }
-    
-    public static void setFunnelHoriLength(int length) {
-        FUNNEL_HORI_LENGTH = Math.max(1, length);
-    }
+
     
     public static void setPatternLength(int length) {
         PATTERN_LENGTH = Math.max(1, length);

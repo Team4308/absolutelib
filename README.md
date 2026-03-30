@@ -143,6 +143,13 @@ ShotLookupTable table = new ShotLookupTable();
 // parse JSON and call table.addEntry(distance, pitch, rpm, tofSeconds)
 ```
 
+You can also directly feed this table into the solver's tuning points:
+
+```java
+// Automatically iterate and load all table map entries as exact physics constraints!
+solver.addTuningPoint(table);
+```
+
 ### Example Code
 
 Under `./example/example-2026-Imported` you can find full robot code for all subsystems + simulation.

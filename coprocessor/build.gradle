@@ -1,0 +1,59 @@
+plugins {
+    id 'java'
+    id 'com.gradleup.shadow' version '8.3.3'
+    id 'edu.wpi.first.wpilib.repositories.WPILibRepositoriesPlugin' version '2025.0'
+}
+
+ext.wpilibVersion = "2026.1.1"
+
+repositories {
+    mavenLocal()
+    mavenCentral()
+    maven { url "https://maven.ctr-electronics.com/release/" } // CTRE
+    maven { url "https://maven.revrobotics.com/" } // REV
+    maven { url "https://maven.photonvision.org/repository/release/" } // PhotonVision
+    maven { url "https://3015rangerrobotics.github.io/pathplannerlib/repo" } // PathPlanner
+    maven { url "https://frcmaven.wpi.edu/release" } // WPILib fallback
+    maven { url "https://frcmaven.wpi.edu/artifactory/littletonrobotics-mvn-release/" } // AdvantageKit
+    maven { url "https://maven.photonvision.org/repository/internal" } // Photon Vision
+    maven { url "https://maven.photonvision.org/repository/snapshots" }
+    maven { url "https://yet-another-software-suite.github.io/YAGSL/releases/" } // YAGSL
+}
+
+
+dependencies {
+    implementation project(':')
+    
+    // WPILib bindings
+    implementation "edu.wpi.first.ntcore:ntcore-java:$wpilibVersion"
+    implementation "edu.wpi.first.wpimath:wpimath-java:$wpilibVersion"
+    implementation "edu.wpi.first.wpiutil:wpiutil-java:$wpilibVersion"
+    
+    // Explicitly add JNI for wpilib so it can run on Raspberry Pi/Linux
+    // runtimeOnly "edu.wpi.first.ntcore:ntcore-jni:$wpilibVersion:linuxarm64"
+    // runtimeOnly "edu.wpi.first.ntcore:ntcore-jni:$wpilibVersion:linuxarm32"
+    // runtimeOnly "edu.wpi.first.ntcore:ntcore-jni:$wpilibVersion:windowsx86-64"
+    // runtimeOnly "edu.wpi.first.ntcore:ntcore-jni:$wpilibVersion:linuxx86-64"
+
+    // runtimeOnly "edu.wpi.first.wpimath:wpimath-jni:$wpilibVersion:linuxarm64"
+    // runtimeOnly "edu.wpi.first.wpimath:wpimath-jni:$wpilibVersion:linuxarm32"
+    // runtimeOnly "edu.wpi.first.wpimath:wpimath-jni:$wpilibVersion:windowsx86-64"
+    // runtimeOnly "edu.wpi.first.wpimath:wpimath-jni:$wpilibVersion:linuxx86-64"
+    
+    // HTTP/JSON
+    implementation 'io.javalin:javalin:6.1.3'
+    implementation 'org.slf4j:slf4j-simple:2.0.11'
+    implementation 'com.fasterxml.jackson.core:jackson-databind:2.17.2'
+}
+
+jar {
+    manifest {
+        attributes 'Main-Class': 'ca.team4308.coprocessor.Main'
+    }
+}
+
+shadowJar {
+    archiveBaseName.set('coprocessor')
+    archiveClassifier.set('')
+    archiveVersion.set('')
+}

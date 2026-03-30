@@ -148,7 +148,6 @@ public class RobotContainer {
                         .andThen(Commands.runOnce(() -> m_leds.setError())));
 
         driver.povUp.onTrue(m_shooter.shootBallSimCommand()); // Shoot ball in simulation
-        driver.povDown.onTrue(Commands.runOnce(() -> m_leds.setAlliance()));
         driver.povLeft.onTrue(Commands.runOnce(() -> m_leds.setRainbow()));
         driver.povRight.onTrue(Commands.runOnce(() -> {
             if (m_shooter.hasValidShot())
