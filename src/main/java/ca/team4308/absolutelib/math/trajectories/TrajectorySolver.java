@@ -1006,6 +1006,7 @@ public class TrajectorySolver {
                 continue;
             }
 
+            boolean finalValid = true;
             double minArcHeight = input.getMinArcHeightMeters();
             if (minArcHeight > 0 && trajSim.maxHeight < input.getTargetZ() + minArcHeight) {
                 if (debugInfo != null) {
@@ -1013,55 +1014,58 @@ public class TrajectorySolver {
                             trajSim.closestApproach, trajSim.maxHeight, trajSim.flightTime, trajSim.hitTarget, trajSim.trajectory);
                 }
                 currentClearance += 0.25;
-                continue;
+                finalValid = false;
             }
 
-            double hoopTolerance = input.getTargetRadius() * config.getHoopToleranceMultiplier();
-            boolean hitsTarget = trajSim.hitTarget
-                    || (trajSim.descendingAtClosest && trajSim.closestApproach <= hoopTolerance
-                    && trajSim.entryAngleDegrees >= SolverConstants.getMinEntryAngleDegrees());
-            if (!hitsTarget) {
-                if (debugInfo != null) {
-                    debugInfo.recordRejected(pitchDeg, SolveDebugInfo.RejectionReason.MISSED_TARGET,
-                            trajSim.closestApproach, trajSim.maxHeight, trajSim.flightTime, trajSim.hitTarget, trajSim.trajectory);
+            if (finalValid) {
+                double hoopTolerance = input.getTargetRadius() * config.getHoopToleranceMultiplier();
+                boolean hitsTarget = trajSim.hitTarget
+                        || (trajSim.descendingAtClosest && trajSim.closestApproach <= hoopTolerance
+                        && trajSim.entryAngleDegrees >= SolverConstants.getMinEntryAngleDegrees());
+                if (!hitsTarget) {
+                    if (debugInfo != null) {
+                        debugInfo.recordRejected(pitchDeg, SolveDebugInfo.RejectionReason.MISSED_TARGET,
+                                trajSim.closestApproach, trajSim.maxHeight, trajSim.flightTime, trajSim.hitTarget, trajSim.trajectory);
+                    }
+                    currentClearance += 0.25;
+                    finalValid = false;
                 }
-                currentClearance += 0.25;
-                continue;
             }
-            if (isFlyover(trajSim.trajectory, effectiveTargetX, effectiveTargetY,
+            if (finalValid && isFlyover(trajSim.trajectory, effectiveTargetX, effectiveTargetY,
                     input.getTargetZ(), input.getTargetRadius())) {
                 if (debugInfo != null) {
                     debugInfo.recordRejected(pitchDeg, SolveDebugInfo.RejectionReason.FLYOVER,
                             trajSim.closestApproach, trajSim.maxHeight, trajSim.flightTime, trajSim.hitTarget, trajSim.trajectory);
                 }
                 currentClearance += 0.25;
-                continue;
+                finalValid = false;
             }
 
-            double missDistance = (trajSim.horizontalDistAtCrossing >= 0)
-                ? trajSim.horizontalDistAtCrossing : trajSim.closestApproach;
-            double score = computeTrajectoryCandidateScore(input, pitchDeg, trajSim,
-                missDistance, pitchFw.requiredWheelRpm, iterDistance, requiredYaw);
-            if (score > bestScore) {
-                bestScore = score;
-                bestPitch = pitchRad;
-                bestTraj = trajSim;
-                if (debugInfo != null) {
-                    debugInfo.recordAccepted(pitchDeg, missDistance,
-                        trajSim.closestApproach, trajSim.maxHeight, trajSim.flightTime,
-                        trajSim.hitTarget, trajSim.trajectory);
+            if (finalValid) {
+                double missDistance = (trajSim.horizontalDistAtCrossing >= 0)
+                        ? trajSim.horizontalDistAtCrossing : trajSim.closestApproach;
+                double score = computeTrajectoryCandidateScore(input, pitchDeg, trajSim,
+                        missDistance, pitchFw.requiredWheelRpm, iterDistance, requiredYaw);
+                if (score > bestScore) {
+                    bestScore = score;
+                    bestPitch = pitchRad;
+                    bestTraj = trajSim;
+                    if (debugInfo != null) {
+                        debugInfo.recordAccepted(pitchDeg, missDistance,
+                                trajSim.closestApproach, trajSim.maxHeight, trajSim.flightTime,
+                                trajSim.hitTarget, trajSim.trajectory);
+                    }
                 }
             }
 
             currentClearance += 0.25;
-            continue;
         }
 
-        if (Double.isNaN(bestPitch) || bestTraj == null) {
+        if (bestTraj == null) {
             return null;
         }
 
-        return new double[]{bestPitch, effectiveTargetX, effectiveTargetY, estimatedTof};
+        return new double[]{bestPitch, effectiveTargetX, effectiveTargetY, bestTraj.flightTime, 0.0};
     }
 
     /**
@@ -1175,7 +1179,13 @@ public class TrajectorySolver {
                     || (trajSim.descendingAtClosest && trajSim.closestApproach <= hoopTolerance
                     && trajSim.entryAngleDegrees >= SolverConstants.getMinEntryAngleDegrees());
 
-            if (!hitsTarget) {
+            // BEST EFFORT RELAXATION:
+            // If we don't 'hit' technically, we still allow the candidate if it's within a reasonable miss distance
+            // (e.g. 0.5m) so that the solver can return the 'Best Effort' shot at high speeds.
+            boolean isMarginal = !hitsTarget;
+            double MAX_MARGINAL_MISS_METERS = 0.5;
+            
+            if (!hitsTarget && trajSim.closestApproach > MAX_MARGINAL_MISS_METERS) {
                 return null;
             }
 
@@ -1191,8 +1201,13 @@ public class TrajectorySolver {
         iterTargetY - input.getShooterY());
         double score = computeTrajectoryCandidateScore(input, pitchDeg, trajSim,
             missDistanceLocal, pitchFw.requiredWheelRpm, distanceMeters, requiredYaw);
+            
+            // Penalize marginal shots so they only win if no perfect hit is possible.
+            if (isMarginal) {
+                score -= 1000.0;
+            }
 
-            return new SweepCandidate(pitchRad, score, iterTargetX, iterTargetY, trajSim.flightTime);
+            return new SweepCandidate(pitchRad, score, iterTargetX, iterTargetY, trajSim.flightTime, isMarginal);
         }).filter(java.util.Objects::nonNull)
                 .max(java.util.Comparator.comparingDouble(c -> c.score))
                 .orElse(null);
@@ -1205,8 +1220,9 @@ public class TrajectorySolver {
         double outItX = best.itX;
         double outItY = best.itY;
         double outTof = best.tof;
+        double marginalFlag = best.isMarginal ? 1.0 : 0.0;
 
-        return new double[]{outPitch, outItX, outItY, outTof};
+        return new double[]{outPitch, outItX, outItY, outTof, marginalFlag};
     }
 
     private double[] solveBisectionCore(
@@ -1343,7 +1359,8 @@ public class TrajectorySolver {
             return null;
         }
 
-        return new double[]{bestPitch, itX, itY, bestTof};
+        double isMarginal = (bestScore < 0) ? 1.0 : 0.0;
+        return new double[]{bestPitch, itX, itY, bestTof, isMarginal};
     }
 
     /**
@@ -1372,6 +1389,7 @@ public class TrajectorySolver {
         double targetRadius, double timeOfFlight,
         double entryAngleDeg, double requiredWheelRpm,
         double distanceMeters, double maxHeight) {
+        double robotVelNorm = Math.hypot(input.getRobotVx(), input.getRobotVy());
         double accuracyScore;
         if (targetRadius > 0) {
             double relMiss = missDistance / targetRadius;
@@ -1403,8 +1421,9 @@ public class TrajectorySolver {
         double deviation = Math.abs(pitchDeg - optimalPitch);
         double stabilityScore = Math.max(0, 30.0 * (1.0 - deviation / 45.0));
         
-        // EMPIRICAL OVERRIDE
-        if (hasTuningPitch) {
+        // EMPIRICAL OVERRIDE: Only apply massive bonus if stationary.
+        // Tuning points (stationary data) should not override physics when moving.
+        if (hasTuningPitch && robotVelNorm < 0.1) {
              stabilityScore = Math.max(0, 1000.0 * (1.0 - deviation / 5.0)); // Huge bonus for matching mapped pitch
         } else if (pitchDeg > 70.0) {
             stabilityScore *= 0.5;
@@ -1451,8 +1470,9 @@ public class TrajectorySolver {
             double rpmOffset = Math.abs(requiredWheelRpm - idealRpm);
             double rpmScoreFromIdeal = Math.max(0, 25.0 * (1.0 - rpmOffset / 1200.0));
 
-            // EMPIRICAL OVERRIDE
-            if (hasTuningRpm) {
+            // EMPIRICAL OVERRIDE: Only apply massive bonus if stationary.
+            // Tuning points (stationary data) should not override physics when moving.
+            if (hasTuningRpm && robotVelNorm < 0.1) {
                  rpmScoreFromIdeal = Math.max(0, 1000.0 * (1.0 - rpmOffset / 100.0)); // Huge bonus for matching mapped rpm
             }
             rpmScore = rpmScoreFromIdeal;
@@ -1549,13 +1569,15 @@ public class TrajectorySolver {
         final double pitchRad;
         final double score;
         final double itX, itY, tof;
+        final boolean isMarginal;
 
-        SweepCandidate(double pitchRad, double score, double itX, double itY, double tof) {
+        SweepCandidate(double pitchRad, double score, double itX, double itY, double tof, boolean isMarginal) {
             this.pitchRad = pitchRad;
             this.score = score;
             this.itX = itX;
             this.itY = itY;
             this.tof = tof;
+            this.isMarginal = isMarginal;
         }
     }
 
@@ -1662,28 +1684,10 @@ public class TrajectorySolver {
 
         double fixedDistance = input.getHorizontalDistanceMeters();
 
-        if (empiricalMap == null && hasTuningPitch && hasTuningRpm) {
-            double reqPitch = tuningPitchMap.get(fixedDistance);
-            double reqRpm = tuningRpmMap.get(fixedDistance);
-
-            FlywheelConfig fwConfig = cachedFlywheel;
-            double exitV = reqRpm / 60.0 * 0.1;
-            FlywheelSimulator.SimulationResult simResult = null;
-            
-            if (fwConfig != null) {
-                simResult = new FlywheelSimulator(fwConfig, gamePiece).simulateAtRpm(reqRpm);
-                exitV = simResult != null && simResult.isAchievable ? simResult.exitVelocityMps : exitV;
-            }
-
-            return new TrajectoryResult(
-                    input, gamePiece,
-                    Math.toRadians(reqPitch), 0.0,
-                    exitV,
-                    fwConfig, simResult,
-                    reqRpm,
-                    1.2, 2.5, 0.0, null, 100.0
-            );
-        }
+        // Removed the direct tuning-map bypass. 
+        // We now allow the solver core to run even if tuning points exist, 
+        // using them as a high-weight scoring bias in computeSweepQualityScore 
+        // instead of a hard override. This ensures physics checks are always performed.
 
         boolean moving = Math.abs(input.getRobotVx()) > SolverConstants.getMovementThresholdMps()
                 || Math.abs(input.getRobotVy()) > SolverConstants.getMovementThresholdMps();
@@ -1808,6 +1812,8 @@ public class TrajectorySolver {
         SolveDebugInfo debugInfo = debugEnabled ? new SolveDebugInfo() : null;
 
         double[] coreResult;
+        TrajectoryResult.Status outStatus = TrajectoryResult.Status.SUCCESS;
+        String outMessage = "Valid trajectory found";
 
         if (solveMode == SolveMode.SWEEP) {
             coreResult = solveSweepCore(input, flywheelSimForPitch, gamePiece,
@@ -1872,6 +1878,10 @@ public class TrajectorySolver {
             effectiveTargetX = coreResult[1];
             effectiveTargetY = coreResult[2];
             estimatedTof = coreResult[3];
+            boolean isMarginalSolution = coreResult.length > 4 && coreResult[4] > 0.5;
+            
+            outStatus = isMarginalSolution ? TrajectoryResult.Status.MARGINAL : TrajectoryResult.Status.SUCCESS;
+            outMessage = isMarginalSolution ? "Marginal trajectory found (best effort)" : "Valid trajectory found";
 
             double dx2 = effectiveTargetX - input.getShooterX();
             double dy2 = effectiveTargetY - input.getShooterY();
@@ -2024,6 +2034,7 @@ public class TrajectorySolver {
     );
 
         TrajectoryResult successResult = new TrajectoryResult(
+                outStatus, outMessage,
                 input, gamePiece,
                 bestPitchAngle, yawAdjustment, actualVelocity,
                 flywheel, bestFlywheelSim, requiredRpm,

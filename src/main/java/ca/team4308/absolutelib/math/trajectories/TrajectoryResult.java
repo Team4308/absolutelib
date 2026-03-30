@@ -111,6 +111,7 @@ public class TrajectoryResult {
      */
     public enum Status {
         SUCCESS, // Valid solution found
+        MARGINAL, // Best effort solution (misses target but closest available)
         OUT_OF_RANGE, // Target too far for any configuration
         VELOCITY_EXCEEDED, // Required velocity exceeds flywheel capability
         ANGLE_EXCEEDED, // Required angle outside mechanism limits
@@ -190,8 +191,25 @@ public class TrajectoryResult {
             double marginOfErrorMeters,
             DiscreteShot discreteSolution,
             double confidenceScore) {
-        this.status = Status.SUCCESS;
-        this.statusMessage = "Valid trajectory found";
+        this(Status.SUCCESS, "Valid trajectory found", input, gamePiece, 
+             pitchAngleRadians, yawAdjustmentRadians, requiredVelocityMps, 
+             recommendedFlywheel, flywheelSimulation, recommendedRpm, 
+             timeOfFlightSeconds, maxHeightMeters, marginOfErrorMeters, 
+             discreteSolution, confidenceScore);
+    }
+
+    public TrajectoryResult(Status status, String statusMessage, ShotInput input, GamePiece gamePiece,
+            double pitchAngleRadians, double yawAdjustmentRadians,
+            double requiredVelocityMps,
+            FlywheelConfig recommendedFlywheel,
+            FlywheelSimulator.SimulationResult flywheelSimulation,
+            double recommendedRpm,
+            double timeOfFlightSeconds, double maxHeightMeters,
+            double marginOfErrorMeters,
+            DiscreteShot discreteSolution,
+            double confidenceScore) {
+        this.status = status;
+        this.statusMessage = statusMessage;
         this.input = input;
         this.gamePiece = gamePiece;
         this.pitchAngleRadians = pitchAngleRadians;
@@ -250,7 +268,7 @@ public class TrajectoryResult {
      * Returns true if a valid solution was found.
      */
     public boolean isSuccess() {
-        return status == Status.SUCCESS;
+        return status == Status.SUCCESS || status == Status.MARGINAL;
     }
 
     /**

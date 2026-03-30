@@ -233,8 +233,15 @@ public final class ShooterSystem {
             return base;
         }
 
-        ShotParameters compensated = movementCompensator.compensate(
-                base, robotVxMps, robotVyMps, yawToTargetRad);
+        // Skip movement compensation if the solver already handled it (SOLVER source).
+        // TrajectorySolver already incorporates robot velocity in its physics simulation.
+        ShotParameters compensated;
+        if (base.source == ShotParameters.Source.SOLVER) {
+            compensated = base;
+        } else {
+            compensated = movementCompensator.compensate(
+                    base, robotVxMps, robotVyMps, yawToTargetRad);
+        }
 
         ShotParameters corrected;
         if (measuredRpm > 0) {

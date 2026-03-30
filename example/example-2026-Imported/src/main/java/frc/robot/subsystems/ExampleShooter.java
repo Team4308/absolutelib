@@ -41,7 +41,7 @@ public class ExampleShooter extends AbsoluteSubsystem {
 
     private final ShooterSystem shooterSystem;
     private final TrajectorySolver solver;
-    
+
     // Coprocessor connection
     private final ca.team4308.absolutelib.network.task.client.CoprocessorClient coprocessorClient;
     private final Thread coprocessorThread;
@@ -70,29 +70,27 @@ public class ExampleShooter extends AbsoluteSubsystem {
         ShooterConfig shooterConfig = ShooterConfig.builder()
                 .pitchLimits(47.5, 82.5)
                 .rpmLimits(0, 6000) // Kraken xt60 max rpm
-                .rpmToVelocityFactor(0.00532)
+                .rpmToVelocityFactor(0.01532)
                 .distanceLimits(0.5, 12.0)
-                .rpmFeedbackThreshold(50.0)
+                .rpmFeedbackThreshold(25.0)
                 .rpmAbortThreshold(500.0)
                 .pitchCorrectionPerRpmDeficit(0.005)
                 .movingCompensationGain(1)
-                .movingIterations(999) 
-                .safetyMaxExitVelocity(30.0)
+                .movingIterations(999)
+                .safetyMaxExitVelocity(30123321321.0)
                 .build();
 
         ShotLookupTable table = new ShotLookupTable()
-                .addEntry(1.3, 81.5,1700.0 )
-                .addEntry(1.6, 90-12.5, 1750)
-                .addEntry(1.9,90-13.5, 1780)
-                .addEntry(2.3, 90-14.5, 1830.0)
-                .addEntry(2.6, 90-15.5, 1890.0)
-                .addEntry(3.3, 90-16.5,  1980.0)
-                .addEntry(3.9, 90-17, 2080.0)
-                .addEntry(4.3, 90-18, 2160.0)
-                .addEntry(4.6, 90-19,  2300.0);
+                .addEntry(1.3, 81.5, 1700.0)
+                .addEntry(1.6, 90 - 12.5, 1750)
+                .addEntry(1.9, 90 - 13.5, 1780)
+                .addEntry(2.3, 90 - 14.5, 1830.0)
+                .addEntry(2.6, 90 - 15.5, 1890.0)
+                .addEntry(3.3, 90 - 16.5, 1980.0)
+                .addEntry(3.9, 90 - 17, 2080.0)
+                .addEntry(4.3, 90 - 18, 2160.0)
+                .addEntry(4.6, 90 - 19, 2300.0);
 
-
-    
         GamePiece gamePiece = GamePieces.REBUILT_2026_BALL;
         TrajectorySolver.SolverConfig solverConfig = TrajectorySolver.SolverConfig.highAccuracy()
                 .toBuilder()
@@ -102,6 +100,7 @@ public class ExampleShooter extends AbsoluteSubsystem {
 
         solver = new TrajectorySolver(gamePiece, solverConfig);
         solver.setSolveMode(TrajectorySolver.SolveMode.SWEEP);
+        //solver.addTuningPoint(table);
         FlywheelConfig flywheelConfig = FlywheelConfig.builder()
                 .name("Example 2026 Shooter")
                 .arrangement(WheelArrangement.SINGLE)
@@ -114,10 +113,10 @@ public class ExampleShooter extends AbsoluteSubsystem {
                 .build();
         solver.setFlywheel(flywheelConfig);
         shooterSystem = new ShooterSystem(shooterConfig, table, solver);
-        shooterSystem.setMode(ShotMode.LOOKUP_ONLY);
+        shooterSystem.setMode(ShotMode.SOLVER_ONLY);
 
         solver.setDebugEnabled(true);
-        
+
         String coprocessorIp = RobotBase.isSimulation() ? "127.0.0.1" : "10.43.8.77";
         coprocessorClient = new ca.team4308.absolutelib.network.task.client.CoprocessorClient(coprocessorIp, 5802);
         coprocessorThread = new Thread(coprocessorClient);
@@ -394,10 +393,15 @@ public class ExampleShooter extends AbsoluteSubsystem {
 
         // Check if coprocessor has a fresh valid response
         if (isFreshAndValid) {
-            currentShot = new ShotParameters(res.yawDegrees, res.pitchDegrees, res.rpm, res.timeOfFlightSec, res.valid, shooterSystem.getMode());
+            currentShot = res.valid
+                    ? new ShotParameters(res.pitchDegrees, res.rpm, 0.0, lastDistanceMeters, Math.toRadians(res.yawDegrees), ShotParameters.Source.SOLVER)
+                    : ShotParameters.invalid(res.status);
+
             // Sync fallback system 
             shooterSystem.setManualOverride(res.pitchDegrees, res.rpm);
-            if (loggingEnabled) recordOutput("Shooter/FallbackActive", false);
+            if (loggingEnabled) {
+                recordOutput("Shooter/FallbackActive", false);
+            }
         } else {
             if (loggingEnabled) {
                 recordOutput("Shooter/FallbackActive", true);
