@@ -17,6 +17,9 @@ public class TrajectoryRequest {
     @JsonProperty("robot_y")
     public double robotY;
 
+    @JsonProperty("robot_z")
+    public double robotZ;
+
     @JsonProperty("robot_heading_rad")
     public double robotHeadingRad;
 
@@ -44,17 +47,22 @@ public class TrajectoryRequest {
     @JsonProperty("current_rpm")
     public double currentRpm;
 
+    // Optional battery voltage / percentage from robot
+    @JsonProperty("battery")
+    public double battery = 100.0;
+
     public TrajectoryRequest() {
     }
 
-    // Binary Protocol Support (88 bytes)
-    public static final int BINARY_SIZE = 88;
+    // Binary Protocol Support (96 bytes)
+    public static final int BINARY_SIZE = 96;
     public static final byte MAGIC_BYTE = 0x42;
 
     public void toBuffer(ByteBuffer buffer) {
         buffer.putDouble(timestamp);
         buffer.putDouble(robotX);
         buffer.putDouble(robotY);
+    buffer.putDouble(robotZ);
         buffer.putDouble(robotHeadingRad);
         buffer.putDouble(vxMps);
         buffer.putDouble(vyMps);
@@ -70,6 +78,7 @@ public class TrajectoryRequest {
         req.timestamp = buffer.getDouble();
         req.robotX = buffer.getDouble();
         req.robotY = buffer.getDouble();
+    req.robotZ = buffer.getDouble();
         req.robotHeadingRad = buffer.getDouble();
         req.vxMps = buffer.getDouble();
         req.vyMps = buffer.getDouble();
@@ -78,6 +87,10 @@ public class TrajectoryRequest {
         req.targetY = buffer.getDouble();
         req.targetZ = buffer.getDouble();
         req.currentRpm = buffer.getDouble();
+        // Buffer format extension not yet used in production; keep safe default if no extra data.
+        if (buffer.remaining() >= Double.BYTES) {
+            req.battery = buffer.getDouble();
+        }
         return req;
     }
 }

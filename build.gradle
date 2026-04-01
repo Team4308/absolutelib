@@ -12,16 +12,16 @@ ext.wpilibVersion = "2026.1.1"
 
 // Repositories
 repositories {
-  mavenCentral()
-  maven { url "https://maven.ctr-electronics.com/release/" } // CTRE
-  maven { url "https://maven.revrobotics.com/" } // REV
-  maven { url "https://maven.photonvision.org/repository/release/" } // PhotonVision
-  maven { url "https://3015rangerrobotics.github.io/pathplannerlib/repo" } // PathPlanner
-  maven { url "https://frcmaven.wpi.edu/release" } // WPILib fallback
-  maven { url "https://frcmaven.wpi.edu/artifactory/littletonrobotics-mvn-release/" } // AdvantageKit
-  maven {url "https://maven.photonvision.org/repository/internal"} // Photon Vision
-  maven {url "https://maven.photonvision.org/repository/snapshots"}
-  maven {url "https://yet-another-software-suite.github.io/YAGSL/releases/"} // YAGSL
+    mavenCentral()
+    maven { url = uri("https://maven.ctr-electronics.com/release/") } // CTRE
+    maven { url = uri("https://maven.revrobotics.com/") } // REV
+    maven { url = uri("https://maven.photonvision.org/repository/release/") } // PhotonVision
+    maven { url = uri("https://3015rangerrobotics.github.io/pathplannerlib/repo") } // PathPlanner
+    maven { url = uri("https://frcmaven.wpi.edu/release") } // WPILib fallback
+    maven { url = uri("https://frcmaven.wpi.edu/artifactory/littletonrobotics-mvn-release/") } // AdvantageKit
+    maven { url = uri("https://maven.photonvision.org/repository/internal") } // Photon Vision
+    maven { url = uri("https://maven.photonvision.org/repository/snapshots") }
+    maven { url = uri("https://yet-another-software-suite.github.io/YAGSL/releases/") } // YAGSL
 
 }
 
@@ -104,8 +104,8 @@ test {
     systemProperty 'junit.jupiter.extensions.autodetection.enabled', 'true'
     
     testLogging {
-        events "passed", "skipped", "failed"
-        exceptionFormat "full"
+        events = ["passed", "skipped", "failed"]
+        exceptionFormat = "full"
         showStandardStreams = false
         showExceptions = true
         showCauses = true

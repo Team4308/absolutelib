@@ -12,6 +12,7 @@ import java.net.Socket;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public class CoprocessorClient implements Runnable {
     private final String host;
@@ -23,6 +24,7 @@ public class CoprocessorClient implements Runnable {
     
     // The active socket writer thread output
     private final AtomicReference<PrintWriter> socketOut = new AtomicReference<>(null);
+    private final AtomicBoolean connected = new AtomicBoolean(false);
 
     public CoprocessorClient(String host, int port) {
         this.host = host;
@@ -83,7 +85,12 @@ public class CoprocessorClient implements Runnable {
                  
                 socket.setTcpNoDelay(true);
                 socketOut.set(out);
+                connected.set(true);
                 System.out.println("Generic CoprocessorClient Connected to " + host + ":" + port);
+
+                if (pendingTasks.isEmpty()) {
+                    System.out.println("Generic CoprocessorClient: no pending tasks yet");
+                }
                 
                 String line;
                 while ((line = in.readLine()) != null) {
@@ -99,8 +106,10 @@ public class CoprocessorClient implements Runnable {
                 }
             } catch (Exception e) {
                 // Connection physically dropped natively or remote terminated. Will automatically reconnect.
+                System.err.println("Generic CoprocessorClient Connection Error: " + e.getMessage());
             } finally {
                 socketOut.set(null);
+                connected.set(false);
                 
                 // Forcibly clear any tasks that were waiting on responses over this socket. 
                 // We know they won't seamlessly flow onto the new reconn socket as state represents discrete packets.
@@ -116,5 +125,9 @@ public class CoprocessorClient implements Runnable {
                 }
             }
         }
+    }
+
+    public boolean isConnected() {
+        return connected.get();
     }
 }

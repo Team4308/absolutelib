@@ -85,11 +85,11 @@ Publishing is strictly for Shuffleboard / AdvantageScope debugging. The NT4 inst
 
 ## Performance Measurement
 The latency value reported on the dashboard is measured server-side using `System.currentTimeMillis()` diff before and after the `solver.solve()` call. This only represents calculation time.
-True end-to-end latency (RTT) is measured by the RoboRIO in `ExampleShooter.java` using `(Timer.getFPGATimestamp() - res.timestamp)` and is broadcast to `/Shooter/CoprocessorRTT_ms`. It typically sits well below 10ms depending on radio/switch load.
+True end-to-end latency (RTT) is measured by the RoboRIO in `ExampleShooter.java` using `(Timer.getFPGATimestamp() - res.timestamp)` and is broadcast to `/Shooter/CoprocessorRTT_ms`. It typically sits well below 100ms depending on radio/switch load.
 
 ## Localhost vs Hardware Mode Switching
 The coprocessor's host IP can be changed directly inside the robot code.
-By default in `ExampleShooter.java`:
+By default in `ExampleShooter.java` in the 2026 example SRC:
 - If `RobotBase.isSimulation()` -> Connects to `127.0.0.1:5801`.
 - If `RobotBase.isReal()` -> Connects to `10.43.8.77:5801`.
 The Coprocessor's own logic uses the `IS_SIMULATION` env variable to deduce the NT4 server location (`10.43.8.2` or `127.0.0.1`).

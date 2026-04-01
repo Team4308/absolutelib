@@ -8,6 +8,9 @@ import java.io.DataInputStream;
 import java.io.OutputStream;
 import java.net.Socket;
 import java.util.concurrent.atomic.AtomicReference;
+
+import org.littletonrobotics.junction.Logger;
+
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.io.ByteArrayOutputStream;
@@ -18,7 +21,7 @@ public class CoprocessorClient implements Runnable {
     private final int port;
     private final boolean useBinaryProtocol;
     private final ObjectMapper mapper = new ObjectMapper();
-
+    private final AtomicReference<Long> lastMs = new AtomicReference<>(System.currentTimeMillis());
     private final AtomicReference<TrajectoryRequest> currentRequest = new AtomicReference<>(null);
     private final AtomicReference<TrajectoryResponse> latestResponse = new AtomicReference<>(null);
     private final AtomicReference<Boolean> isConnected = new AtomicReference<>(false);
@@ -55,6 +58,11 @@ public class CoprocessorClient implements Runnable {
                     System.out.println("CoprocessorClient: Connected.");
 
                     while (isConnected.get() && !Thread.currentThread().isInterrupted()) {
+                        System.out.println("getLatestResponse: " + String.valueOf(getLatestResponse() != null ? getLatestResponse().toString() : "null"));
+                        System.out.println("currentRequest: " + String.valueOf(currentRequest.get() != null ? currentRequest.get().toString() : "null"));
+                        System.out.println("isConnected: "+ String.valueOf(isConnected.get()));
+                        System.out.println("useBinaryProtocol: "+ String.valueOf(useBinaryProtocol));
+                        System.out.println("Ping (MS): " + String.valueOf(System.currentTimeMillis() - lastMs.get()));
                         TrajectoryRequest req = currentRequest.get();
                         if (req != null) {
                             if (useBinaryProtocol) {
@@ -72,6 +80,7 @@ public class CoprocessorClient implements Runnable {
                                     ByteBuffer bb = ByteBuffer.wrap(inBuf).order(ByteOrder.LITTLE_ENDIAN);
                                     TrajectoryResponse res = TrajectoryResponse.fromBuffer(bb);
                                     latestResponse.set(res);
+                                    lastMs.set(System.currentTimeMillis());
                                 }
                             } else {
                                 String jsonReq = mapper.writeValueAsString(req) + "\n";

@@ -1,6 +1,15 @@
 # Changelog for AbsoluteLib v2
 
 
+# 2.1.7 - 1.2.8
+
+## The Co-processors update 
+ Added easy use to offload anything to a co-processor over TCP which would allow for super fast data transfer making heavy tasks easy to run.
+
+- Updated Example code to demo it
+- Added github workflow to auto build 
+- Added TCP And networking helpers to the libary
+- Read the README in /coprocessor for more info!
 
 # 2.1.6
 

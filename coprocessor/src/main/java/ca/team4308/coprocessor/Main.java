@@ -25,18 +25,31 @@ public class Main {
 
         TrajectoryWrapper wrapper = new TrajectoryWrapper();
         TCPServer tcpServer = new TCPServer(wrapper);
-        new WebServer(tcpServer);
-        NT4Publisher nt4Publisher = new NT4Publisher();
+    TaskRegistry registry = new TaskRegistry();
+    TaskServer taskServer = new TaskServer(5802, registry, 4); // 4 concurrent worker threads
+    new WebServer(tcpServer, taskServer);
+        NT4Publisher nt4Publisher = null;
+        if (!Config.IS_SIMULATION) {
+            System.out.println("Connecting NT4Publisher...");
+            try {
+                nt4Publisher = new NT4Publisher();
+                System.out.println("NT4Publisher created");
+            } catch (Throwable ex) {
+                // If NT4 JNI cannot be loaded (or anything else fails), continue in standalone mode.
+                System.err.println("NT4Publisher disabled: " + ex.getClass().getSimpleName() + " - " + ex.getMessage());
+                ex.printStackTrace();
+            }
+        } else {
+            System.out.println("Simulation mode: skipping NT4Publisher initialization.");
+        }
 
         Thread tcpThread = new Thread(tcpServer);
         tcpThread.start();
 
-        // Start the generalized task offloading server on port 5802
-        TaskRegistry registry = new TaskRegistry();
-        registry.register("TRAJECTORY_SOLVE", new TrajectoryTaskHandler(wrapper));
-        TaskServer taskServer = new TaskServer(5802, registry, 4); // 4 concurrent worker threads
-        Thread taskThread = new Thread(taskServer);
-        taskThread.start();
+    // Start the generalized task offloading server on port 5802
+    registry.register("TRAJECTORY_SOLVE", new TrajectoryTaskHandler(wrapper, tcpServer));
+    Thread taskThread = new Thread(taskServer);
+    taskThread.start();
 
         System.out.println("System initialized entirely.");
 
@@ -45,7 +58,8 @@ public class Main {
             try {
                 Thread.sleep(20); // 50Hz update loop to NT4
                 TrajectoryResult trajResult = wrapper.getShooterSystem().getLastTrajectoryResult();
-                nt4Publisher.update(
+                if (nt4Publisher != null) {
+                    nt4Publisher.update(
                         tcpServer.latestRequest.get(),
                         tcpServer.latestResponse.get(),
                         tcpServer.lastSolverTimeMs.get(),
@@ -54,7 +68,8 @@ public class Main {
                         tcpServer.lastSolverTimeMs.get(),
                         tcpServer.totalRequests.get(),
                         tcpServer.droppedPackets.get()
-                );
+                    );
+                }
             } catch (InterruptedException e) {
                 e.printStackTrace();
                 break;

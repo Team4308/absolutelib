@@ -29,6 +29,7 @@ import edu.wpi.first.util.sendable.Sendable;
 import edu.wpi.first.util.sendable.SendableBuilder;
 import edu.wpi.first.wpilibj.DriverStation;
 import edu.wpi.first.wpilibj.RobotBase;
+import edu.wpi.first.wpilibj.RobotController;
 import edu.wpi.first.wpilibj2.command.Command;
 import frc.robot.subsystems.Util.FuelSim;
 
@@ -119,6 +120,7 @@ public class ExampleShooter extends AbsoluteSubsystem {
 
         String coprocessorIp = RobotBase.isSimulation() ? "127.0.0.1" : "10.43.8.77";
         coprocessorClient = new ca.team4308.absolutelib.network.task.client.CoprocessorClient(coprocessorIp, 5802);
+        System.out.println("Starting coprocessor client thread for " + coprocessorIp);
         coprocessorThread = new Thread(coprocessorClient);
         coprocessorThread.setDaemon(true);
         coprocessorThread.start();
@@ -381,6 +383,13 @@ public class ExampleShooter extends AbsoluteSubsystem {
             currentTaskHandle = coprocessorClient.submitTask("TRAJECTORY_SOLVE", req, TrajectoryResponse.class, now);
         }
 
+        if (loggingEnabled) {
+            System.out.println("ExampleShooter: coprocessor connected=" + ", request=" + req.robotX + "," + req.robotY);
+            if (currentTaskHandle != null) {
+                System.out.println("ExampleShooter: currentTaskHandle done=" + currentTaskHandle.isDone() + " stale=" + currentTaskHandle.isStale(now, 0.5));
+            }
+        }
+
         TrajectoryResponse res = null;
         boolean isFreshAndValid = false;
 
@@ -393,6 +402,9 @@ public class ExampleShooter extends AbsoluteSubsystem {
 
         // Check if coprocessor has a fresh valid response
         if (isFreshAndValid) {
+            if (loggingEnabled) {
+                System.out.println("ExampleShooter: using coprocessor response, pitch=" + res.pitchDegrees + " rpm=" + res.rpm);
+            }
             currentShot = res.valid
                     ? new ShotParameters(res.pitchDegrees, res.rpm, 0.0, lastDistanceMeters, Math.toRadians(res.yawDegrees), ShotParameters.Source.SOLVER)
                     : ShotParameters.invalid(res.status);
@@ -403,6 +415,9 @@ public class ExampleShooter extends AbsoluteSubsystem {
                 recordOutput("Shooter/FallbackActive", false);
             }
         } else {
+            if (loggingEnabled) {
+                System.out.println("ExampleShooter: fallback to local solver; coprocessor connected=" );
+            }
             if (loggingEnabled) {
                 recordOutput("Shooter/FallbackActive", true);
                 if (res != null) {

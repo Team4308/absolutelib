@@ -19,7 +19,6 @@ import edu.wpi.first.wpilibj.Filesystem;
 import edu.wpi.first.wpilibj.RobotBase;
 import edu.wpi.first.wpilibj.smartdashboard.SendableChooser;
 import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
-import edu.wpi.first.wpilibj.util.Color;
 import edu.wpi.first.wpilibj2.command.Command;
 import edu.wpi.first.wpilibj2.command.Commands;
 
@@ -27,9 +26,7 @@ public class RobotContainer {
 
     // Subsystems - Only Swerve, Shooter, Pivot (for shooter angle), and LEDs
     private final ExamplePivot m_pivot = new ExamplePivot();
-    private final ExampleLEDs m_leds = new ExampleLEDs();
     private final ExampleShooter m_shooter = new ExampleShooter();
-    private final FuelSim m_FuelSim = FuelSim.getInstance();
     private final SwerveSubsystem drivebase = new SwerveSubsystem(new File(Filesystem.getDeployDirectory(), "swerve"));
 
     private final XBoxWrapper driver = new XBoxWrapper(1);
@@ -82,7 +79,6 @@ public class RobotContainer {
         DriverStation.silenceJoystickConnectionWarning(true);
         autoChooser = AutoBuilder.buildAutoChooser();
         SmartDashboard.putData("Auto Chooser", autoChooser);
-        m_leds.setIdle();
 
     }
 
@@ -99,15 +95,14 @@ public class RobotContainer {
 
     private void configureBindings() {
         Command driveFieldOrientedAnglularVelocity = drivebase.driveFieldOriented(driveAngularVelocity);
-        Command driveRobotOrientedAngularVelocity = drivebase.driveFieldOriented(driveRobotOriented);
-        Command driveFieldOrientedAnglularVelocityKeyboard = drivebase.driveFieldOriented(driveAngularVelocityKeyboard);
+    //Command driveRobotOrientedAngularVelocity = drivebase.driveFieldOriented(driveRobotOriented);
+    Command driveFieldOrientedAnglularVelocityKeyboard = drivebase.driveFieldOriented(driveAngularVelocityKeyboard);
 
 
         driver.RB.whileTrue(
                 Commands.run(() -> {
                     if (m_shooter.hasValidShot()) {
                         m_pivot.setAngle(m_shooter.getTargetPitchDegrees()).schedule();
-                        m_leds.setProgress(0.5, edu.wpi.first.wpilibj.util.Color.kYellow);
                     }
                 }));
 
@@ -122,39 +117,20 @@ public class RobotContainer {
 
         driver.LeftStickButton.whileTrue(
                 m_shooter.stopCommand()
-                        .andThen(m_pivot.setAngle(0.0))
-                        .andThen(Commands.runOnce(() -> m_leds.setIdle())));
+                        .andThen(m_pivot.setAngle(0.0)));
 
         driver.A.onTrue(Commands.runOnce(() -> {
             m_shooter.setTrackingEnabled(!m_shooter.isTrackingEnabled());
             if (m_shooter.isTrackingEnabled()) {
-                m_leds.setProgress(0.3, edu.wpi.first.wpilibj.util.Color.kGreen);
             } else {
-                m_leds.setIdle();
             }
         }));
 
         // B button: cycle shot mode (LOOKUP_ONLY → SOLVER_ONLY → LOOKUP_WITH_SOLVER_FALLBACK → ...)
-        driver.B.onTrue(m_shooter.cycleModeCommand()
-                .andThen(Commands.runOnce(() -> 
-                        m_leds.setProgress(0.7, edu.wpi.first.wpilibj.util.Color.kCyan))));
 
-        driver.Start.onTrue(
-                m_shooter.spinUp().withTimeout(3.0)
-                        .andThen(Commands.runOnce(() -> m_leds.setSuccess())));
 
-        driver.Back.onTrue(
-                m_shooter.stopCommand()
-                        .andThen(Commands.runOnce(() -> m_leds.setError())));
 
         driver.povUp.onTrue(m_shooter.shootBallSimCommand()); // Shoot ball in simulation
-        driver.povLeft.onTrue(Commands.runOnce(() -> m_leds.setRainbow()));
-        driver.povRight.onTrue(Commands.runOnce(() -> {
-            if (m_shooter.hasValidShot())
-                m_leds.setSuccess();
-            else
-                m_leds.setError();
-        }));
 
         if (RobotBase.isSimulation()) {
             drivebase.setDefaultCommand(driveFieldOrientedAnglularVelocityKeyboard);
@@ -177,7 +153,6 @@ public class RobotContainer {
                 m_pivot.setAngle(35.0),
                 Commands.waitSeconds(0.3),
                 m_shooter.spinUp().withTimeout(2.0),
-                Commands.runOnce(() -> m_leds.setSuccess()),
                 Commands.waitSeconds(0.5),
                 m_shooter.stopCommand(),
                 m_pivot.setAngle(0.0));
@@ -206,10 +181,9 @@ public class RobotContainer {
      * Update LED patterns based on robot state. Call this in robotPeriodic.
      */
 
+    // LED subsystem removed; no-op method kept for compatibility
     public void updateLEDs() {
-        if (m_shooter.hasValidShot()) {
-            m_leds.setProgress(m_shooter.getTargetRpm() / 6000.0, Color.kGreen);
-        }
+        // no-op
     }
 
  
