@@ -39,6 +39,7 @@ public class TrajectoryTaskHandler implements TaskHandler {
         if (Config.LOG_TO_FILE) {
             long now = System.currentTimeMillis();
             // Throttle logging to max 2 times a second, AND only if the robot actually moved
+            // TODO: Send update on move command, check timedRobotCommand for more direct logging instead of position change + time 
             if (now - lastLogTime >= 500) { 
                 boolean moved = Math.abs(req.robotX - lastLogX) > 0.05 || Math.abs(req.robotY - lastLogY) > 0.05;
                 if (moved) {

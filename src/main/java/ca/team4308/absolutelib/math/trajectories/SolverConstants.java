@@ -141,7 +141,19 @@ public final class SolverConstants {
      */
     private static double rimClearanceMeters = 0.15;
 
+
+    /**
+     * This only applies to bisection solutions.
+     * Maximum iterations for bisection convergence. Higher = more accuracy,
+     * longer solve time. Default: 16 (log2(~45 degree spread / ~0.5 degree res))
+     */
+    private static double maxIterations = 16; // log2(~45 degree spread / ~0.5 degree res)
+
     // ==================== Getters ====================
+    public static double getMaxIterations() {
+        return maxIterations;
+    }
+
     public static double getHoopToleranceMultiplier() {
         return hoopToleranceMultiplier;
     }
@@ -309,6 +321,10 @@ public final class SolverConstants {
 
     public static void setRimClearanceMeters(double value) {
         rimClearanceMeters = value;
+    }
+
+    public static void setMaxIterations(double value) {
+        maxIterations = value;
     }
 
     /**

@@ -29,6 +29,10 @@ public class WebServer {
                                     h2 { margin-top: 0; color: #4fc3f7; }
                                     table { width: 100%; border-collapse: collapse; }
                                     th, td { text-align: left; padding: 8px; border-bottom: 1px solid #333; }
+                                    .disconnected .card { opacity: 0.35; }
+                                    .status-connected { color: #5dfc5d; }
+                                    .status-disconnected { color: #fc5d5d; }
+                                    .small-label { font-size: 0.85rem; color: #bbbbbb; }
                                 </style>
                                 <script>
                                     async function fetchStatus() {
@@ -37,6 +41,24 @@ public class WebServer {
                                         document.getElementById('connected').innerText = data.isConnected ? "CONNECTED" : "DISCONNECTED";
                                         document.getElementById('latency').innerText = data.latencyMs + " ms";
 
+                                        document.body.classList.toggle('disconnected', !data.isConnected);
+                                        document.getElementById('connected').className = data.isConnected ? 'status-connected' : 'status-disconnected';
+
+                                        if (!data.isConnected) {
+                                            // Don't show stale measurement values when disconnected
+                                            document.getElementById('robotX').innerText = '--';
+                                            document.getElementById('robotY').innerText = '--';
+                                            document.getElementById('robotZ').innerText = '--';
+                                            document.getElementById('pitch').innerText = '--';
+                                            document.getElementById('yaw').innerText = '--';
+                                            document.getElementById('rpm').innerText = '--';
+                                            document.getElementById('valid').innerText = '--';
+                                            document.getElementById('batteryPercentage').innerText = '--';
+                                            document.getElementById('incoming').innerText = '--';
+                                            document.getElementById('outgoing').innerText = '--';
+                                            return;
+                                        }
+
                                         document.getElementById('batteryPercentage').innerText = data.battery.toFixed(1) + '%';
                                         document.getElementById('incoming').innerText = data.incomingPackets;
                                         document.getElementById('outgoing').innerText = data.outgoingPackets;
@@ -44,6 +66,7 @@ public class WebServer {
                                         if (data.request) {
                                             document.getElementById('robotX').innerText = data.request.robot_x.toFixed(2);
                                             document.getElementById('robotY').innerText = data.request.robot_y.toFixed(2);
+                                            document.getElementById('robotZ').innerText = (data.request.robot_z || 0.0).toFixed(2);
                                         }
                                         if (data.response) {
                                             document.getElementById('pitch').innerText = data.response.pitch_deg.toFixed(2);
@@ -70,6 +93,7 @@ public class WebServer {
                                     <table>
                                         <tr><th>Robot X (m)</th><td id="robotX">0.0</td></tr>
                                         <tr><th>Robot Y (m)</th><td id="robotY">0.0</td></tr>
+                                        <tr><th>Robot Z (m)</th><td id="robotZ">0.0</td></tr>
                                     </table>
                                 </div>
 
@@ -87,7 +111,8 @@ public class WebServer {
                                     <h2>Hardware info</h2>
                                     <table>
                                         <tr><th>Battery Percentage</th><td id="batteryPercentage">0</td></tr>
-                                        
+                                        <tr><th>Incoming Packets</th><td id="incoming">0</td></tr>
+                                        <tr><th>Outgoing Packets</th><td id="outgoing">0</td></tr>
                                     </table>
                                 </div>
                             </body>

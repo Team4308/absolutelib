@@ -512,3 +512,4 @@ public class TrajectoryResult {
                 confidenceScore);
     }
 }
+

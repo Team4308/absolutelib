@@ -27,6 +27,9 @@ public class NT4Publisher {
     private final BooleanPublisher resValid;
     private final DoublePublisher tcpLatencyMs;
     
+    private final IntegerPublisher activeConfigVersionIdPub;
+    private final DoublePublisher filteredLatencyMsPub;
+    
     public NT4Publisher() {
         inst = NetworkTableInstance.getDefault();
         inst.startClient4("trajectory-coprocessor");
@@ -47,9 +50,12 @@ public class NT4Publisher {
         resRpm = table.getDoubleTopic("Output/RPM").publish();
         resValid = table.getBooleanTopic("Output/Valid").publish();
         tcpLatencyMs = table.getDoubleTopic("Status/TCPLatencyMs").publish();
+        
+        activeConfigVersionIdPub = table.getIntegerTopic("Status/ActiveConfigVersionId").publish();
+        filteredLatencyMsPub = table.getDoubleTopic("Status/FilteredLatencyMs").publish();
     }
 
-    public void update(TrajectoryRequest req, TrajectoryResponse res, long latency, TrajectoryResult trajResult, boolean isConnected, double solverTime, long totalRequests, long droppedPackets) {
+    public void update(TrajectoryRequest req, TrajectoryResponse res, long latency, TrajectoryResult trajResult, boolean isConnected, double solverTime, long totalRequests, long droppedPackets, TCPServer tcpServer) {
         connectedPub.set(isConnected);
         solverTimePub.set(solverTime);
         totalRequestsPub.set(totalRequests);
@@ -68,5 +74,8 @@ public class NT4Publisher {
         }
         
         tcpLatencyMs.set(latency);
+        
+        activeConfigVersionIdPub.set(tcpServer.getActiveConfigVersionId());
+        filteredLatencyMsPub.set(tcpServer.getFilteredLatencyMs());
     }
 }

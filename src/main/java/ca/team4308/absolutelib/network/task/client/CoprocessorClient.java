@@ -91,9 +91,11 @@ public class CoprocessorClient implements Runnable {
                 if (pendingTasks.isEmpty()) {
                     System.out.println("Generic CoprocessorClient: no pending tasks yet");
                 }
-                
+
                 String line;
+                System.out.println("Generic CoprocessorClient waiting for lines...");
                 while ((line = in.readLine()) != null) {
+                    System.out.println("Generic CoprocessorClient received line length: " + line.length());
                     try {
                         TaskResponse res = mapper.readValue(line, TaskResponse.class);
                         TaskHandle<?> handle = pendingTasks.remove(res.requestId);

@@ -12,6 +12,7 @@ import ca.team4308.absolutelib.math.trajectories.shooter.ShotParameters;
 import ca.team4308.absolutelib.math.trajectories.flywheel.FlywheelConfig;
 import ca.team4308.absolutelib.math.trajectories.flywheel.WheelMaterial;
 import ca.team4308.absolutelib.math.trajectories.motor.FRCMotors;
+import ca.team4308.absolutelib.math.trajectories.network.ConfigurationPacket;
 import ca.team4308.absolutelib.math.trajectories.network.TrajectoryRequest;
 import ca.team4308.absolutelib.math.trajectories.network.TrajectoryResponse;
 
@@ -20,6 +21,10 @@ public class TrajectoryWrapper {
     private final TrajectorySolver solver;
     private final ShooterSystem shooterSystem;
     private final OutputSmoother smoother;
+    
+    // Active configuration tracking
+    private volatile int currentConfigVersionId = 0;
+    private volatile double shooterHeightMeters = 0.5;
 
     public TrajectoryWrapper() {
         smoother = new OutputSmoother(Config.SMOOTHING_EMA_ALPHA, Config.SMOOTHING_RESET_THRESHOLD_DEG);
@@ -84,7 +89,7 @@ public class TrajectoryWrapper {
         
         shooterSystem.setSolverInput(
                 ShotInput.builder()
-                        .shooterPositionMeters(req.robotX, req.robotY, 0.5) // Example height
+                        .shooterPositionMeters(req.robotX, req.robotY, shooterHeightMeters)
                         .shooterYawRadians(yawRadians)
                         .targetPositionMeters(req.targetX, req.targetY, req.targetZ)
                         .targetRadiusMeters(0.45)
@@ -152,5 +157,26 @@ public class TrajectoryWrapper {
     
     public ShooterSystem getShooterSystem() {
         return shooterSystem;
+    }
+
+    public void updateConfiguration(ca.team4308.absolutelib.math.trajectories.network.ConfigurationPacket config) {
+        if (config == null) {
+            return;
+        }
+
+        currentConfigVersionId = config.configVersionId;
+        shooterHeightMeters = config.shooterHeightMeters;
+
+        // Log the configuration update for dashboard sync verification
+        System.out.println("=== Configuration Updated (Version " + config.configVersionId + ") ===");
+        System.out.println("Flywheel: " + config.flywheelWheelDiameterInches + "\" dia, gear ratio: " + config.flywheelGearRatio);
+        System.out.println("Shooter: pitch [" + config.shooterPitchMinDegrees + ", " + config.shooterPitchMaxDegrees + "]°, "
+                + "rpm [" + config.shooterRpmMin + ", " + config.shooterRpmMax + "]");
+        System.out.println("Shooter height: " + shooterHeightMeters + "m");
+        
+    }
+
+    public int getCurrentConfigVersionId() {
+        return currentConfigVersionId;
     }
 }

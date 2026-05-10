@@ -304,7 +304,7 @@ public class FuelSim {
     private int trackedTickCount = 0;
     private boolean trackedLanded = false; // true once the tracked ball hits the ground
     private boolean trackedPublished = false; // true once we log the trajectory results
-    private static final int TRACK_SAMPLE_INTERVAL = 5; // record every 5 subticks (= every 0.02s)
+    private static final int TRACK_SAMPLE_INTERVAL = 5; 
     private Supplier<Pose2d> robotSupplier = null;
     private Supplier<ChassisSpeeds> robotSpeedsSupplier = null;
     private double robotWidth; // size along the robot's y axis

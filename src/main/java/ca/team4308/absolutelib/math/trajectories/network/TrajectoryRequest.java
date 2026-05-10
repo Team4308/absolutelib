@@ -87,7 +87,7 @@ public class TrajectoryRequest {
         req.targetY = buffer.getDouble();
         req.targetZ = buffer.getDouble();
         req.currentRpm = buffer.getDouble();
-        // Buffer format extension not yet used in production; keep safe default if no extra data.
+        // Buffer format; keep safe default if no extra data.
         if (buffer.remaining() >= Double.BYTES) {
             req.battery = buffer.getDouble();
         }

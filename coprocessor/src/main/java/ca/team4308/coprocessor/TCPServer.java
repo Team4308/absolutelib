@@ -1,5 +1,6 @@
 package ca.team4308.coprocessor;
 
+import ca.team4308.absolutelib.math.trajectories.network.ConfigurationPacket;
 import ca.team4308.absolutelib.math.trajectories.network.TrajectoryRequest;
 import ca.team4308.absolutelib.math.trajectories.network.TrajectoryResponse;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -13,6 +14,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.io.ByteArrayOutputStream;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class TCPServer implements Runnable {
 
@@ -22,6 +24,7 @@ public class TCPServer implements Runnable {
     // For monitoring from dashboard
     public final AtomicReference<TrajectoryRequest> latestRequest = new AtomicReference<>(null);
     public final AtomicReference<TrajectoryResponse> latestResponse = new AtomicReference<>(null);
+    public final AtomicReference<ConfigurationPacket> latestConfig = new AtomicReference<>(null);
     public final AtomicLong lastSolverTimeMs = new AtomicLong(0L);
     public final AtomicReference<Boolean> isConnected = new AtomicReference<>(false);
     public final AtomicLong lastActivityMs = new AtomicLong(0L);
@@ -32,6 +35,16 @@ public class TCPServer implements Runnable {
     public final AtomicLong incomingPackets = new AtomicLong(0L);
     public final AtomicLong outgoingPackets = new AtomicLong(0L);
     public final AtomicReference<Double> batteryLevel = new AtomicReference<>(100.0);
+    
+    // Configuration tracking
+    public final AtomicReference<Integer> activeConfigVersionId = new AtomicReference<>(0);
+    public final LatencyFilter latencyFilter = new LatencyFilter(16);
+    
+    // Client connection pool
+    private final ConcurrentHashMap<String, Long> clientConnectTimes = new ConcurrentHashMap<>();
+    
+    // Pre-allocated buffers for zero-allocation loop
+    private static final int MAX_BUFFER_SIZE = 4096;
 
     public void setBattery(double incomingBattery) {
         if (Double.isNaN(incomingBattery) || Double.isInfinite(incomingBattery)) {
@@ -72,6 +85,7 @@ public class TCPServer implements Runnable {
                             long last = lastActivityMs.get();
                             if (last > 0 && System.currentTimeMillis() - last > CONNECTION_TIMEOUT_MS) {
                                 isConnected.set(false);
+                                System.out.println("Connection timeout detected.");
                             }
                         }
                         Thread.sleep(250);
@@ -85,87 +99,149 @@ public class TCPServer implements Runnable {
             
             while (!Thread.currentThread().isInterrupted()) {
                 Socket clientSocket = serverSocket.accept();
-                clientSocket.setTcpNoDelay(true); // Disable Nagle's algorithm for lowest latency
-                System.out.println("Client connected: " + clientSocket.getInetAddress());
+                clientSocket.setTcpNoDelay(true);
+                String clientAddr = clientSocket.getInetAddress().toString();
+                System.out.println("Client connected: " + clientAddr);
                 isConnected.set(true);
                 lastActivityMs.set(System.currentTimeMillis());
+                clientConnectTimes.put(clientAddr, System.currentTimeMillis());
 
-                try (DataInputStream dataIn = new DataInputStream(clientSocket.getInputStream());
-                     OutputStream rawOut = clientSocket.getOutputStream()) {
-
-                    while (!Thread.currentThread().isInterrupted()) {
-                        int firstByte = dataIn.read();
-                        if (firstByte == -1) break;
-
-                        long start = System.currentTimeMillis();
-                        TrajectoryRequest request = null;
-
-                        try {
-                            if (firstByte == TrajectoryRequest.MAGIC_BYTE) {
-                                byte[] buf = new byte[TrajectoryRequest.BINARY_SIZE];
-                                dataIn.readFully(buf);
-                                ByteBuffer bb = ByteBuffer.wrap(buf).order(ByteOrder.LITTLE_ENDIAN);
-                                request = TrajectoryRequest.fromBuffer(bb);
-                            } else if (firstByte == '{') {
-                                ByteArrayOutputStream baos = new ByteArrayOutputStream();
-                                baos.write(firstByte);
-                                while (true) {
-                                    int b = dataIn.read();
-                                    if (b == -1 || b == '\n') break;
-                                    baos.write(b);
-                                }
-                                request = mapper.readValue(baos.toByteArray(), TrajectoryRequest.class);
-                            } else {
-                                continue;
-                            }
-                            
-                            if (request != null) {
-                                lastActivityMs.set(System.currentTimeMillis());
-                                incomingPackets.incrementAndGet();
-                                totalRequests.incrementAndGet();
-                                latestRequest.set(request);
-                                if (request.battery > 0) {
-                                    setBattery(request.battery);
-                                }
-
-                                TrajectoryResponse response = solverWrapper.solve(request);
-                                latestResponse.set(response);
-
-                                if (firstByte == TrajectoryRequest.MAGIC_BYTE) {
-                                    ByteBuffer outBuf = ByteBuffer.allocate(TrajectoryResponse.BINARY_SIZE).order(ByteOrder.LITTLE_ENDIAN);
-                                    response.toBuffer(outBuf);
-                                    rawOut.write(outBuf.array());
-                                    outgoingPackets.incrementAndGet();
-                                } else {
-                                    byte[] json = mapper.writeValueAsBytes(response);
-                                    rawOut.write(json);
-                                    rawOut.write('\n');
-                                    outgoingPackets.incrementAndGet();
-                                }
-                                rawOut.flush();
-
-                                lastSolverTimeMs.set(System.currentTimeMillis() - start);
-
-                                if (Config.LOG_TO_FILE) {
-                                    ReplayLogger.log(request, response);
-                                }
-                            }
-                        } catch (Exception e) {
-                            System.err.println("Error processing request: " + e.getMessage());
-                            droppedPackets.incrementAndGet();
-                        }
-                    }
-                } catch (Exception e) {
-                    System.err.println("Client handler exception: " + e.getMessage());
-                } finally {
-                    System.out.println("Client disconnected.");
-                    isConnected.set(false);
-                    lastActivityMs.set(0L);
-                }
+                Thread clientHandler = new Thread(() -> handleClient(clientSocket, clientAddr));
+                clientHandler.setDaemon(true);
+                clientHandler.start();
             }
         } catch (Exception e) {
             System.err.println("Could not listen on port " + Config.TCP_PORT);
             e.printStackTrace();
         }
+    }
+
+    private void handleClient(Socket clientSocket, String clientAddr) {
+        byte[] readBuffer = new byte[4096];
+        ByteBuffer byteBuffer = ByteBuffer.allocate(Math.max(TrajectoryRequest.BINARY_SIZE, ConfigurationPacket.BINARY_SIZE));
+        byteBuffer.order(ByteOrder.LITTLE_ENDIAN);
+
+        try (DataInputStream dataIn = new DataInputStream(clientSocket.getInputStream());
+             OutputStream rawOut = clientSocket.getOutputStream()) {
+
+            while (!Thread.currentThread().isInterrupted()) {
+                int firstByte = dataIn.read();
+                if (firstByte == -1) break;
+
+                long start = System.currentTimeMillis();
+                TrajectoryRequest request = null;
+                ConfigurationPacket config = null;
+
+                try {
+                    if (firstByte == TrajectoryRequest.MAGIC_BYTE) {
+                        byte[] buf = new byte[TrajectoryRequest.BINARY_SIZE];
+                        dataIn.readFully(buf);
+                        byteBuffer.clear();
+                        byteBuffer.put(buf);
+                        byteBuffer.flip();
+                        request = TrajectoryRequest.fromBuffer(byteBuffer);
+                    } else if (firstByte == ConfigurationPacket.MAGIC_BYTE) {
+                        byte[] buf = new byte[ConfigurationPacket.BINARY_SIZE];
+                        dataIn.readFully(buf);
+                        byteBuffer.clear();
+                        byteBuffer.put(buf);
+                        byteBuffer.flip();
+                        config = ConfigurationPacket.fromBuffer(byteBuffer);
+                    } else if (firstByte == '{') {
+                        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                        baos.write(firstByte);
+                        int b;
+                        while ((b = dataIn.read()) != -1 && b != '\n') {
+                            baos.write(b);
+                        }
+                        
+                        byte[] jsonBytes = baos.toByteArray();
+                        try {
+                            config = mapper.readValue(jsonBytes, ConfigurationPacket.class);
+                        } catch (Exception e1) {
+                            try {
+                                request = mapper.readValue(jsonBytes, TrajectoryRequest.class);
+                            } catch (Exception e2) {
+                                System.err.println("Failed to parse JSON: " + e2.getMessage());
+                                droppedPackets.incrementAndGet();
+                                continue;
+                            }
+                        }
+                    } else {
+                        continue;
+                    }
+
+                    lastActivityMs.set(System.currentTimeMillis());
+
+                    if (config != null) {
+                        incomingPackets.incrementAndGet();
+                        latestConfig.set(config);
+                        activeConfigVersionId.set(config.configVersionId);
+                        
+                        solverWrapper.updateConfiguration(config);
+                        System.out.println("Configuration updated: version " + config.configVersionId);
+                        
+                        java.util.Map<String, Object> ackMap = new java.util.HashMap<>();
+                        ackMap.put("ack", "config_received");
+                        ackMap.put("version", config.configVersionId);
+                        byte[] ackJson = mapper.writeValueAsBytes(ackMap);
+                        rawOut.write(ackJson);
+                        rawOut.write('\n');
+                        rawOut.flush();
+                        outgoingPackets.incrementAndGet();
+                    }
+
+                    // Handle trajectory request
+                    if (request != null) {
+                        incomingPackets.incrementAndGet();
+                        totalRequests.incrementAndGet();
+                        latestRequest.set(request);
+                        if (request.battery > 0) {
+                            setBattery(request.battery);
+                        }
+
+                        TrajectoryResponse response = solverWrapper.solve(request);
+                        latestResponse.set(response);
+
+                        byteBuffer.clear();
+                        response.toBuffer(byteBuffer);
+                        rawOut.write(byteBuffer.array(), 0, TrajectoryResponse.BINARY_SIZE);
+                        outgoingPackets.incrementAndGet();
+                        rawOut.flush();
+
+                        long elapsed = System.currentTimeMillis() - start;
+                        lastSolverTimeMs.set(elapsed);
+                        latencyFilter.addSample(elapsed);
+
+                        if (Config.LOG_TO_FILE) {
+                            ReplayLogger.log(request, response);
+                        }
+                    }
+                } catch (Exception e) {
+                    System.err.println("Error processing request: " + e.getMessage());
+                    droppedPackets.incrementAndGet();
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("Client handler exception: " + e.getMessage());
+        } finally {
+            System.out.println("Client disconnected: " + clientAddr);
+            isConnected.set(false);
+            lastActivityMs.set(0L);
+            clientConnectTimes.remove(clientAddr);
+            try {
+                clientSocket.close();
+            } catch (Exception e) {
+            }
+        }
+    }
+
+    public int getActiveConfigVersionId() {
+        Integer ver = activeConfigVersionId.get();
+        return ver != null ? ver : 0;
+    }
+
+    public double getFilteredLatencyMs() {
+        return latencyFilter.getLastFilteredValue();
     }
 }

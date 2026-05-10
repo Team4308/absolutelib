@@ -6,7 +6,17 @@ import ca.team4308.absolutelib.network.task.server.TaskServer;
 
 public class Main {
     public static void main(String[] args) {
-        
+        try {
+            mainInternal(args);
+        } catch (Throwable ex) {
+            System.err.println("[MAIN CATCH] Unexpected exception in main");
+            System.err.println("[MAIN CATCH] Type: " + ex.getClass().getName());
+            ex.printStackTrace(System.err);
+            System.exit(1);
+        }
+    }
+
+    private static void mainInternal(String[] args) {
         if (args.length == 2 && args[0].equals("--replay")) {
             ReplayLogger.replay(args[1]);
             return;
@@ -28,19 +38,10 @@ public class Main {
     TaskRegistry registry = new TaskRegistry();
     TaskServer taskServer = new TaskServer(5802, registry, 4); // 4 concurrent worker threads
     new WebServer(tcpServer, taskServer);
+        // Skip NT4Publisher for now due to missing ntcorejni library
         NT4Publisher nt4Publisher = null;
         if (!Config.IS_SIMULATION) {
-            System.out.println("Connecting NT4Publisher...");
-            try {
-                nt4Publisher = new NT4Publisher();
-                System.out.println("NT4Publisher created");
-            } catch (Throwable ex) {
-                // If NT4 JNI cannot be loaded (or anything else fails), continue in standalone mode.
-                System.err.println("NT4Publisher disabled: " + ex.getClass().getSimpleName() + " - " + ex.getMessage());
-                ex.printStackTrace();
-            }
-        } else {
-            System.out.println("Simulation mode: skipping NT4Publisher initialization.");
+            System.out.println("Skipping NT4Publisher (ntcorejni library not available)");
         }
 
         Thread tcpThread = new Thread(tcpServer);
@@ -67,7 +68,8 @@ public class Main {
                         tcpServer.isConnected.get(),
                         tcpServer.lastSolverTimeMs.get(),
                         tcpServer.totalRequests.get(),
-                        tcpServer.droppedPackets.get()
+                        tcpServer.droppedPackets.get(),
+                        tcpServer
                     );
                 }
             } catch (InterruptedException e) {

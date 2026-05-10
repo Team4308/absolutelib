@@ -67,6 +67,32 @@ public class TrajectorySolver {
     }
 
     /**
+     * Internal data structure for tracking real-time calibration samples.
+     * Each sample records an actual trajectory execution result that can be
+     * used to improve the RPM-to-velocity conversion factor.
+     */
+    private static class CalibrationSample {
+        final double distanceMeters;
+        final double pitchDegrees;
+        final double rpmUsed;
+        final double expectedDistance;
+        final double actualDistance;
+        final double distanceError; // actual - expected
+        final long timestampMs;
+
+        CalibrationSample(double distanceMeters, double pitchDegrees, double rpmUsed,
+                         double expectedDistance, double actualDistance) {
+            this.distanceMeters = distanceMeters;
+            this.pitchDegrees = pitchDegrees;
+            this.rpmUsed = rpmUsed;
+            this.expectedDistance = expectedDistance;
+            this.actualDistance = actualDistance;
+            this.distanceError = actualDistance - expectedDistance;
+            this.timestampMs = System.currentTimeMillis();
+        }
+    }
+
+    /**
      * Configuration for the trajectory math engine.
      * 
      * <p>Use this to tune the "how" of the search: speed vs. precision. 
@@ -608,6 +634,13 @@ public class TrajectorySolver {
     private double previousYawAdjustmentRadians = Double.NaN;
     private double previousRpm = Double.NaN;
 
+    // Real-time calibration tracking: learns RPM-to-velocity factor from actual shot results
+    private double adaptiveRpmToVelocityFactor = 0.01532; // Initial fallback from DefaultShotTable
+    private final java.util.List<CalibrationSample> calibrationSamples = new java.util.ArrayList<>();
+    private static final int MAX_CALIBRATION_SAMPLES = 100; // Keep rolling window of recent samples
+    private static final double CALIBRATION_SMOOTHING_ALPHA = 0.15; // Exponential moving average weight
+    private static final double MIN_CALIBRATION_SAMPLES_FOR_CONFIDENCE = 3;
+
     /**
      * Sets the solve strategy.
      */
@@ -635,6 +668,112 @@ public class TrajectorySolver {
      */
     public boolean isDebugEnabled() {
         return debugEnabled;
+    }
+
+    /**
+     * Records the actual result of a trajectory to refine the RPM-to-velocity calibration factor.
+     * 
+     * <p>Call this method after executing a shot to provide feedback about actual vs. calculated
+     * performance. The solver will use this data to adapt its RPM-to-velocity conversion factor
+     * toward the true hardware parameters, eliminating assumptions about wheel size or gear ratio.</p>
+     * 
+     * <p>Example usage in your shooter subsystem:</p>
+     * <pre>
+     * // After a shot is executed...
+     * double calculatedDistance = 4.5; // From trajectory calculation
+     * double actualDistance = 4.52;    // From vision/odometry
+     * solver.recordTrajectoryResult(calculatedDistance, actualDistance, 
+     *                                pitchDeg, rpmUsed);
+     * </pre>
+     * 
+     * @param expectedDistance Calculated horizontal distance at which ball should land (meters)
+     * @param actualDistance Measured horizontal distance where ball actually landed (meters)
+     * @param pitchDegrees Pitch angle used in the shot (degrees)
+     * @param rpmUsed Wheel RPM that was commanded (RPM)
+     */
+    public synchronized void recordTrajectoryResult(double expectedDistance, double actualDistance,
+                                                    double pitchDegrees, double rpmUsed) {
+        // Ignore invalid samples
+        if (Double.isNaN(expectedDistance) || Double.isNaN(actualDistance) || 
+            Double.isNaN(pitchDegrees) || Double.isNaN(rpmUsed)) {
+            return;
+        }
+        
+        if (rpmUsed <= 0 || expectedDistance <= 0 || actualDistance <= 0) {
+            return;
+        }
+        
+        // Create and store the sample
+        CalibrationSample sample = new CalibrationSample(expectedDistance, pitchDegrees, 
+                                                         rpmUsed, expectedDistance, actualDistance);
+        calibrationSamples.add(sample);
+        
+        // Keep rolling window of recent samples
+        if (calibrationSamples.size() > MAX_CALIBRATION_SAMPLES) {
+            calibrationSamples.remove(0);
+        }
+        
+        // Update adaptive RPM factor using exponential moving average
+        updateAdaptiveRpmFactor(sample);
+    }
+
+    /**
+     * Internal method to update the adaptive RPM-to-velocity factor based on a new sample.
+     */
+    private void updateAdaptiveRpmFactor(CalibrationSample sample) {
+        if (sample.rpmUsed <= 0 || sample.distanceError == 0) {
+            return;
+        }
+        
+        // Basic adjustment: if we fell short, we need more velocity, so increase the factor
+        // If we overshot, we need less velocity, so decrease the factor
+        // Adjustment magnitude is proportional to the error
+        double errorRatio = sample.distanceError / sample.expectedDistance;
+        double adjustment = adaptiveRpmToVelocityFactor * errorRatio * 0.01; // 1% adjustment per 1% error
+        
+        // Apply exponential moving average to smooth out noise
+        double newFactor = adaptiveRpmToVelocityFactor + (adjustment * CALIBRATION_SMOOTHING_ALPHA);
+        
+        // Sanity bounds: factor should stay reasonable (0.005 to 0.025)
+        // Based on typical wheel sizes and gear ratios
+        newFactor = Math.max(0.005, Math.min(0.025, newFactor));
+        
+        adaptiveRpmToVelocityFactor = newFactor;
+    }
+
+    /**
+     * Gets the current adaptive RPM-to-velocity conversion factor.
+     * 
+     * <p>This factor is initially set to 0.01532 from DefaultShotTable, but adapts based on
+     * actual trajectory feedback. Returns the adapted value if sufficient calibration data
+     * exists, otherwise returns the fallback.</p>
+     * 
+     * @return RPM-to-velocity factor (m/s per RPM)
+     */
+    public synchronized double getAdaptiveRpmFactor() {
+        if (calibrationSamples.size() >= MIN_CALIBRATION_SAMPLES_FOR_CONFIDENCE) {
+            return adaptiveRpmToVelocityFactor;
+        }
+        // Fallback to DefaultShotTable calibration if not enough samples yet
+        return 0.01532;
+    }
+
+    /**
+     * Returns the number of calibration samples recorded so far.
+     * 
+     * @return Number of trajectory results used for calibration
+     */
+    public synchronized int getCalibrationSampleCount() {
+        return calibrationSamples.size();
+    }
+
+    /**
+     * Resets all calibration data and returns the adaptive factor to the default value.
+     * Use this if you swap hardware or want to start fresh.
+     */
+    public synchronized void resetCalibration() {
+        calibrationSamples.clear();
+        adaptiveRpmToVelocityFactor = 0.01532;
     }
 
     /**
@@ -909,6 +1048,7 @@ public class TrajectorySolver {
         while (currentClearance <= rimClearance + 3.0) {
             double dx = effectiveTargetX - input.getShooterX();
             double dy = effectiveTargetY - input.getShooterY();
+        
             double iterDistance = Math.sqrt(dx * dx + dy * dy);
             double requiredYaw = Math.atan2(dy, dx);
 
@@ -961,7 +1101,7 @@ public class TrajectorySolver {
 
             double actualVelocity = pitchFw.exitVelocityMps;
 
-            ProjectileMotion.TrajectoryResult trajSim = projectileMotion.simulateFast(
+            ProjectileMotion.TrajectoryResult trajSim = projectileMotion.simulate(
                     gp,
                     input.getShooterX(), input.getShooterY(), input.getShooterZ(),
                     actualVelocity, pitchRad, requiredYaw,
@@ -1097,6 +1237,8 @@ public class TrajectorySolver {
             double iterTargetX = effectiveTargetX;
             double iterTargetY = effectiveTargetY;
 
+
+            // TODO: Remove this is handled by the main robot method
             double dx = iterTargetX - input.getShooterX();
             double dy = iterTargetY - input.getShooterY();
             double iterDistance = Math.sqrt(dx * dx + dy * dy);
@@ -1113,19 +1255,7 @@ public class TrajectorySolver {
             double targetV = Math.sqrt(compensatedHoriz * compensatedHoriz + vVert * vVert);
 
             FlywheelSimulator.SimulationResult pitchFw = flywheelSimForPitch.simulateForVelocity(targetV);
-            
-            // double dynamicMaxRpm = config.getMaxRpm();
-            // User requested to put a hard cap in solveSweepCore to prevent 3k-4k rpm for mid-range (around 5m)
-            // and let it pick high rpm when distance > something.
-            // But strict limits cause precompute failure. We will let the score function guide it.
-            // if (iterDistance > 1.0 && iterDistance <= 4.0) {
-            //     dynamicMaxRpm = 3000.0;
-            // } else if (iterDistance > 4.0 && iterDistance <= 5.5) {
-            //    dynamicMaxRpm = 3200.0;
-            // } else if (iterDistance > 5.5 && iterDistance <= 6.5) {
-            //    dynamicMaxRpm = 3800.0;
-            // }
-            double dynamicMaxRpm = config.getMaxRpm(); // Keep using the max hardware RPM to find *A* solution, but penalize bad ones.
+            double dynamicMaxRpm = config.getMaxRpm();
             if (pitchFw.requiredWheelRpm > dynamicMaxRpm) {
                 return null;
             }
@@ -1135,7 +1265,7 @@ public class TrajectorySolver {
 
             double actualVelocity = pitchFw.exitVelocityMps;
 
-            ProjectileMotion.TrajectoryResult trajSim = projectileMotion.simulateFast(
+            ProjectileMotion.TrajectoryResult trajSim = projectileMotion.simulate(
                     gp,
                     input.getShooterX(), input.getShooterY(), input.getShooterZ(),
                     actualVelocity, pitchRad, requiredYaw,
@@ -1179,13 +1309,9 @@ public class TrajectorySolver {
                     || (trajSim.descendingAtClosest && trajSim.closestApproach <= hoopTolerance
                     && trajSim.entryAngleDegrees >= SolverConstants.getMinEntryAngleDegrees());
 
-            // BEST EFFORT RELAXATION:
-            // If we don't 'hit' technically, we still allow the candidate if it's within a reasonable miss distance
-            // (e.g. 0.5m) so that the solver can return the 'Best Effort' shot at high speeds.
             boolean isMarginal = !hitsTarget;
-            double MAX_MARGINAL_MISS_METERS = 0.5;
             
-            if (!hitsTarget && trajSim.closestApproach > MAX_MARGINAL_MISS_METERS) {
+            if (!hitsTarget && trajSim.closestApproach > 0.5) {
                 return null;
             }
 
@@ -1240,9 +1366,8 @@ public class TrajectorySolver {
         double itX = effectiveTargetX, itY = effectiveTargetY;
     double bestTof = estimatedTof;
 
-        int maxIterations = 8; // log2(~45 degree spread / ~0.5 degree res)
 
-        for (int i = 0; i < maxIterations; i++) {
+        for (int i = 0; i < SolverConstants.getMaxIterations(); i++) {
             double midPitchDeg = (lowPitchDeg + highPitchDeg) / 2.0;
             double pitchRad = Math.toRadians(midPitchDeg);
 
@@ -1999,6 +2124,19 @@ public class TrajectorySolver {
                 }
             }
         }
+
+        // Apply adaptive calibration adjustment from real-time trajectory feedback
+        // This allows the system to learn the actual RPM-to-velocity relationship
+        // instead of relying on assumptions about wheel size or gear ratio.
+        if (calibrationSamples.size() >= MIN_CALIBRATION_SAMPLES_FOR_CONFIDENCE) {
+            double adaptiveFactor = getAdaptiveRpmFactor();
+            double defaultFactor = 0.01532; // From DefaultShotTable
+            if (adaptiveFactor != defaultFactor) {
+                double calibrationRatio = adaptiveFactor / defaultFactor;
+                requiredRpm = requiredRpm * calibrationRatio;
+            }
+        }
+
         requiredRpm = Math.max(config.getMinRpm(), Math.min(config.getMaxRpm(), requiredRpm));
         double actualVelocity = bestFlywheelSim.exitVelocityMps;
         double timeOfFlight = bestTrajSim.flightTime;
@@ -2431,3 +2569,4 @@ public class TrajectorySolver {
         return cachedFlywheel;
     }
 }
+// To many hours were spent making this - Nicholas 2026, Never again

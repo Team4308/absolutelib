@@ -1,67 +1,55 @@
-package frc.robot.subsystems;
+package frc.robot.Util;
 
-import ca.team4308.absolutelib.math.trajectories.shooter.*;
-import ca.team4308.absolutelib.math.trajectories.*;
-import ca.team4308.absolutelib.math.trajectories.gamepiece.*;
+import java.util.List;
+import java.util.function.Supplier;
+import java.net.InetAddress;
+import com.ctre.phoenix6.hardware.TalonFX;
+import ca.team4308.absolutelib.math.trajectories.ShotInput;
+import ca.team4308.absolutelib.math.trajectories.SolveDebugInfo;
+import ca.team4308.absolutelib.math.trajectories.TrajectoryResult;
+import ca.team4308.absolutelib.math.trajectories.TrajectorySolver;
 import ca.team4308.absolutelib.math.trajectories.flywheel.FlywheelConfig;
 import ca.team4308.absolutelib.math.trajectories.flywheel.FlywheelConfig.WheelArrangement;
 import ca.team4308.absolutelib.math.trajectories.flywheel.FlywheelSimulator;
 import ca.team4308.absolutelib.math.trajectories.flywheel.WheelMaterial;
+import ca.team4308.absolutelib.math.trajectories.gamepiece.GamePiece;
+import ca.team4308.absolutelib.math.trajectories.gamepiece.GamePieces;
 import ca.team4308.absolutelib.math.trajectories.motor.FRCMotors;
-import ca.team4308.absolutelib.wrapper.AbsoluteSubsystem;
-import ca.team4308.absolutelib.wrapper.MotorWrapper;
-import ca.team4308.absolutelib.wrapper.MotorWrapper.MotorType;
 import ca.team4308.absolutelib.math.trajectories.network.TrajectoryRequest;
 import ca.team4308.absolutelib.math.trajectories.network.TrajectoryResponse;
-
-import org.littletonrobotics.junction.Logger;
-
-import com.ctre.phoenix6.hardware.TalonFX;
-
+import ca.team4308.absolutelib.math.trajectories.shooter.ShooterConfig;
+import ca.team4308.absolutelib.math.trajectories.shooter.ShooterSystem;
+import ca.team4308.absolutelib.math.trajectories.shooter.ShotLookupTable;
+import ca.team4308.absolutelib.math.trajectories.shooter.ShotMode;
+import ca.team4308.absolutelib.math.trajectories.shooter.ShotParameters;
+import ca.team4308.absolutelib.wrapper.AbsoluteSubsystem;
 import edu.wpi.first.math.geometry.Pose2d;
-import edu.wpi.first.math.geometry.Pose3d;
 import edu.wpi.first.math.geometry.Rotation2d;
-import edu.wpi.first.math.geometry.Rotation3d;
 import edu.wpi.first.math.geometry.Translation2d;
 import edu.wpi.first.math.geometry.Translation3d;
 import edu.wpi.first.math.kinematics.ChassisSpeeds;
 import edu.wpi.first.util.sendable.Sendable;
 import edu.wpi.first.util.sendable.SendableBuilder;
-import edu.wpi.first.wpilibj.DriverStation;
 import edu.wpi.first.wpilibj.RobotBase;
-import edu.wpi.first.wpilibj.RobotController;
-import edu.wpi.first.wpilibj2.command.Command;
-import frc.robot.subsystems.Util.FuelSim;
+import org.littletonrobotics.junction.Logger;
 
-import java.util.List;
-import java.util.function.Supplier;
+public class TrajectoryCalculations extends AbsoluteSubsystem {
 
-public class ExampleShooter extends AbsoluteSubsystem {
-
-    private final TalonFX flywheelLeader;
 
     private final ShooterSystem shooterSystem;
     private final TrajectorySolver solver;
-
+    private TalonFX flywheelLeader;
+    // Coprocessor connection
     private final ca.team4308.absolutelib.network.task.client.CoprocessorClient coprocessorClient;
-    private Thread coprocessorThread;
+    private final Thread coprocessorThread;
     private ca.team4308.absolutelib.network.task.client.TaskHandle<TrajectoryResponse> currentTaskHandle;
-    private TrajectoryResponse lastCoprocessorResponse = null;
-
-    private final edu.wpi.first.networktables.DoubleSubscriber pitchMinSub;
-    private final edu.wpi.first.networktables.DoubleSubscriber pitchMaxSub;
-    private final edu.wpi.first.networktables.DoubleSubscriber rpmMinSub;
-    private final edu.wpi.first.networktables.DoubleSubscriber rpmMaxSub;
-    private final edu.wpi.first.networktables.DoubleSubscriber shooterHeightSub;
-    private final edu.wpi.first.networktables.DoubleSubscriber rpmVelocityFactorSub;
-    private final edu.wpi.first.networktables.DoubleSubscriber distanceMinSub;
-    private final edu.wpi.first.networktables.DoubleSubscriber distanceMaxSub;
-    private final edu.wpi.first.networktables.IntegerSubscriber configVersionSub;
+    private final String coprocessorIp;
+    private double lastPingMs = 0;
+    private Thread pingThread;
 
     private ShotParameters currentShot = ShotParameters.invalid("Not yet calculated");
     private double targetYawDegrees = 0.0;
     private double lastDistanceMeters = 0.0;
-    private double lastComputationTimeMs = 0.0;
 
     private Supplier<Pose2d> poseSupplier = null;
     private Supplier<ChassisSpeeds> chassisSpeedsSupplier = null;
@@ -69,52 +57,68 @@ public class ExampleShooter extends AbsoluteSubsystem {
 
     private double shooterHeightMeters = 0.5;
     private Translation2d shooterOffset = new Translation2d(0.1, 0.1);
-    private Translation3d targetPosition = new Translation3d(0, 0.0, 0);
+    private Translation3d targetPosition = FieldConstants.Hub.topCenterPoint;
     private boolean trackingEnabled = true;
     private boolean loggingEnabled = true;
 
-    public ExampleShooter() {
+    public TrajectoryCalculations(TalonFX flywheelLeader) {
         super();
-
-        flywheelLeader = new TalonFX(40);
-
+        this.flywheelLeader = flywheelLeader;
+        
+        // Set coprocessor IP
+        this.coprocessorIp = "10.43.8.11";
+        
         ShooterConfig shooterConfig = ShooterConfig.builder()
-                .pitchLimits(47.5, 82.5) // From 90 Degrees (parallel to ground)  so to find the angle if the min and max is 10 and 20 you'd do 90 - 10 , as 0 in this is parrel to the ground and we are shooting upwards so we subtract from 90
-                .rpmLimits(0, 6000) // Change Per Motor, So Kraken X60 is roughly 6.1k RPM MAX but we set 6k for some headroom always leave around 
-                .rpmToVelocityFactor(0.01532) // This Factor can be modeled or found experimentally, it converts RPM to exit velocity (m/s) this is used for feedforward and safety checks, so its important to be accurate in our case this is a simple guess based on 4 inch wheels and some slip, but ideally you would calculate this based on your wheel diameter, gear ratio, and slip ratio
-                .distanceLimits(0.5, 12.0) // Define and Min and Max shot, as if we try to caclulate a shot outside of limits its a waste of resources 
-                .rpmFeedbackThreshold(25.0) // the thershold in which RPM is considered close enough to target for feedback compensation to be applied
-                .rpmAbortThreshold(500.0) // If we lose to much RPM per SHOT wait for the RPM to recover 
-                .pitchCorrectionPerRpmDeficit(0.005) // Per rpmFeedback (25) how much to adjust pitch (deg) to compensate for RPM deficit
-                .movingCompensationGain(1) // Total Gain this is a ending multiplier, set to 0 if the movement compensation should be disabled
-                .movingIterations(5) // Change to 10 for more aggressive compensation (may cause lag) 
-                .safetyMaxExitVelocity(Double.POSITIVE_INFINITY) // No safety limit for testing; set to real max velocity irl 
+                .pitchLimits(47.5, 82.5)
+                .rpmLimits(0, 6000) // Kraken xt60 max rpm
+                .rpmToVelocityFactor(0.01532)
+                .distanceLimits(0.5, 12.0)
+                .rpmFeedbackThreshold(25.0)
+                .rpmAbortThreshold(500.0)
+                .pitchCorrectionPerRpmDeficit(0.005)
+                .movingCompensationGain(1)
+                .movingIterations(3)
+                .safetyMaxExitVelocity(99)
                 .build();
 
-        ShotLookupTable table = new ShotLookupTable()
-                .addEntry(1.3, 81.5, 1700.0)
-                .addEntry(1.6, 90 - 12.5, 1750)
-                .addEntry(1.9, 90 - 13.5, 1780)
-                .addEntry(2.3, 90 - 14.5, 1830.0)
-                .addEntry(2.6, 90 - 15.5, 1890.0)
-                .addEntry(3.3, 90 - 16.5, 1980.0)
-                .addEntry(3.9, 90 - 17, 2080.0)
-                .addEntry(4.3, 90 - 18, 2160.0)
-                .addEntry(4.6, 90 - 19, 2300.0);
-
+        ShotLookupTable LookupTable = new ShotLookupTable();
+        LookupTable.addEntry(1.3, 90 - 8.5, 1700.0);
+        LookupTable.addEntry(1.6, 90 - 12.5, 1750.0);
+        LookupTable.addEntry(1.9, 90 - 13.5, 1780.0);
+        LookupTable.addEntry(2.3, 90 - 14.5, 1830.0);
+        LookupTable.addEntry(2.6, 90 - 15.5, 1890.0);
+        LookupTable.addEntry(2.9, 90 - 16.5, 1980.0);
+        LookupTable.addEntry(3.3, 90 - 17.0, 2080.0);
+        LookupTable.addEntry(3.6, 90 - 17.5, 2160.0);
+        LookupTable.addEntry(3.9, 90 - 18.0, 2180.0);
+        LookupTable.addEntry(4.3, 90 - 18.5, 2240.0);
+        LookupTable.addEntry(4.6, 90 - 19.0, 2305.0);
+        LookupTable.addEntry(4.9, 90 - 19.0, 2380.0);
+        LookupTable.addEntry(5.2, 90 - 19.5, 24200.);
+        LookupTable.addEntry(5.5, 90 - 20.0, 2480.0);
+        LookupTable.addEntry(6.0, 90 - 20.0, 2550.0);
+        LookupTable.addEntry(7.0, 90 - 21.0, 2650.0);
+        LookupTable.addEntry(8.0, 90 - 22.0, 2750.0);
+        LookupTable.addEntry(9.0, 90 - 22.5, 2850.0);
+        LookupTable.addEntry(10.0, 90 - 23.0, 2950.0);
+        LookupTable.addEntry(11.0, 90 - 23.5, 3050.0);
+        LookupTable.addEntry(12.0, 90 - 24.0, 3150.0);
+        LookupTable.addEntry(13.0, 90 - 24.5, 3250.0);
+        LookupTable.addEntry(14.0, 90 - 25.0, 3350.0);
+        LookupTable.addEntry(15.0, 90 - 25.5, 3450.0);
+        LookupTable.addEntry(16.0, 90 - 26.0, 3550.0);
         GamePiece gamePiece = GamePieces.REBUILT_2026_BALL;
-        TrajectorySolver.SolverConfig solverConfig = TrajectorySolver.SolverConfig.highAccuracy()
+        TrajectorySolver.SolverConfig solverConfig = TrajectorySolver.SolverConfig.roboRIOPerformance()
                 .toBuilder()
                 .minPitchDegrees(47.5)
                 .maxPitchDegrees(82.5)
                 .build();
 
         solver = new TrajectorySolver(gamePiece, solverConfig);
-        solver.setSolveMode(TrajectorySolver.SolveMode.SWEEP);
-        solver.addTuningPoint(table);
-        
+        solver.setSolveMode(TrajectorySolver.SolveMode.BISECTION);
+        solver.addTuningPoint(LookupTable);
         FlywheelConfig flywheelConfig = FlywheelConfig.builder()
-                .name("Example 2026 Shooter")
+                .name("2026 Shooter")
                 .arrangement(WheelArrangement.SINGLE)
                 .wheelDiameterInches(4.0)
                 .material(WheelMaterial.VERY_HARD)
@@ -124,30 +128,21 @@ public class ExampleShooter extends AbsoluteSubsystem {
                 .gearRatio(1.0)
                 .build();
         solver.setFlywheel(flywheelConfig);
-        shooterSystem = new ShooterSystem(shooterConfig, table, solver);
+        shooterSystem = new ShooterSystem(shooterConfig, LookupTable, solver);
         shooterSystem.setMode(ShotMode.SOLVER_ONLY);
 
-        solver.setDebugEnabled(true); // Disable irl alot of logging is bad for radio 
+        solver.setDebugEnabled(true);
 
-        String coprocessorIp = RobotBase.isSimulation() ? "127.0.0.1" : "10.43.8.77";
+        // Connect to coprocessor (always use coprocessor, never local solver)
+        // IMPORTANT: Use port 5802 (TaskServer), NOT 5805 (which is HTTP web dashboard)
         coprocessorClient = new ca.team4308.absolutelib.network.task.client.CoprocessorClient(coprocessorIp, 5802);
-        System.out.println("Starting coprocessor client thread for " + coprocessorIp);
+        System.out.println("Starting coprocessor client thread for " + coprocessorIp + ":5802 (TaskServer)");
         coprocessorThread = new Thread(coprocessorClient);
         coprocessorThread.setDaemon(true);
         coprocessorThread.start();
 
-        edu.wpi.first.networktables.NetworkTableInstance nt = edu.wpi.first.networktables.NetworkTableInstance.getDefault();
-        edu.wpi.first.networktables.NetworkTable table2 = nt.getTable("TrajectoryCoprocessor");
-        
-        pitchMinSub = table2.getDoubleTopic("Config/ShooterPitchMinDeg").subscribe(47.5);
-        pitchMaxSub = table2.getDoubleTopic("Config/ShooterPitchMaxDeg").subscribe(82.5);
-        rpmMinSub = table2.getDoubleTopic("Config/ShooterRpmMin").subscribe(0.0);
-        rpmMaxSub = table2.getDoubleTopic("Config/ShooterRpmMax").subscribe(6000.0);
-        shooterHeightSub = table2.getDoubleTopic("Config/ShooterHeightMeters").subscribe(0.5);
-        rpmVelocityFactorSub = table2.getDoubleTopic("Config/RpmVelocityFactor").subscribe(0.01532);
-        distanceMinSub = table2.getDoubleTopic("Config/DistanceMinMeters").subscribe(0.5);
-        distanceMaxSub = table2.getDoubleTopic("Config/DistanceMaxMeters").subscribe(12.0);
-        configVersionSub = table2.getIntegerTopic("Status/ActiveConfigVersionId").subscribe(0);
+        // Start ping thread to monitor connection
+        startPingThread();
     }
 
     public void setPoseSupplier(Supplier<Pose2d> supplier) {
@@ -174,42 +169,55 @@ public class ExampleShooter extends AbsoluteSubsystem {
         this.targetPosition = new Translation3d(x, y, z);
     }
 
-    public void setTrackingEnabled(boolean enabled) {
-        this.trackingEnabled = enabled;
-    }
 
     public void setLoggingEnabled(boolean enabled) {
         this.loggingEnabled = enabled;
+    }
+
+    public void setUseCoprocessor(boolean enabled) {
+        // Always use coprocessor - this method is a no-op
+    }
+
+    public boolean isUseCoprocessor() {
+        return true;
+    }
+
+    private void startPingThread() {
+        pingThread = new Thread(() -> {
+            while (true) {
+                try {
+                    long startTime = System.currentTimeMillis();
+                    InetAddress address = InetAddress.getByName(coprocessorIp);
+                    if (address.isReachable(1000)) {
+                        lastPingMs = System.currentTimeMillis() - startTime;
+                        Logger.recordOutput("Coprocessor/PingMs", lastPingMs);
+                    } else {
+                        Logger.recordOutput("Coprocessor/PingMs", -1.0);
+                    }
+                    Thread.sleep(500); // Ping every 500ms
+                } catch (Exception e) {
+                    Logger.recordOutput("Coprocessor/PingMs", -1.0);
+                }
+            }
+        });
+        pingThread.setDaemon(true);
+        pingThread.start();
     }
 
     public boolean isTrackingEnabled() {
         return trackingEnabled;
     }
 
-    public void setPitchLimits(double min, double max) {
-    }
-
-    /**
-     * Change the shot mode at runtime (e.g. from dashboard or button).
-     */
-    public void setMode(ShotMode mode) {
-        shooterSystem.setMode(mode);
-    }
-
-    public ShotMode getMode() {
-        return shooterSystem.getMode();
-    }
-
-    /**
-     * Set manual override values for MANUAL mode.
-     */
-    public void setManualOverride(double pitchDegrees, double rpm) {
-        shooterSystem.setManualOverride(pitchDegrees, rpm);
-    }
-
     @Override
     public void periodic() {
-        double measuredRpm = RobotBase.isReal() ? flywheelLeader.getVelocity().getValueAsDouble() * 60.0 : currentShot.rpm;
+        double measuredRpm = RobotBase.isReal() ? flywheelLeader.getVelocity().getValueAsDouble() * 60.0
+                : currentShot.rpm;
+
+        if (loggingEnabled) {
+            recordOutput("Trajectory/TrackingEnabled", trackingEnabled);
+            recordOutput("Trajectory/PoseSupplierNull", poseSupplier == null);
+            recordOutput("Trajectory/CurrentShotValid", currentShot.valid);
+        }
 
         if (trackingEnabled && poseSupplier != null) {
             updateShot();
@@ -235,10 +243,6 @@ public class ExampleShooter extends AbsoluteSubsystem {
                 recordOutput("Shooter/Safety/Safe", telemetry.safetyResult.safe);
                 recordOutput("Shooter/Safety/Reason", telemetry.safetyResult.reason);
             }
-
-            Pose3d goalPose = new Pose3d(targetPosition, new Rotation3d());
-            Logger.recordOutput("ExampleShooter/GoalPose3d", goalPose);
-
             recordOutput("TargetYawDeg", targetYawDegrees);
             recordOutput("MeasuredRPM", measuredRpm);
             recordOutput("RpmDeficit", telemetry.targetRpm - measuredRpm);
@@ -289,11 +293,21 @@ public class ExampleShooter extends AbsoluteSubsystem {
                 recordOutput("Flywheel/LimitingFactor", flywheelSim.limitingFactor);
             }
 
-            List<Pose3d> flightPath = trajResult.getFlightPath();
+            List<edu.wpi.first.math.geometry.Pose3d> flightPath = trajResult.getFlightPath();
             if (!flightPath.isEmpty()) {
-                Logger.recordOutput("ExampleShooter/Trajectory/FlightPath",
-                        flightPath.toArray(new Pose3d[0]));
-
+                int sampleRate = Math.max(1, flightPath.size() / 30); // Keep max 30 points
+                java.util.ArrayList<edu.wpi.first.math.geometry.Pose3d> sampledPath = new java.util.ArrayList<>();
+                for (int i = 0; i < flightPath.size(); i += sampleRate) {
+                    sampledPath.add(flightPath.get(i));
+                }
+                if (flightPath.size() % sampleRate != 0) {
+                    sampledPath.add(flightPath.get(flightPath.size() - 1));
+                }
+                
+                recordOutput("Shooter/Trajectory/FlightPath",
+                        sampledPath.toArray(new edu.wpi.first.math.geometry.Pose3d[0]));
+                
+                // Also record all coordinates for detailed analysis
                 double[] pathX = new double[flightPath.size()];
                 double[] pathY = new double[flightPath.size()];
                 double[] pathZ = new double[flightPath.size()];
@@ -358,9 +372,11 @@ public class ExampleShooter extends AbsoluteSubsystem {
         }
     }
 
+    /**
+     * Recalculates the shot using the current robot pose and target position.
+     * Called automatically when tracking is enabled.
+     */
     private void updateShot() {
-        updateConfigFromNT4();
-        
         Pose2d pose = poseSupplier.get();
 
         Rotation2d rot = pose.getRotation();
@@ -397,9 +413,21 @@ public class ExampleShooter extends AbsoluteSubsystem {
         req.targetZ = targetPosition.getZ();
         req.currentRpm = measuredRpm;
 
-        long startTime = System.nanoTime();
         double now = edu.wpi.first.wpilibj.Timer.getFPGATimestamp();
         coprocessorClient.pruneStaleTasks(now, 1.0);
+
+        // Always submit task to coprocessor (never local solver)
+        if (currentTaskHandle == null || currentTaskHandle.isDone() || currentTaskHandle.isStale(now, 0.5)) {
+            currentTaskHandle = coprocessorClient.submitTask("TRAJECTORY_SOLVE", req, TrajectoryResponse.class, now);
+        }
+
+        if (loggingEnabled) {
+          //  System.out.println("Trajectory: coprocessor connected=" + ", request=" + req.robotX + "," + req.robotY);
+            if (currentTaskHandle != null) {
+                //ystem.out.println("Trajectory: currentTaskHandle done=" + currentTaskHandle.isDone() + " stale="
+                       // + currentTaskHandle.isStale(now, 0.5));
+            }
+        }
 
         TrajectoryResponse res = null;
         boolean isFreshAndValid = false;
@@ -407,41 +435,37 @@ public class ExampleShooter extends AbsoluteSubsystem {
         if (currentTaskHandle != null && currentTaskHandle.isDone() && currentTaskHandle.isSuccess()) {
             res = currentTaskHandle.get();
             if (res != null) {
-                lastCoprocessorResponse = res;
+                isFreshAndValid = (now - res.timestamp) < 0.5;
             }
-        }
-
-        if (lastCoprocessorResponse != null) {
-            isFreshAndValid = (now - lastCoprocessorResponse.timestamp) < 0.5;
-            if (isFreshAndValid) {
-                res = lastCoprocessorResponse;
-            }
-        }
-
-        if (currentTaskHandle == null || currentTaskHandle.isDone() || currentTaskHandle.isStale(now, 0.5)) {
-            currentTaskHandle = coprocessorClient.submitTask("TRAJECTORY_SOLVE", req, TrajectoryResponse.class, now);
         }
 
         // Check if coprocessor has a fresh valid response
         if (isFreshAndValid) {
-            recordOutput("Shooter/CalculatedOnCoProcessor", true);
+            if (loggingEnabled) {
+                System.out.println(
+                        "Trajectory: using coprocessor response, pitch=" + res.pitchDegrees + " rpm=" + res.rpm);
+            }
             currentShot = res.valid
-                    ? new ShotParameters(res.pitchDegrees, res.rpm, 0.0, lastDistanceMeters, Math.toRadians(res.yawDegrees), ShotParameters.Source.SOLVER)
+                    ? new ShotParameters(res.pitchDegrees, res.rpm, 0.0, lastDistanceMeters,
+                            Math.toRadians(res.yawDegrees), ShotParameters.Source.SOLVER)
                     : ShotParameters.invalid(res.status);
 
-            // Sync fallback system 
+            // Sync fallback system
             shooterSystem.setManualOverride(res.pitchDegrees, res.rpm);
             if (loggingEnabled) {
                 recordOutput("Shooter/FallbackActive", false);
             }
         } else {
             if (loggingEnabled) {
+                //System.out.println("Trajectory: fallback to local solver; coprocessor connected=");
+            }
+            if (loggingEnabled) {
                 recordOutput("Shooter/FallbackActive", true);
                 if (res != null) {
-                    recordOutput("Shooter/FallbackReason_StaleTime", edu.wpi.first.wpilibj.Timer.getFPGATimestamp() - res.timestamp);
+                    recordOutput("Shooter/FallbackReason_StaleTime",
+                            edu.wpi.first.wpilibj.Timer.getFPGATimestamp() - res.timestamp);
                 }
             }
-            // Fallback to RoboRIO solving
             shooterSystem.setSolverInput(
                     ShotInput.builder()
                             .shooterPositionMeters(shooterX, shooterY, shooterHeightMeters)
@@ -450,16 +474,13 @@ public class ExampleShooter extends AbsoluteSubsystem {
                             .targetRadiusMeters(0.45)
                             .includeAirResistance(true)
                             .robotVelocity(vx, vy)
-                            .build()
-            );
-            recordOutput("Shooter/CalculatedOnCoProcessor", false);
+                            .build());
             currentShot = shooterSystem.calculate(lastDistanceMeters, measuredRpm, vx, vy, yawRad);
         }
-        long endTime = System.nanoTime();
-        lastComputationTimeMs = (endTime - startTime) / 1_000_000.0;
 
         if (loggingEnabled && res != null) {
-            recordOutput("Shooter/CoprocessorRTT_ms", (edu.wpi.first.wpilibj.Timer.getFPGATimestamp() - res.timestamp) * 1000.0);
+            recordOutput("Shooter/CoprocessorRTT_ms",
+                    (edu.wpi.first.wpilibj.Timer.getFPGATimestamp() - res.timestamp) * 1000.0);
         }
 
         if (loggingEnabled) {
@@ -480,78 +501,6 @@ public class ExampleShooter extends AbsoluteSubsystem {
         lastDistanceMeters = Math.hypot(dx, dy);
         targetYawDegrees = Math.toDegrees(Math.atan2(dy, dx));
         currentShot = shooterSystem.calculate(lastDistanceMeters);
-    }
-
-    /**
-     * Spin up the flywheel to the current target RPM.
-     */
-    public Command spinUp() {
-        return run(() -> {
-            if (currentShot.valid && currentShot.rpm > 0) {
-                flywheelLeader.set(Math.min(currentShot.rpm / 6000.0, 1.0));
-            }
-        });
-    }
-
-    /**
-     * Stop the flywheel.
-     */
-    public Command stopCommand() {
-        return runOnce(() -> {
-            currentShot = ShotParameters.invalid("Stopped");
-            flywheelLeader.set(0);
-        });
-    }
-
-    /**
-     * Switch to the next shot mode (cycles through modes).
-     */
-    public Command cycleModeCommand() {
-        return runOnce(() -> {
-            ShotMode[] modes = ShotMode.values();
-            int next = (shooterSystem.getMode().ordinal() + 1) % modes.length;
-            shooterSystem.setMode(modes[next]);
-            System.out.println("Shot mode: " + modes[next]);
-        });
-    }
-
-    /**
-     * Shoot a ball in simulation (FuelSim).
-     */
-    public Command shootBallSimCommand() {
-        return runOnce(this::shootBallSim);
-    }
-
-    private void shootBallSim() {
-        if (poseSupplier == null) {
-            return;
-        }
-
-        Pose2d robotPose = poseSupplier.get();
-        ChassisSpeeds speeds = chassisSpeedsSupplier != null ? chassisSpeedsSupplier.get() : new ChassisSpeeds();
-        TrajectoryResult trajResult = shooterSystem.getLastTrajectoryResult();
-        if (trajResult == null || !trajResult.isSuccess()) {
-            System.out.println("Cannot shoot: no valid trajectory");
-            return;
-        }
-
-        double launchSpeed = trajResult.getRequiredVelocityMps();
-        double pitchRad = Math.toRadians(trajResult.getPitchAngleDegrees());
-        double yawRad = Math.toRadians(targetYawDegrees) + trajResult.getYawAdjustmentRadians();
-
-        Rotation2d rot = robotPose.getRotation();
-        double wx = shooterOffset.getX() * rot.getCos() - shooterOffset.getY() * rot.getSin();
-        double wy = shooterOffset.getX() * rot.getSin() + shooterOffset.getY() * rot.getCos();
-        Translation3d pos = new Translation3d(robotPose.getX() + wx, robotPose.getY() + wy, shooterHeightMeters);
-
-        double hSpeed = launchSpeed * Math.cos(pitchRad);
-        Translation3d vel = new Translation3d(
-                hSpeed * Math.cos(yawRad) + speeds.vxMetersPerSecond,
-                hSpeed * Math.sin(yawRad) + speeds.vyMetersPerSecond,
-                launchSpeed * Math.sin(pitchRad));
-
-        List<Pose3d> predictedPath = trajResult.getFlightPath();
-        FuelSim.getInstance().spawnFuelTracked(pos, vel, predictedPath);
     }
 
     public double getTargetRpm() {
@@ -578,24 +527,6 @@ public class ExampleShooter extends AbsoluteSubsystem {
         return shooterSystem;
     }
 
-    private void updateConfigFromNT4() {
-        shooterHeightMeters = shooterHeightSub.get();
-        
-        double minPitch = pitchMinSub.get();
-        double maxPitch = pitchMaxSub.get();
-        double minRpm = rpmMinSub.get();
-        double maxRpm = rpmMaxSub.get();
-        double rpmFactor = rpmVelocityFactorSub.get();
-        double distMin = distanceMinSub.get();
-        double distMax = distanceMaxSub.get();
-        long configVersion = configVersionSub.get();
-        
-        recordOutput("Config/ActiveVersion", configVersion);
-        recordOutput("Config/ShooterHeight", shooterHeightMeters);
-        recordOutput("Config/PitchRange", new double[]{minPitch, maxPitch});
-        recordOutput("Config/RPMRange", new double[]{minRpm, maxRpm});
-    }
-
     /**
      * Check if the flywheel is at speed and the shot is safe.
      */
@@ -609,7 +540,7 @@ public class ExampleShooter extends AbsoluteSubsystem {
         return new Sendable() {
             @Override
             public void initSendable(SendableBuilder builder) {
-                builder.setSmartDashboardType("ExampleShooter");
+                builder.setSmartDashboardType("TrajectoryCalculations");
                 builder.addDoubleProperty("TargetRPM", () -> currentShot.rpm, null);
                 builder.addDoubleProperty("TargetPitchDeg", () -> currentShot.pitchDegrees, null);
                 builder.addDoubleProperty("TargetYawDeg", () -> targetYawDegrees, null);
