@@ -38,9 +38,10 @@ public class Main {
     TaskRegistry registry = new TaskRegistry();
     TaskServer taskServer = new TaskServer(5802, registry, 4); // 4 concurrent worker threads
     new WebServer(tcpServer, taskServer);
-        // Skip NT4Publisher for now due to missing ntcorejni library
         NT4Publisher nt4Publisher = null;
-        if (!Config.IS_SIMULATION) {
+        try {
+            nt4Publisher = new NT4Publisher();
+        } catch (Throwable ex) {
             System.out.println("Skipping NT4Publisher (ntcorejni library not available)");
         }
 

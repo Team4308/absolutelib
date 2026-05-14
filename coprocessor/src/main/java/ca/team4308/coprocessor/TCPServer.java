@@ -1,8 +1,12 @@
 package ca.team4308.coprocessor;
 
 import ca.team4308.absolutelib.math.trajectories.network.ConfigurationPacket;
+import ca.team4308.absolutelib.math.trajectories.network.LossyDataPacket;
 import ca.team4308.absolutelib.math.trajectories.network.TrajectoryRequest;
 import ca.team4308.absolutelib.math.trajectories.network.TrajectoryResponse;
+import ca.team4308.absolutelib.math.trajectories.impl.Pose3d;
+import ca.team4308.absolutelib.math.trajectories.impl.Rotation3d;
+import ca.team4308.absolutelib.math.trajectories.TrajectoryResult;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.io.DataInputStream;
@@ -25,6 +29,7 @@ public class TCPServer implements Runnable {
     public final AtomicReference<TrajectoryRequest> latestRequest = new AtomicReference<>(null);
     public final AtomicReference<TrajectoryResponse> latestResponse = new AtomicReference<>(null);
     public final AtomicReference<ConfigurationPacket> latestConfig = new AtomicReference<>(null);
+    public final AtomicReference<LossyDataPacket> latestLossyPacket = new AtomicReference<>(null);
     public final AtomicLong lastSolverTimeMs = new AtomicLong(0L);
     public final AtomicReference<Boolean> isConnected = new AtomicReference<>(false);
     public final AtomicLong lastActivityMs = new AtomicLong(0L);
@@ -44,7 +49,6 @@ public class TCPServer implements Runnable {
     private final ConcurrentHashMap<String, Long> clientConnectTimes = new ConcurrentHashMap<>();
     
     // Pre-allocated buffers for zero-allocation loop
-    private static final int MAX_BUFFER_SIZE = 4096;
 
     public void setBattery(double incomingBattery) {
         if (Double.isNaN(incomingBattery) || Double.isInfinite(incomingBattery)) {
@@ -117,7 +121,6 @@ public class TCPServer implements Runnable {
     }
 
     private void handleClient(Socket clientSocket, String clientAddr) {
-        byte[] readBuffer = new byte[4096];
         ByteBuffer byteBuffer = ByteBuffer.allocate(Math.max(TrajectoryRequest.BINARY_SIZE, ConfigurationPacket.BINARY_SIZE));
         byteBuffer.order(ByteOrder.LITTLE_ENDIAN);
 
@@ -209,6 +212,18 @@ public class TCPServer implements Runnable {
                         outgoingPackets.incrementAndGet();
                         rawOut.flush();
 
+                        // Optional lossy flight path packet (non-critical)
+                        LossyDataPacket lossyPacket = buildLossyPacket();
+                        if (lossyPacket != null && !lossyPacket.flightPath.isEmpty()) {
+                            latestLossyPacket.set(lossyPacket);
+                            ByteBuffer lossyBuffer = ByteBuffer.allocate(LossyDataPacket.BINARY_SIZE);
+                            lossyBuffer.order(ByteOrder.LITTLE_ENDIAN);
+                            lossyPacket.toBuffer(lossyBuffer);
+                            rawOut.write(lossyBuffer.array(), 0, LossyDataPacket.BINARY_SIZE);
+                            outgoingPackets.incrementAndGet();
+                            rawOut.flush();
+                        }
+
                         long elapsed = System.currentTimeMillis() - start;
                         lastSolverTimeMs.set(elapsed);
                         latencyFilter.addSample(elapsed);
@@ -234,6 +249,35 @@ public class TCPServer implements Runnable {
             } catch (Exception e) {
             }
         }
+    }
+
+    private LossyDataPacket buildLossyPacket() {
+        TrajectoryResult trajResult = solverWrapper.getShooterSystem().getLastTrajectoryResult();
+        if (trajResult == null || !trajResult.isSuccess()) {
+            return null;
+        }
+
+        java.util.List<edu.wpi.first.math.geometry.Pose3d> flightPath = trajResult.getFlightPath();
+        if (flightPath == null || flightPath.isEmpty()) {
+            return null;
+        }
+
+        LossyDataPacket packet = new LossyDataPacket();
+        int sampleRate = Math.max(1, flightPath.size() / LossyDataPacket.MAX_POINTS);
+        for (int i = 0; i < flightPath.size(); i += sampleRate) {
+            if (packet.flightPath.size() >= LossyDataPacket.MAX_POINTS) {
+                break;
+            }
+            edu.wpi.first.math.geometry.Pose3d pose = flightPath.get(i);
+            packet.flightPath.add(new Pose3d(pose.getX(), pose.getY(), pose.getZ(), new Rotation3d()));
+        }
+
+        if (!flightPath.isEmpty() && packet.flightPath.size() < LossyDataPacket.MAX_POINTS) {
+            edu.wpi.first.math.geometry.Pose3d last = flightPath.get(flightPath.size() - 1);
+            packet.flightPath.add(new Pose3d(last.getX(), last.getY(), last.getZ(), new Rotation3d()));
+        }
+
+        return packet;
     }
 
     public int getActiveConfigVersionId() {

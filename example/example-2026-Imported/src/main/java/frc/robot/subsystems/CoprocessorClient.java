@@ -1,5 +1,6 @@
 package frc.robot.subsystems;
 
+import ca.team4308.absolutelib.math.trajectories.network.LossyDataPacket;
 import ca.team4308.absolutelib.math.trajectories.network.TrajectoryRequest;
 import ca.team4308.absolutelib.math.trajectories.network.TrajectoryResponse;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -7,6 +8,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.DataInputStream;
 import java.io.OutputStream;
 import java.net.Socket;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 
 import org.littletonrobotics.junction.Logger;
@@ -24,6 +27,7 @@ public class CoprocessorClient implements Runnable {
     private final AtomicReference<Long> lastMs = new AtomicReference<>(System.currentTimeMillis());
     private final AtomicReference<TrajectoryRequest> currentRequest = new AtomicReference<>(null);
     private final AtomicReference<TrajectoryResponse> latestResponse = new AtomicReference<>(null);
+    private final AtomicReference<List<edu.wpi.first.math.geometry.Pose3d>> latestFlightPath = new AtomicReference<>(List.of());
     private final AtomicReference<Boolean> isConnected = new AtomicReference<>(false);
 
     public CoprocessorClient(String host, int port, boolean useBinaryProtocol) {
@@ -38,6 +42,10 @@ public class CoprocessorClient implements Runnable {
 
     public TrajectoryResponse getLatestResponse() {
         return latestResponse.get();
+    }
+
+    public List<edu.wpi.first.math.geometry.Pose3d> getLatestFlightPath() {
+        return latestFlightPath.get();
     }
 
     public boolean isConnected() {
@@ -81,6 +89,18 @@ public class CoprocessorClient implements Runnable {
                                     TrajectoryResponse res = TrajectoryResponse.fromBuffer(bb);
                                     latestResponse.set(res);
                                     lastMs.set(System.currentTimeMillis());
+
+                                    // Optional lossy flight path packet (non-critical)
+                                    if (dataIn.available() >= LossyDataPacket.BINARY_SIZE) {
+                                        int lossyMagic = dataIn.read();
+                                        if (lossyMagic == LossyDataPacket.MAGIC_BYTE) {
+                                            byte[] lossyBuf = new byte[LossyDataPacket.BINARY_SIZE - 1];
+                                            dataIn.readFully(lossyBuf);
+                                            ByteBuffer lossyBb = ByteBuffer.wrap(lossyBuf).order(ByteOrder.LITTLE_ENDIAN);
+                                            LossyDataPacket packet = LossyDataPacket.fromBuffer(lossyBb);
+                                            latestFlightPath.set(convertToWpiPoses(packet));
+                                        }
+                                    }
                                 }
                             } else {
                                 String jsonReq = mapper.writeValueAsString(req) + "\n";
@@ -114,5 +134,21 @@ public class CoprocessorClient implements Runnable {
                 Thread.currentThread().interrupt();
             }
         }
+    }
+
+    private List<edu.wpi.first.math.geometry.Pose3d> convertToWpiPoses(LossyDataPacket packet) {
+        if (packet == null || packet.flightPath == null || packet.flightPath.isEmpty()) {
+            return List.of();
+        }
+
+        List<edu.wpi.first.math.geometry.Pose3d> poses = new ArrayList<>(packet.flightPath.size());
+        for (ca.team4308.absolutelib.math.trajectories.impl.Pose3d pose : packet.flightPath) {
+            poses.add(new edu.wpi.first.math.geometry.Pose3d(
+                    pose.getTranslation().x,
+                    pose.getTranslation().y,
+                    pose.getTranslation().z,
+                    new edu.wpi.first.math.geometry.Rotation3d()));
+        }
+        return poses;
     }
 }

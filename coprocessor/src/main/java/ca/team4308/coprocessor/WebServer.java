@@ -56,6 +56,8 @@ public class WebServer {
                                             document.getElementById('batteryPercentage').innerText = '--';
                                             document.getElementById('incoming').innerText = '--';
                                             document.getElementById('outgoing').innerText = '--';
+                                            document.getElementById('lossyCount').innerText = '--';
+                                            document.getElementById('lossyLast').innerText = '--';
                                             return;
                                         }
 
@@ -74,8 +76,60 @@ public class WebServer {
                                             document.getElementById('rpm').innerText = data.response.rpm.toFixed(0);
                                             document.getElementById('valid').innerText = data.response.valid;
                                         }
+
+                                        if (data.lossy && data.lossy.count !== undefined) {
+                                            document.getElementById('lossyCount').innerText = data.lossy.count;
+                                            if (data.lossy.last) {
+                                                const lp = data.lossy.last;
+                                                document.getElementById('lossyLast').innerText =
+                                                    `${lp.x.toFixed(2)}, ${lp.y.toFixed(2)}, ${lp.z.toFixed(2)}`;
+                                            } else {
+                                                document.getElementById('lossyLast').innerText = '--';
+                                            }
+                                        }
+
+                                        if (data.lossy && Array.isArray(data.lossy.points)) {
+                                            renderLossySvg(data.lossy.points);
+                                        }
                                     }
                                     setInterval(fetchStatus, 100);
+
+                                    function renderLossySvg(points) {
+                                        const svg = document.getElementById('lossySvg');
+                                        const poly = document.getElementById('lossyPolyline');
+                                        if (!svg || !poly || points.length === 0) {
+                                            if (poly) {
+                                                poly.setAttribute('points', '');
+                                            }
+                                            return;
+                                        }
+
+                                        let minX = points[0].x;
+                                        let maxX = points[0].x;
+                                        let minY = points[0].y;
+                                        let maxY = points[0].y;
+
+                                        for (const p of points) {
+                                            minX = Math.min(minX, p.x);
+                                            maxX = Math.max(maxX, p.x);
+                                            minY = Math.min(minY, p.y);
+                                            maxY = Math.max(maxY, p.y);
+                                        }
+
+                                        const width = 360;
+                                        const height = 160;
+                                        const padding = 10;
+                                        const spanX = Math.max(0.001, maxX - minX);
+                                        const spanY = Math.max(0.001, maxY - minY);
+
+                                        const pts = points.map(p => {
+                                            const x = padding + ((p.x - minX) / spanX) * (width - padding * 2);
+                                            const y = padding + (1.0 - (p.y - minY) / spanY) * (height - padding * 2);
+                                            return `${x.toFixed(1)},${y.toFixed(1)}`;
+                                        }).join(' ');
+
+                                        poly.setAttribute('points', pts);
+                                    }
                                 </script>
                             </head>
                             <body>
@@ -115,6 +169,17 @@ public class WebServer {
                                         <tr><th>Outgoing Packets</th><td id="outgoing">0</td></tr>
                                     </table>
                                 </div>
+
+                                <div class="card">
+                                    <h2>Lossy Flight Path</h2>
+                                    <table>
+                                        <tr><th>Points Received</th><td id="lossyCount">0</td></tr>
+                                        <tr><th>Last Point (x, y, z)</th><td id="lossyLast">--</td></tr>
+                                    </table>
+                                    <svg id="lossySvg" width="360" height="160" style="margin-top: 10px; background: #141414; border: 1px solid #333; border-radius: 6px;">
+                                        <polyline id="lossyPolyline" fill="none" stroke="#4fc3f7" stroke-width="2" points="" />
+                                    </svg>
+                                </div>
                             </body>
                             </html>
                             """);
@@ -132,6 +197,35 @@ public class WebServer {
             status.put("incomingPackets", tcpServer.incomingPackets.get() + taskServer.incomingPackets.get());
             status.put("outgoingPackets", tcpServer.outgoingPackets.get() + taskServer.outgoingPackets.get());
             status.put("battery", tcpServer.batteryLevel.get());
+
+            Map<String, Object> lossy = new HashMap<>();
+            ca.team4308.absolutelib.math.trajectories.network.LossyDataPacket lossyPacket = tcpServer.latestLossyPacket.get();
+            if (lossyPacket != null && lossyPacket.flightPath != null) {
+                lossy.put("count", lossyPacket.flightPath.size());
+                if (!lossyPacket.flightPath.isEmpty()) {
+                    ca.team4308.absolutelib.math.trajectories.impl.Pose3d last =
+                            lossyPacket.flightPath.get(lossyPacket.flightPath.size() - 1);
+                    Map<String, Object> lastPoint = new HashMap<>();
+                    lastPoint.put("x", last.getTranslation().x);
+                    lastPoint.put("y", last.getTranslation().y);
+                    lastPoint.put("z", last.getTranslation().z);
+                    lossy.put("last", lastPoint);
+                }
+
+                java.util.List<Map<String, Object>> points = new java.util.ArrayList<>();
+                for (ca.team4308.absolutelib.math.trajectories.impl.Pose3d pose : lossyPacket.flightPath) {
+                    Map<String, Object> point = new HashMap<>();
+                    point.put("x", pose.getTranslation().x);
+                    point.put("y", pose.getTranslation().y);
+                    point.put("z", pose.getTranslation().z);
+                    points.add(point);
+                }
+                lossy.put("points", points);
+            } else {
+                lossy.put("count", 0);
+                lossy.put("points", java.util.List.of());
+            }
+            status.put("lossy", lossy);
             ctx.json(status);
         });
 

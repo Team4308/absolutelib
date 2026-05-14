@@ -6,7 +6,7 @@ public class Config {
     public static final int TEAM_NUMBER = getIntEnv("TEAM_NUMBER", 4308);
     // Network settings
     public static final int TCP_PORT = getIntEnv("TCP_PORT", 5801);
-    public static final int HTTP_PORT = getIntEnv("HTTP_PORT", 5800);
+    public static final int HTTP_PORT = getIntEnv("HTTP_PORT", 5805);
     public static final boolean IS_SIMULATION = getBooleanEnv("IS_SIMULATION", false);
     public static final boolean BINARY_PROTOCOL_ENABLED = getBooleanEnv("BINARY_PROTOCOL_ENABLED", true);
 

@@ -141,8 +141,7 @@ sudo bash -c 'cat > /etc/systemd/system/$SERVICE_NAME.service << '"'"'EOF'"'"'
 $SERVICE_CONTENT
 EOF
 systemctl daemon-reload
-systemctl enable $SERVICE_NAME
-systemctl restart $SERVICE_NAME
+systemctl enable --now $SERVICE_NAME
 systemctl status $SERVICE_NAME'
 "@
 

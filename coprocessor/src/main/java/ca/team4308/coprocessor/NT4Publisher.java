@@ -1,10 +1,12 @@
 package ca.team4308.coprocessor;
 
-import edu.wpi.first.networktables.DoublePublisher;
 import edu.wpi.first.networktables.BooleanPublisher;
+import edu.wpi.first.networktables.DoubleArrayPublisher;
+import edu.wpi.first.networktables.DoublePublisher;
+import edu.wpi.first.networktables.IntegerPublisher;
 import edu.wpi.first.networktables.NetworkTable;
 import edu.wpi.first.networktables.NetworkTableInstance;
-import edu.wpi.first.networktables.IntegerPublisher;
+import edu.wpi.first.networktables.StringPublisher;
 import ca.team4308.absolutelib.math.trajectories.network.TrajectoryRequest;
 import ca.team4308.absolutelib.math.trajectories.network.TrajectoryResponse;
 import ca.team4308.absolutelib.math.trajectories.TrajectoryResult;
@@ -29,6 +31,12 @@ public class NT4Publisher {
     
     private final IntegerPublisher activeConfigVersionIdPub;
     private final DoublePublisher filteredLatencyMsPub;
+
+    private final IntegerPublisher lossyCountPub;
+    private final DoubleArrayPublisher lossyPathXPub;
+    private final DoubleArrayPublisher lossyPathYPub;
+    private final DoubleArrayPublisher lossyPathZPub;
+    private final StringPublisher lossySvgPathPub;
     
     public NT4Publisher() {
         inst = NetworkTableInstance.getDefault();
@@ -53,6 +61,12 @@ public class NT4Publisher {
         
         activeConfigVersionIdPub = table.getIntegerTopic("Status/ActiveConfigVersionId").publish();
         filteredLatencyMsPub = table.getDoubleTopic("Status/FilteredLatencyMs").publish();
+
+        lossyCountPub = table.getIntegerTopic("Lossy/Count").publish();
+        lossyPathXPub = table.getDoubleArrayTopic("Lossy/PathX").publish();
+        lossyPathYPub = table.getDoubleArrayTopic("Lossy/PathY").publish();
+        lossyPathZPub = table.getDoubleArrayTopic("Lossy/PathZ").publish();
+        lossySvgPathPub = table.getStringTopic("Lossy/SvgPath").publish();
     }
 
     public void update(TrajectoryRequest req, TrajectoryResponse res, long latency, TrajectoryResult trajResult, boolean isConnected, double solverTime, long totalRequests, long droppedPackets, TCPServer tcpServer) {
@@ -77,5 +91,36 @@ public class NT4Publisher {
         
         activeConfigVersionIdPub.set(tcpServer.getActiveConfigVersionId());
         filteredLatencyMsPub.set(tcpServer.getFilteredLatencyMs());
+
+        ca.team4308.absolutelib.math.trajectories.network.LossyDataPacket lossyPacket = tcpServer.latestLossyPacket.get();
+        if (lossyPacket != null && lossyPacket.flightPath != null && !lossyPacket.flightPath.isEmpty()) {
+            int count = lossyPacket.flightPath.size();
+            double[] xs = new double[count];
+            double[] ys = new double[count];
+            double[] zs = new double[count];
+            StringBuilder svgPath = new StringBuilder();
+            for (int i = 0; i < count; i++) {
+                ca.team4308.absolutelib.math.trajectories.impl.Pose3d pose = lossyPacket.flightPath.get(i);
+                xs[i] = pose.getTranslation().x;
+                ys[i] = pose.getTranslation().y;
+                zs[i] = pose.getTranslation().z;
+                if (i == 0) {
+                    svgPath.append("M ").append(xs[i]).append(' ').append(ys[i]);
+                } else {
+                    svgPath.append(" L ").append(xs[i]).append(' ').append(ys[i]);
+                }
+            }
+            lossyCountPub.set(count);
+            lossyPathXPub.set(xs);
+            lossyPathYPub.set(ys);
+            lossyPathZPub.set(zs);
+            lossySvgPathPub.set(svgPath.toString());
+        } else {
+            lossyCountPub.set(0);
+            lossyPathXPub.set(new double[0]);
+            lossyPathYPub.set(new double[0]);
+            lossyPathZPub.set(new double[0]);
+            lossySvgPathPub.set("");
+        }
     }
 }

@@ -48,6 +48,9 @@ public class ExampleShooter extends AbsoluteSubsystem {
     private ca.team4308.absolutelib.network.task.client.TaskHandle<TrajectoryResponse> currentTaskHandle;
     private TrajectoryResponse lastCoprocessorResponse = null;
 
+    private final CoprocessorClient lossyCoprocessorClient;
+    private Thread lossyCoprocessorThread;
+
     private final edu.wpi.first.networktables.DoubleSubscriber pitchMinSub;
     private final edu.wpi.first.networktables.DoubleSubscriber pitchMaxSub;
     private final edu.wpi.first.networktables.DoubleSubscriber rpmMinSub;
@@ -135,6 +138,12 @@ public class ExampleShooter extends AbsoluteSubsystem {
         coprocessorThread = new Thread(coprocessorClient);
         coprocessorThread.setDaemon(true);
         coprocessorThread.start();
+
+    lossyCoprocessorClient = new CoprocessorClient(coprocessorIp, 5801, true);
+    System.out.println("Starting lossy coprocessor client thread for " + coprocessorIp);
+    lossyCoprocessorThread = new Thread(lossyCoprocessorClient);
+    lossyCoprocessorThread.setDaemon(true);
+    lossyCoprocessorThread.start();
 
         edu.wpi.first.networktables.NetworkTableInstance nt = edu.wpi.first.networktables.NetworkTableInstance.getDefault();
         edu.wpi.first.networktables.NetworkTable table2 = nt.getTable("TrajectoryCoprocessor");
@@ -309,6 +318,25 @@ public class ExampleShooter extends AbsoluteSubsystem {
             }
         }
 
+        List<Pose3d> lossyPath = lossyCoprocessorClient.getLatestFlightPath();
+        if (lossyPath != null && !lossyPath.isEmpty()) {
+            Logger.recordOutput("ExampleShooter/Coprocessor/FlightPath",
+                    lossyPath.toArray(new Pose3d[0]));
+
+            double[] lossyX = new double[lossyPath.size()];
+            double[] lossyY = new double[lossyPath.size()];
+            double[] lossyZ = new double[lossyPath.size()];
+            for (int i = 0; i < lossyPath.size(); i++) {
+                lossyX[i] = lossyPath.get(i).getX();
+                lossyY[i] = lossyPath.get(i).getY();
+                lossyZ[i] = lossyPath.get(i).getZ();
+            }
+            recordOutput("Trajectory/LossyPathX", lossyX);
+            recordOutput("Trajectory/LossyPathY", lossyY);
+            recordOutput("Trajectory/LossyPathZ", lossyZ);
+            recordOutput("Trajectory/LossyPathLength", lossyPath.size());
+        }
+
         SolveDebugInfo debug = trajResult.getDebugInfo();
         if (debug != null) {
             recordOutput("Debug/Enabled", false);
@@ -396,6 +424,8 @@ public class ExampleShooter extends AbsoluteSubsystem {
         req.targetY = targetPosition.getY();
         req.targetZ = targetPosition.getZ();
         req.currentRpm = measuredRpm;
+
+    lossyCoprocessorClient.setRequest(req);
 
         long startTime = System.nanoTime();
         double now = edu.wpi.first.wpilibj.Timer.getFPGATimestamp();

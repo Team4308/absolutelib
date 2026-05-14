@@ -1,6 +1,9 @@
 package ca.team4308.absolutelib.math.trajectories.network;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+
+import ca.team4308.absolutelib.math.trajectories.impl.Pose3d;
+
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 
@@ -32,6 +35,7 @@ public class TrajectoryResponse {
 
     @JsonProperty("ready_to_fire")
     public boolean readyToFire;
+
 
     public TrajectoryResponse() {
     }

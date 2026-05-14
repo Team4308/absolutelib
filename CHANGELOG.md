@@ -1,6 +1,12 @@
 # Changelog for AbsoluteLib v2
 
 
+
+# 2.2.2 - Lossy TCP
+- Added a new type of packet which can be sent as a lossy packet which has no checks for reciving, (UDP LIKE)
+- Updated the co-processer web dashboard to be cleaner
+
+
 # 2.2.1 - Interactive Documentation & Architecture Clarity
 
 ## Documentation Visualization

@@ -64,7 +64,7 @@ Network communication involves inherent risks (latency spikes, lost packets, dis
 - **Alerts:** The RIO logs `/Shooter/FallbackActive` to NT4/AdvantageKit. When fallback triggers, it logs `/Shooter/FallbackReason_StaleTime` to help debug if it dropped due to latency or a hard disconnect. There is currently no delay hysteresis; recovery happens immediately on the next valid packet.
 
 ## Web Dashboard & API Endpoints
-The coprocessor hosts a Javalin web server on port `5800`.
+The coprocessor hosts a Javalin web server on port `5805`.
 - **`GET /`**: Serves a user-friendly HTML dashboard showing realtime connection status, latency, and solver states.
 - **`GET /api/status`**: Returns a JSON object containing `isConnected`, `latencyMs`, `request`, and `response`.
 
