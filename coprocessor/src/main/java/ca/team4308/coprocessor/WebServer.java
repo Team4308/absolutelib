@@ -2,6 +2,7 @@ package ca.team4308.coprocessor;
 
 import io.javalin.Javalin;
 import io.javalin.websocket.WsContext;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
@@ -10,6 +11,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public class WebServer {
 
     private final Javalin app;
+    private final ObjectMapper mapper = new ObjectMapper();
     private final Set<WsContext> wsSessions = ConcurrentHashMap.newKeySet();
 
     public WebServer(TCPServer tcpServer, ca.team4308.absolutelib.network.task.server.TaskServer taskServer) {
@@ -47,7 +49,7 @@ public class WebServer {
                         if (!wsSessions.isEmpty()) {
                             for (WsContext session : wsSessions) {
                                 if (session.session.isOpen()) {
-                                    session.send(packet);
+                                    session.send(mapper.writeValueAsString(packet));
                                 }
                             }
                         }
@@ -536,4 +538,3 @@ public class WebServer {
         System.out.println("Web Server running on port " + Config.HTTP_PORT);
     }
 }
-

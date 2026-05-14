@@ -32,9 +32,7 @@ public class TrajectoryTaskHandler implements TaskHandler {
         tcpServer.latestRequest.set(req);
 
         TrajectoryResponse res = wrapper.solve(req);
-        tcpServer.latestResponse.set(res);
-
-        tcpServer.lastSolverTimeMs.set(System.currentTimeMillis() - start);
+        tcpServer.updateTelemetry(req, res, wrapper.getShooterSystem().getLastTrajectoryResult(), System.currentTimeMillis() - start);
 
         if (Config.LOG_TO_FILE) {
             long now = System.currentTimeMillis();

@@ -30,7 +30,7 @@ public class CoprocessorClient implements Runnable {
     private java.util.function.Consumer<JsonNode> telemetryListener;
 
     public CoprocessorClient(String host, int port) {
-        this(host, port, 5803);
+        this(host, port, 5806);
     }
 
     public CoprocessorClient(String host, int port, int telemetryPort) {

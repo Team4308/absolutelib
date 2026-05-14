@@ -114,6 +114,22 @@ public final class ShooterConfig {
                 .build();
     }
 
+    /** Creates a builder initialized with the values of this config. */
+    public Builder toBuilder() {
+        return new Builder()
+                .pitchLimits(minPitchDegrees, maxPitchDegrees)
+                .rpmLimits(minRpm, maxRpm)
+                .rpmToVelocityFactor(rpmToVelocityFactor)
+                .distanceLimits(minDistanceMeters, maxDistanceMeters)
+                .rpmFeedbackThreshold(rpmFeedbackThreshold)
+                .rpmAbortThreshold(rpmAbortThreshold)
+                .pitchCorrectionPerRpmDeficit(pitchCorrectionPerRpmDeficit)
+                .movingCompensationGain(movingCompensationGain)
+                .movingIterations(movingIterations)
+                .safetyMaxExitVelocity(safetyMaxExitVelocity)
+                .rpmDropRecoveryBoost(rpmDropRecoveryBoost);
+    }
+
     public static final class Builder {
         private double minPitchDegrees = 30.0;
         private double maxPitchDegrees = 82.0;

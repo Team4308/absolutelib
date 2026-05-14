@@ -228,12 +228,7 @@ public class TCPServer implements Runnable {
                             rawOut.flush();
                         }
 
-                        // Generate full telemetry for UDP and WebSockets
-                        latestFullTelemetry.set(buildFullTelemetry(request, response, trajResult));
-
-                        long elapsed = System.currentTimeMillis() - start;
-                        lastSolverTimeMs.set(elapsed);
-                        latencyFilter.addSample(elapsed);
+                        updateTelemetry(request, response, trajResult, System.currentTimeMillis() - start);
 
                         if (Config.LOG_TO_FILE) {
                             ReplayLogger.log(request, response);
@@ -255,6 +250,33 @@ public class TCPServer implements Runnable {
                 clientSocket.close();
             } catch (Exception e) {
             }
+        }
+    }
+
+    /**
+     * Updates all internal telemetry state with the latest solver result.
+     * Call this from any source that processes a trajectory request (TCP, UDP Tasks, etc).
+     */
+    public synchronized void updateTelemetry(TrajectoryRequest request, TrajectoryResponse response, 
+                                            ca.team4308.absolutelib.math.trajectories.TrajectoryResult result, 
+                                            long elapsedMs) {
+        lastActivityMs.set(System.currentTimeMillis());
+        latestRequest.set(request);
+        latestResponse.set(response);
+        lastSolverTimeMs.set(elapsedMs);
+        latencyFilter.addSample(elapsedMs);
+        
+        if (request.battery > 0) {
+            setBattery(request.battery);
+        }
+
+        // Generate full telemetry for UDP and WebSockets
+        latestFullTelemetry.set(buildFullTelemetry(request, response, result));
+        
+        // Build lossy flight path packet (useful for broadcasting)
+        LossyDataPacket lossyPacket = buildLossyPacket(result);
+        if (lossyPacket != null) {
+            latestLossyPacket.set(lossyPacket);
         }
     }
 
@@ -302,10 +324,12 @@ public class TCPServer implements Runnable {
         packet.confidence = response.confidence;
         
         // Path
-        packet.setFlightPath(result.getFlightPath());
+        if (result != null) {
+            packet.setFlightPath(result.getFlightPath());
+        }
         
         // Flywheel Sim
-        if (result.hasFlywheelData()) {
+        if (result != null && result.hasFlywheelData()) {
             ca.team4308.absolutelib.math.trajectories.flywheel.FlywheelSimulator.SimulationResult sim = result.getFlywheelSimulation();
             packet.fwWheelRpm = sim.requiredWheelRpm;
             packet.fwMotorRpm = sim.requiredMotorRpm;
@@ -323,18 +347,22 @@ public class TCPServer implements Runnable {
         }
         
         // Metrics
-        packet.metTof = result.getTimeOfFlightSeconds();
-        packet.metMaxHeight = result.getMaxHeightMeters();
-        packet.metMarginError = result.getMarginOfErrorMeters();
-        packet.metDistance = result.getDistanceToTargetMeters();
-        packet.metHeightDiff = result.getHeightDifferenceMeters();
+        if (result != null) {
+            packet.metTof = result.getTimeOfFlightSeconds();
+            packet.metMaxHeight = result.getMaxHeightMeters();
+            packet.metMarginError = result.getMarginOfErrorMeters();
+            packet.metDistance = result.getDistanceToTargetMeters();
+            packet.metHeightDiff = result.getHeightDifferenceMeters();
+        }
         
         // Trace
-        packet.trMode = result.getSolveModeUsed().name();
-        packet.trTimeMs = result.getComputationTimeMs();
-        packet.trIterations = result.getIterations();
+        if (result != null) {
+            packet.trMode = result.getSolveModeUsed().name();
+            packet.trTimeMs = result.getComputationTimeMs();
+            packet.trIterations = result.getIterations();
+        }
         
-        ca.team4308.absolutelib.math.trajectories.SolveDebugInfo debug = result.getDebugInfo();
+        ca.team4308.absolutelib.math.trajectories.SolveDebugInfo debug = result != null ? result.getDebugInfo() : null;
         if (debug != null) {
             packet.trTotalTested = debug.getTotalTested();
             packet.trAccepted = debug.getAcceptedCount();
@@ -346,7 +374,7 @@ public class TCPServer implements Runnable {
         }
         
         // Discrete
-        if (result.hasDiscreteSolution()) {
+        if (result != null && result.hasDiscreteSolution()) {
             ca.team4308.absolutelib.math.trajectories.TrajectoryResult.DiscreteShot ds = result.getDiscreteSolution();
             packet.dsValid = true;
             packet.dsRpm = ds.rpmValue;
