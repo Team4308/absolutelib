@@ -167,13 +167,47 @@ public class TrajectoryWrapper {
         currentConfigVersionId = config.configVersionId;
         shooterHeightMeters = config.shooterHeightMeters;
 
+        // Update Solver Config
+        TrajectorySolver.SolverConfig solverConfig = TrajectorySolver.SolverConfig.fromDTO(config).build();
+        solver.updateConfig(solverConfig);
+        
+        if (config.solverSolveMode != null) {
+            try {
+                solver.setSolveMode(TrajectorySolver.SolveMode.valueOf(config.solverSolveMode));
+            } catch (Exception e) {}
+        }
+
+        // Update Shooter Config
+        ShooterConfig shooterConfig = ShooterConfig.Builder.fromDTO(config).build();
+        shooterSystem.setConfig(shooterConfig);
+        
+        if (config.shooterMode != null) {
+            try {
+                shooterSystem.setMode(ShotMode.valueOf(config.shooterMode));
+            } catch (Exception e) {}
+        }
+        
+        shooterSystem.setBlendFactor(config.shooterBlendFactor);
+
+        // Update Lookup Table
+        if (config.lookupDistances != null && config.lookupDistances.length > 0) {
+            ShotLookupTable newTable = new ShotLookupTable(config.shooterRpmToVelocityFactor);
+            for (int i = 0; i < config.lookupDistances.length; i++) {
+                if (i < config.lookupPitches.length && i < config.lookupRpms.length) {
+                    if (i < config.lookupTofs.length) {
+                        newTable.addEntry(config.lookupDistances[i], config.lookupPitches[i], config.lookupRpms[i], config.lookupTofs[i]);
+                    } else {
+                        newTable.addEntry(config.lookupDistances[i], config.lookupPitches[i], config.lookupRpms[i]);
+                    }
+                }
+            }
+            shooterSystem.setLookupTable(newTable);
+            solver.addTuningPoint(newTable);
+        }
+
         // Log the configuration update for dashboard sync verification
         System.out.println("=== Configuration Updated (Version " + config.configVersionId + ") ===");
-        System.out.println("Flywheel: " + config.flywheelWheelDiameterInches + "\" dia, gear ratio: " + config.flywheelGearRatio);
-        System.out.println("Shooter: pitch [" + config.shooterPitchMinDegrees + ", " + config.shooterPitchMaxDegrees + "]°, "
-                + "rpm [" + config.shooterRpmMin + ", " + config.shooterRpmMax + "]");
         System.out.println("Shooter height: " + shooterHeightMeters + "m");
-        
     }
 
     public int getCurrentConfigVersionId() {

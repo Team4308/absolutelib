@@ -7,6 +7,10 @@ public class Config {
     // Network settings
     public static final int TCP_PORT = getIntEnv("TCP_PORT", 5801);
     public static final int HTTP_PORT = getIntEnv("HTTP_PORT", 5805);
+    public static final int UDP_PORT = getIntEnv("UDP_PORT", 5806);
+    public static final String UDP_BROADCAST_ADDR = getStringEnv("UDP_BROADCAST_ADDR", "255.255.255.255");
+    public static final boolean UDP_ENABLED = getBooleanEnv("UDP_ENABLED", true);
+    
     public static final boolean IS_SIMULATION = getBooleanEnv("IS_SIMULATION", false);
     public static final boolean BINARY_PROTOCOL_ENABLED = getBooleanEnv("BINARY_PROTOCOL_ENABLED", true);
 

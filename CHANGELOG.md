@@ -2,6 +2,13 @@
 
 
 
+# 2.2.3 - Full Network Synchronization
+- **Bidirectional Trajectory Sync**: Implemented a 1:1 network parity layer that mirrors all robot-side trajectory configurations to the coprocessor in real-time.
+- **Unified Config DTO**: Created `TrajectoryConfigDTO` to encapsulate all shooter, solver, and lookup table parameters into a single atomic update packet.
+- **Dynamic Reconfiguration**: The coprocessor now supports runtime reconfiguration, allowing parameters like RPM limits and physics tolerances to be tuned via Shuffleboard without restarting.
+- **Web Dashboard Refinement**: Updated the coprocessor web interface with a cleaner, professional "AbsoluteLib Site" theme, reducing aggressive gradients and glows while improving readability.
+- **Robust Field Mirroring**: Fixed several field resolution issues and standardized the `shooterHeightMeters` parameter across all network packets.
+
 # 2.2.2 - Lossy TCP
 - Added a new type of packet which can be sent as a lossy packet which has no checks for reciving, (UDP LIKE)
 - Updated the co-processer web dashboard to be cleaner

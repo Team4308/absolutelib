@@ -5,6 +5,14 @@ plugins {
     
 }
 
+java {
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(17)
+    }
+}
+
 ext.wpilibVersion = "2026.1.1"
 
 repositories {
@@ -42,13 +50,47 @@ dependencies {
     implementation 'com.fasterxml.jackson.core:jackson-databind:2.17.2'
 }
 
+configurations {
+    nativeZips
+}
+
+dependencies {
+    def platforms = ['windowsx86-64', 'linuxx86-64', 'linuxarm64']
+    platforms.each { platform ->
+        nativeZips "edu.wpi.first.ntcore:ntcore-cpp:$wpilibVersion:${platform}@zip"
+        nativeZips "edu.wpi.first.hal:hal-cpp:$wpilibVersion:${platform}@zip"
+        nativeZips "edu.wpi.first.wpimath:wpimath-cpp:$wpilibVersion:${platform}@zip"
+        nativeZips "edu.wpi.first.cscore:cscore-cpp:$wpilibVersion:${platform}@zip"
+        nativeZips "edu.wpi.first.apriltag:apriltag-cpp:$wpilibVersion:${platform}@zip"
+        nativeZips "edu.wpi.first.wpiutil:wpiutil-cpp:$wpilibVersion:${platform}@zip"
+        nativeZips "edu.wpi.first.wpinet:wpinet-cpp:$wpilibVersion:${platform}@zip"
+    }
+}
+
 jar {
     manifest {
         attributes 'Main-Class': 'ca.team4308.coprocessor.Main'
     }
 }
 
+task extractNatives(type: Sync) {
+    duplicatesStrategy = DuplicatesStrategy.INCLUDE
+    from({ project.configurations.nativeZips.collect { zipTree(it) } }) {
+        include '**/*.dll'
+        include '**/*.so'
+        include '**/*.dylib'
+        eachFile { fcd ->
+            def segments = fcd.relativePath.segments
+            def newSegments = segments.findAll { it != 'shared' }
+            fcd.relativePath = new RelativePath(true, newSegments as String[])
+        }
+        includeEmptyDirs = false
+    }
+    into layout.buildDirectory.dir("natives")
+}
+
 shadowJar {
+    dependsOn extractNatives
     archiveBaseName.set('coprocessor')
     archiveClassifier.set('')
     archiveVersion.set('')

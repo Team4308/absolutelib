@@ -48,8 +48,14 @@ public class Main {
         Thread tcpThread = new Thread(tcpServer);
         tcpThread.start();
 
+        UDPBroadcaster udpBroadcaster = new UDPBroadcaster(tcpServer);
+        Thread udpThread = new Thread(udpBroadcaster);
+        udpThread.setDaemon(true);
+        udpThread.start();
+
     // Start the generalized task offloading server on port 5802
     registry.register("TRAJECTORY_SOLVE", new TrajectoryTaskHandler(wrapper, tcpServer));
+    registry.register("CONFIG_UPDATE", new ConfigTaskHandler(wrapper, tcpServer));
     Thread taskThread = new Thread(taskServer);
     taskThread.start();
 

@@ -445,6 +445,25 @@ public class TrajectorySolver {
         }
 
         /**
+         * Creates a builder from a DTO.
+         */
+        public static SolverConfig.Builder fromDTO(ca.team4308.absolutelib.math.trajectories.network.TrajectoryConfigDTO dto) {
+            return new SolverConfig.Builder()
+                .minPitchDegrees(dto.shooterPitchMin) // Using shooter limits for solver too
+                .maxPitchDegrees(dto.shooterPitchMax)
+                .minRpm(dto.shooterRpmMin)
+                .maxRpm(dto.shooterRpmMax)
+                .rpmTolerance(dto.solverRpmTolerance)
+                .angleTolerance(dto.solverAngleTolerance)
+                .hoopToleranceMultiplier(dto.solverHoopMultiplier)
+                .sweepStepDegrees(dto.solverSweepStep)
+                .velocityRefineIterations(dto.solverVelRefineIters)
+                .simulationTimeStep(dto.solverSimStep)
+                .fastSimulationTimeStep(dto.solverFastSimStep)
+                .useParallel(dto.solverUseParallel);
+        }
+
+        /**
          * Returns a config with all default values.
          */
         public static SolverConfig defaults() {
@@ -533,8 +552,8 @@ public class TrajectorySolver {
         }
     }
 
-    private final GamePiece gamePiece;
-    private final SolverConfig config;
+    private GamePiece gamePiece;
+    private SolverConfig config;
     private final ProjectileMotion projectileMotion;
     private final FlywheelGenerator flywheelGenerator;
 
@@ -668,6 +687,19 @@ public class TrajectorySolver {
      */
     public boolean isDebugEnabled() {
         return debugEnabled;
+    }
+
+    /**
+     * Updates the solver configuration at runtime.
+     * 
+     * @param newConfig the new configuration to apply
+     */
+    public synchronized void updateConfig(SolverConfig newConfig) {
+        if (newConfig == null) return;
+        this.config = newConfig;
+        // The projectile motion and flywheel generator are initialized in the constructor
+        // but they don't depend on config values that can change at runtime here
+        // (timesteps are used during solve() calls).
     }
 
     /**

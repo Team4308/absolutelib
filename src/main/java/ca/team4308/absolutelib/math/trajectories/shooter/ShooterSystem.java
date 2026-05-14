@@ -38,12 +38,12 @@ import ca.team4308.absolutelib.math.trajectories.TrajectorySolver;
  */
 public final class ShooterSystem {
 
-    private final ShooterConfig config;
-    private final ShotLookupTable lookupTable;
+    private ShooterConfig config;
+    private ShotLookupTable lookupTable;
     private final TrajectorySolver solver;
-    private final RPMCorrector rpmCorrector;
-    private final MovementCompensator movementCompensator;
-    private final SafetyValidator safetyValidator;
+    private RPMCorrector rpmCorrector;
+    private MovementCompensator movementCompensator;
+    private SafetyValidator safetyValidator;
 
     private ShotMode mode = ShotMode.LOOKUP_WITH_SOLVER_FALLBACK;
     private double blendFactor = 0.5;
@@ -411,9 +411,34 @@ public final class ShooterSystem {
         return config;
     }
 
+    /**
+     * Updates the shooter configuration at runtime and re-initializes internal components.
+     * 
+     * @param newConfig the new configuration to apply
+     */
+    public synchronized void setConfig(ShooterConfig newConfig) {
+        if (newConfig == null) return;
+        this.config = newConfig;
+        
+        // Re-initialize sub-components with the new config
+        this.rpmCorrector = new RPMCorrector(newConfig);
+        this.movementCompensator = new MovementCompensator(newConfig);
+        this.safetyValidator = new SafetyValidator(newConfig);
+    }
+
     /** Returns the lookup table. */
     public ShotLookupTable getLookupTable() {
         return lookupTable;
+    }
+
+    /**
+     * Updates the lookup table at runtime.
+     * 
+     * @param table the new lookup table
+     */
+    public synchronized void setLookupTable(ShotLookupTable table) {
+        if (table == null) return;
+        this.lookupTable = table;
     }
 
     /**

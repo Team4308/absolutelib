@@ -17,6 +17,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public class CoprocessorClient implements Runnable {
     private final String host;
     private final int port;
+    private final int telemetryPort;
     private static final ObjectMapper mapper = new ObjectMapper();
     
     // Thread-safe map holding handles to all currently submitted but unfinished remote tasks.
@@ -26,9 +27,20 @@ public class CoprocessorClient implements Runnable {
     private final AtomicReference<PrintWriter> socketOut = new AtomicReference<>(null);
     private final AtomicBoolean connected = new AtomicBoolean(false);
 
+    private java.util.function.Consumer<JsonNode> telemetryListener;
+
     public CoprocessorClient(String host, int port) {
+        this(host, port, 5803);
+    }
+
+    public CoprocessorClient(String host, int port, int telemetryPort) {
         this.host = host;
         this.port = port;
+        this.telemetryPort = telemetryPort;
+    }
+
+    public void setTelemetryListener(java.util.function.Consumer<JsonNode> listener) {
+        this.telemetryListener = listener;
     }
 
     /**
@@ -78,6 +90,12 @@ public class CoprocessorClient implements Runnable {
 
     @Override
     public void run() {
+        // Start UDP telemetry listener thread
+        Thread telemetryThread = new Thread(this::runTelemetryLoop);
+        telemetryThread.setDaemon(true);
+        telemetryThread.setName("Coprocessor-UDP-Telemetry");
+        telemetryThread.start();
+
         while (!Thread.currentThread().isInterrupted()) {
             try (Socket socket = new Socket(host, port);
                  PrintWriter out = new PrintWriter(socket.getOutputStream(), true);
@@ -95,7 +113,6 @@ public class CoprocessorClient implements Runnable {
                 String line;
                 System.out.println("Generic CoprocessorClient waiting for lines...");
                 while ((line = in.readLine()) != null) {
-                    System.out.println("Generic CoprocessorClient received line length: " + line.length());
                     try {
                         TaskResponse res = mapper.readValue(line, TaskResponse.class);
                         TaskHandle<?> handle = pendingTasks.remove(res.requestId);
@@ -126,6 +143,28 @@ public class CoprocessorClient implements Runnable {
                     Thread.currentThread().interrupt();
                 }
             }
+        }
+    }
+
+    private void runTelemetryLoop() {
+        byte[] buffer = new byte[65535];
+        try (java.net.DatagramSocket socket = new java.net.DatagramSocket(telemetryPort)) {
+            System.out.println("UDP Telemetry Listener started on port " + telemetryPort);
+            while (!Thread.currentThread().isInterrupted()) {
+                try {
+                    java.net.DatagramPacket packet = new java.net.DatagramPacket(buffer, buffer.length);
+                    socket.receive(packet);
+                    
+                    if (telemetryListener != null) {
+                        JsonNode node = mapper.readTree(packet.getData(), 0, packet.getLength());
+                        telemetryListener.accept(node);
+                    }
+                } catch (Exception e) {
+                    // System.err.println("Error receiving UDP telemetry: " + e.getMessage());
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("UDP Telemetry Listener crashed: " + e.getMessage());
         }
     }
 

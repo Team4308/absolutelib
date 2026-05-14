@@ -1,4 +1,4 @@
-# Trajectory Coprocessor
+# Trajectory Coprocessor and custom coprocessor code
 
 This is a standalone runtime for the `TrajectorySolver`. It runs on a Raspberry Pi, Orange Pi, or any Linux machine, and communicates with the roboRIO over TCP and NetworkTables 4.
 

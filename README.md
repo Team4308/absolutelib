@@ -38,6 +38,11 @@ Before building, install all required libraries:
 
 ## What You Get
 
+### Custom Coprocessor Wrappers
+- Simple and easy to use packet sending over TCP and NT4
+- Pre built jars and setup ps1 scripts to install and run jars on startup
+- Pre made trajectory jar and code to run which transfers data over TCP and NT4 
+
 ### Wrappers
 - `MotorWrapper`: TalonFX (Phoenix6), TalonSRX/VictorSPX (Phoenix5), SparkMax (REV) unified API
 - `EncoderWrapper`: Unified encoder access (CANCoder, SparkMax encoder, etc.)

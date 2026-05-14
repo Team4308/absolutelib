@@ -30,6 +30,8 @@ public class TCPServer implements Runnable {
     public final AtomicReference<TrajectoryResponse> latestResponse = new AtomicReference<>(null);
     public final AtomicReference<ConfigurationPacket> latestConfig = new AtomicReference<>(null);
     public final AtomicReference<LossyDataPacket> latestLossyPacket = new AtomicReference<>(null);
+    public final AtomicReference<ca.team4308.absolutelib.math.trajectories.network.FullTelemetryPacket> latestFullTelemetry = new AtomicReference<>(null);
+    private long telemetrySequence = 0;
     public final AtomicLong lastSolverTimeMs = new AtomicLong(0L);
     public final AtomicReference<Boolean> isConnected = new AtomicReference<>(false);
     public final AtomicLong lastActivityMs = new AtomicLong(0L);
@@ -206,6 +208,8 @@ public class TCPServer implements Runnable {
                         TrajectoryResponse response = solverWrapper.solve(request);
                         latestResponse.set(response);
 
+                        TrajectoryResult trajResult = solverWrapper.getShooterSystem().getLastTrajectoryResult();
+
                         byteBuffer.clear();
                         response.toBuffer(byteBuffer);
                         rawOut.write(byteBuffer.array(), 0, TrajectoryResponse.BINARY_SIZE);
@@ -213,7 +217,7 @@ public class TCPServer implements Runnable {
                         rawOut.flush();
 
                         // Optional lossy flight path packet (non-critical)
-                        LossyDataPacket lossyPacket = buildLossyPacket();
+                        LossyDataPacket lossyPacket = buildLossyPacket(trajResult);
                         if (lossyPacket != null && !lossyPacket.flightPath.isEmpty()) {
                             latestLossyPacket.set(lossyPacket);
                             ByteBuffer lossyBuffer = ByteBuffer.allocate(LossyDataPacket.BINARY_SIZE);
@@ -223,6 +227,9 @@ public class TCPServer implements Runnable {
                             outgoingPackets.incrementAndGet();
                             rawOut.flush();
                         }
+
+                        // Generate full telemetry for UDP and WebSockets
+                        latestFullTelemetry.set(buildFullTelemetry(request, response, trajResult));
 
                         long elapsed = System.currentTimeMillis() - start;
                         lastSolverTimeMs.set(elapsed);
@@ -251,8 +258,7 @@ public class TCPServer implements Runnable {
         }
     }
 
-    private LossyDataPacket buildLossyPacket() {
-        TrajectoryResult trajResult = solverWrapper.getShooterSystem().getLastTrajectoryResult();
+    private LossyDataPacket buildLossyPacket(TrajectoryResult trajResult) {
         if (trajResult == null || !trajResult.isSuccess()) {
             return null;
         }
@@ -277,6 +283,89 @@ public class TCPServer implements Runnable {
             packet.flightPath.add(new Pose3d(last.getX(), last.getY(), last.getZ(), new Rotation3d()));
         }
 
+        return packet;
+    }
+
+    private ca.team4308.absolutelib.math.trajectories.network.FullTelemetryPacket buildFullTelemetry(
+            TrajectoryRequest request, TrajectoryResponse response, ca.team4308.absolutelib.math.trajectories.TrajectoryResult result) {
+        
+        ca.team4308.absolutelib.math.trajectories.network.FullTelemetryPacket packet = new ca.team4308.absolutelib.math.trajectories.network.FullTelemetryPacket();
+        packet.timestamp = System.currentTimeMillis() / 1000.0;
+        packet.sequence = telemetrySequence++;
+        
+        // Solution
+        packet.status = response.status;
+        packet.pitchDeg = response.pitchDegrees;
+        packet.yawDeg = response.yawDegrees;
+        packet.rpm = response.rpm;
+        packet.exitVelocityMps = response.rpm > 0 ? (response.rpm * 0.1016 * Math.PI / 60.0) : 0; // Rough estimate or use sim exit vel
+        packet.confidence = response.confidence;
+        
+        // Path
+        packet.setFlightPath(result.getFlightPath());
+        
+        // Flywheel Sim
+        if (result.hasFlywheelData()) {
+            ca.team4308.absolutelib.math.trajectories.flywheel.FlywheelSimulator.SimulationResult sim = result.getFlywheelSimulation();
+            packet.fwWheelRpm = sim.requiredWheelRpm;
+            packet.fwMotorRpm = sim.requiredMotorRpm;
+            packet.fwMotorPower = sim.motorPowerPercent;
+            packet.fwSpinUpSec = sim.spinUpTimeSeconds;
+            packet.fwCurrentAmps = sim.currentDrawAmps;
+            packet.fwStoredJoules = sim.storedEnergyJoules;
+            packet.fwContactMs = sim.contactTimeMs;
+            packet.fwBallSpinRpm = sim.ballSpinRpm;
+            packet.fwSlipRatio = sim.slipRatio;
+            packet.fwEfficiency = sim.energyTransferEfficiency;
+            packet.fwAchievable = sim.isAchievable;
+            packet.fwLimitingFactor = sim.limitingFactor;
+            packet.exitVelocityMps = sim.exitVelocityMps; // Better exit velocity from sim
+        }
+        
+        // Metrics
+        packet.metTof = result.getTimeOfFlightSeconds();
+        packet.metMaxHeight = result.getMaxHeightMeters();
+        packet.metMarginError = result.getMarginOfErrorMeters();
+        packet.metDistance = result.getDistanceToTargetMeters();
+        packet.metHeightDiff = result.getHeightDifferenceMeters();
+        
+        // Trace
+        packet.trMode = result.getSolveModeUsed().name();
+        packet.trTimeMs = result.getComputationTimeMs();
+        packet.trIterations = result.getIterations();
+        
+        ca.team4308.absolutelib.math.trajectories.SolveDebugInfo debug = result.getDebugInfo();
+        if (debug != null) {
+            packet.trTotalTested = debug.getTotalTested();
+            packet.trAccepted = debug.getAcceptedCount();
+            packet.trRejCollision = debug.getRejectedCollisionCount();
+            packet.trRejArcTooLow = debug.getRejectedArcTooLowCount();
+            packet.trRejClearance = debug.getRejectedClearanceCount();
+            packet.trRejMiss = debug.getRejectedMissCount();
+            packet.trRejFlyover = debug.getRejectedFlyoverCount();
+        }
+        
+        // Discrete
+        if (result.hasDiscreteSolution()) {
+            ca.team4308.absolutelib.math.trajectories.TrajectoryResult.DiscreteShot ds = result.getDiscreteSolution();
+            packet.dsValid = true;
+            packet.dsRpm = ds.rpmValue;
+            packet.dsPitchDeg = ds.pitchAngleDegrees;
+            packet.dsRpmTicks = ds.rpmTicks;
+            packet.dsAngleTicks = ds.angleTicks;
+            packet.dsScore = ds.score;
+        }
+        
+        // Input
+        packet.inRobotX = request.robotX;
+        packet.inRobotY = request.robotY;
+        packet.inRobotZ = request.robotZ;
+        packet.inTargetX = request.targetX;
+        packet.inTargetY = request.targetY;
+        packet.inTargetZ = request.targetZ;
+        packet.inVx = request.vxMps;
+        packet.inVy = request.vyMps;
+        
         return packet;
     }
 

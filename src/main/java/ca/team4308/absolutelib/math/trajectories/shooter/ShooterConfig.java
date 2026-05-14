@@ -202,6 +202,24 @@ public final class ShooterConfig {
         public ShooterConfig build() {
             return new ShooterConfig(this);
         }
+
+        /**
+         * Creates a builder from a DTO.
+         */
+        public static Builder fromDTO(ca.team4308.absolutelib.math.trajectories.network.TrajectoryConfigDTO dto) {
+            return new Builder()
+                .pitchLimits(dto.shooterPitchMin, dto.shooterPitchMax)
+                .rpmLimits(dto.shooterRpmMin, dto.shooterRpmMax)
+                .rpmToVelocityFactor(dto.shooterRpmToVelocityFactor)
+                .distanceLimits(dto.shooterDistanceMin, dto.shooterDistanceMax)
+                .rpmFeedbackThreshold(dto.shooterRpmFeedbackThreshold)
+                .rpmAbortThreshold(dto.shooterRpmAbortThreshold)
+                .pitchCorrectionPerRpmDeficit(dto.shooterPitchCorrectionPerRpm)
+                .movingCompensationGain(dto.shooterMovingCompGain)
+                .movingIterations(dto.shooterMovingIterations)
+                .safetyMaxExitVelocity(dto.shooterSafetyMaxExitVel)
+                .rpmDropRecoveryBoost(dto.shooterRpmDropRecovery);
+        }
     }
 
     @Override
