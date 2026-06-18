@@ -34,8 +34,8 @@ public class TrajectoryResult {
         try {
             double yaw = input.getShooterYaw() + yawAdjustmentRadians;
             double hSpeed = requiredVelocityMps * Math.cos(pitchAngleRadians);
-            double launchVx = hSpeed * Math.cos(yaw) + input.getRobotVx();
-            double launchVy = hSpeed * Math.sin(yaw) + input.getRobotVy();
+            double launchVx = hSpeed * Math.cos(yaw) + input.getEffectiveRobotVx();
+            double launchVy = hSpeed * Math.sin(yaw) + input.getEffectiveRobotVy();
             double launchVz = requiredVelocityMps * Math.sin(pitchAngleRadians);
             double totalLaunchSpeed = Math.sqrt(launchVx * launchVx + launchVy * launchVy + launchVz * launchVz);
             double effectivePitch = Math.atan2(launchVz, Math.sqrt(launchVx * launchVx + launchVy * launchVy));
@@ -51,7 +51,7 @@ public class TrajectoryResult {
                     effectivePitch,
                     effectiveYaw,
                     flywheelSimulation != null ? flywheelSimulation.ballSpinRpm : 0,
-                    input.getRobotVx(), input.getRobotVy(),
+                    input.getEffectiveRobotVx(), input.getEffectiveRobotVy(),
                     input.getTargetX(), input.getTargetY(), input.getTargetZ(),
                     input.getTargetRadius()
             );

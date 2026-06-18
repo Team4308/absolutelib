@@ -703,7 +703,7 @@ public final class ShotTablePrecompute {
                 .shooterYawRadians(shooterYaw)
                 .targetPositionMeters(targetX, targetY, targetZ)
                 .targetRadiusMeters(targetRadius)
-                .robotVelocity(template.getRobotVx(), template.getRobotVy())
+                .robotVelocity(template.getEffectiveRobotVx(), template.getEffectiveRobotVy())
                 .includeAirResistance(template.isIncludeAirResistance())
                 .shotPreference(template.getShotPreference())
                 .maxCandidates(template.getMaxCandidates())

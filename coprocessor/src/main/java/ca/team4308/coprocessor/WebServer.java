@@ -55,7 +55,7 @@ public class WebServer {
                         }
                         lastSeq = packet.sequence;
                     }
-                    Thread.sleep(20); // 50Hz push
+                    Thread.sleep(5);
                 } catch (InterruptedException e) {
                     break;
                 } catch (Exception e) {
@@ -335,6 +335,17 @@ public class WebServer {
                                     const ctx = canvas.getContext('2d');
                                     let ws;
                                     let lastData = null;
+                                    let drawQueued = false;
+                                    let canvasCssWidth = 0;
+                                    let canvasCssHeight = 0;
+                                    let canvasDpr = 0;
+                                    let targetPath = [];
+                                    let renderedPath = [];
+                                    let targetActivePath = [];
+                                    let renderedActivePath = [];
+                                    let renderedFrame = null;
+                                    let lastDrawTimeMs = 0;
+                                    const pathSmoothingTauSec = 0.045;
 
                                     function connect() {
                                         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -357,7 +368,18 @@ public class WebServer {
                                             const data = JSON.parse(event.data);
                                             updateUI(data);
                                             lastData = data;
-                                            draw();
+                                            targetPath = extractPath(data);
+                                            targetActivePath = extractActivePath(data);
+                                            if (renderedPath.length !== targetPath.length) {
+                                                renderedPath = targetPath.map(p => ({ ...p }));
+                                            }
+                                            if (renderedActivePath.length !== targetActivePath.length) {
+                                                renderedActivePath = targetActivePath.map(p => ({ ...p }));
+                                            }
+                                            if (!renderedFrame) {
+                                                renderedFrame = extractFrame(data);
+                                            }
+                                            scheduleDraw();
                                         };
                                     }
 
@@ -429,15 +451,128 @@ public class WebServer {
                                         }
                                     }
 
-                                    function draw() {
+                                    function scheduleDraw() {
+                                        if (drawQueued) return;
+                                        drawQueued = true;
+                                        requestAnimationFrame((nowMs) => {
+                                            drawQueued = false;
+                                            draw(nowMs);
+                                            if (lastData) scheduleDraw();
+                                        });
+                                    }
+
+                                    function extractPath(data) {
+                                        const count = data.path_count || 0;
+                                        const path = [];
+                                        for (let i = 0; i < count; i++) {
+                                            path.push({
+                                                x: data.flight_path_x[i],
+                                                y: data.flight_path_y[i],
+                                                z: data.flight_path_z[i],
+                                            });
+                                        }
+                                        return path;
+                                    }
+
+                                    function extractActivePath(data) {
+                                        const count = data.active_path_count || 0;
+                                        const path = [];
+                                        for (let i = 0; i < count; i++) {
+                                            path.push({
+                                                x: data.active_path_x[i],
+                                                y: data.active_path_y[i],
+                                                z: data.active_path_z[i],
+                                            });
+                                        }
+                                        return path;
+                                    }
+
+                                    function extractFrame(data) {
+                                        return {
+                                            robotX: data.in_rx,
+                                            robotY: data.in_ry,
+                                            robotZ: data.in_rz,
+                                            targetX: data.in_tx,
+                                            targetY: data.in_ty,
+                                            targetZ: data.in_tz,
+                                            dist: data.met_dist,
+                                            maxHeight: data.met_max_height,
+                                        };
+                                    }
+
+                                    function lerp(a, b, t) {
+                                        return a + (b - a) * t;
+                                    }
+
+                                    function smoothVisuals(nowMs) {
+                                        if (!lastData) return null;
+
+                                        const dtSec = lastDrawTimeMs > 0 ? Math.min(0.05, (nowMs - lastDrawTimeMs) / 1000.0) : 0.016;
+                                        lastDrawTimeMs = nowMs;
+                                        const alpha = 1.0 - Math.exp(-dtSec / pathSmoothingTauSec);
+                                        const targetFrame = extractFrame(lastData);
+
+                                        if (!renderedFrame) {
+                                            renderedFrame = targetFrame;
+                                        } else {
+                                            renderedFrame.robotX = lerp(renderedFrame.robotX, targetFrame.robotX, alpha);
+                                            renderedFrame.robotY = lerp(renderedFrame.robotY, targetFrame.robotY, alpha);
+                                            renderedFrame.robotZ = lerp(renderedFrame.robotZ, targetFrame.robotZ, alpha);
+                                            renderedFrame.targetX = lerp(renderedFrame.targetX, targetFrame.targetX, alpha);
+                                            renderedFrame.targetY = lerp(renderedFrame.targetY, targetFrame.targetY, alpha);
+                                            renderedFrame.targetZ = lerp(renderedFrame.targetZ, targetFrame.targetZ, alpha);
+                                            renderedFrame.dist = lerp(renderedFrame.dist, targetFrame.dist, alpha);
+                                            renderedFrame.maxHeight = lerp(renderedFrame.maxHeight, targetFrame.maxHeight, alpha);
+                                        }
+
+                                        if (targetPath.length === 0) {
+                                            renderedPath = [];
+                                        } else if (renderedPath.length !== targetPath.length) {
+                                            renderedPath = targetPath.map(p => ({ ...p }));
+                                        } else {
+                                            for (let i = 0; i < targetPath.length; i++) {
+                                                renderedPath[i].x = lerp(renderedPath[i].x, targetPath[i].x, alpha);
+                                                renderedPath[i].y = lerp(renderedPath[i].y, targetPath[i].y, alpha);
+                                                renderedPath[i].z = lerp(renderedPath[i].z, targetPath[i].z, alpha);
+                                            }
+                                        }
+
+                                        if (targetActivePath.length === 0) {
+                                            renderedActivePath = [];
+                                        } else if (renderedActivePath.length !== targetActivePath.length) {
+                                            renderedActivePath = targetActivePath.map(p => ({ ...p }));
+                                        } else {
+                                            for (let i = 0; i < targetActivePath.length; i++) {
+                                                renderedActivePath[i].x = lerp(renderedActivePath[i].x, targetActivePath[i].x, alpha);
+                                                renderedActivePath[i].y = lerp(renderedActivePath[i].y, targetActivePath[i].y, alpha);
+                                                renderedActivePath[i].z = lerp(renderedActivePath[i].z, targetActivePath[i].z, alpha);
+                                            }
+                                        }
+
+                                        return renderedFrame;
+                                    }
+
+                                    function resizeCanvasIfNeeded() {
+                                        const dpr = window.devicePixelRatio || 1;
+                                        const displayW = canvas.clientWidth;
+                                        const displayH = canvas.clientHeight;
+                                        if (displayW !== canvasCssWidth || displayH !== canvasCssHeight || dpr !== canvasDpr) {
+                                            canvasCssWidth = displayW;
+                                            canvasCssHeight = displayH;
+                                            canvasDpr = dpr;
+                                            canvas.width = Math.max(1, Math.floor(displayW * dpr));
+                                            canvas.height = Math.max(1, Math.floor(displayH * dpr));
+                                            ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+                                        }
+                                        return { displayW, displayH };
+                                    }
+
+                                    function draw(nowMs) {
                                         if (!lastData) return;
                                         
-                                        const w = canvas.width = canvas.offsetWidth * window.devicePixelRatio;
-                                        const h = canvas.height = canvas.offsetHeight * window.devicePixelRatio;
-                                        ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
-                                        
-                                        const displayW = canvas.offsetWidth;
-                                        const displayH = canvas.offsetHeight;
+                                        const { displayW, displayH } = resizeCanvasIfNeeded();
+                                        const frame = smoothVisuals(nowMs);
+                                        if (!frame) return;
                                         
                                         ctx.clearRect(0, 0, displayW, displayH);
                                         
@@ -447,11 +582,11 @@ public class WebServer {
                                         for(let x=0; x<displayW; x+=50) { ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,displayH); ctx.stroke(); }
                                         for(let y=0; y<displayH; y+=50) { ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(displayW,y); ctx.stroke(); }
 
-                                        if (lastData.path_count === 0) return;
+                                        if (renderedPath.length === 0 && renderedActivePath.length === 0) return;
 
                                         // Calculate Bounds
-                                        const targetDist = lastData.met_dist;
-                                        const maxH = Math.max(lastData.met_max_height, lastData.in_tz, lastData.in_rz) + 0.5;
+                                        const targetDist = frame.dist;
+                                        const maxH = Math.max(frame.maxHeight, frame.targetZ, frame.robotZ) + 0.5;
                                         const maxX = targetDist + 1.0;
                                         
                                         const scaleX = (displayW - 100) / maxX;
@@ -469,46 +604,63 @@ public class WebServer {
                                         }
 
                                         // Draw Hub
-                                        const hub = toScreen(targetDist, lastData.in_tz);
+                                        const hub = toScreen(targetDist, frame.targetZ);
                                         ctx.fillStyle = 'rgba(20, 184, 129, 0.2)';
-                                        ctx.strokeStyle = 'var(--success)';
+                                        ctx.strokeStyle = '#10b981';
                                         ctx.lineWidth = 2;
                                         ctx.strokeRect(hub.x - 15, hub.y, 30, 100);
                                         ctx.fillRect(hub.x - 15, hub.y, 30, 100);
                                         
                                         // Draw Robot
-                                        const bot = toScreen(0, lastData.in_rz);
+                                        const bot = toScreen(0, frame.robotZ);
                                         ctx.fillStyle = 'rgba(79, 195, 247, 0.4)';
-                                        ctx.strokeStyle = 'var(--accent)';
+                                        ctx.strokeStyle = '#4fc3f7';
                                         ctx.lineWidth = 2;
                                         ctx.strokeRect(bot.x - 10, bot.y - 10, 20, 20);
                                         ctx.fillRect(bot.x - 10, bot.y - 10, 20, 20);
 
+                                        if (renderedActivePath.length > 0) {
+                                            drawPath(renderedActivePath, frame, toScreen, '#f59e0b', 3, [8, 8]);
+                                            ctx.fillStyle = '#f59e0b';
+                                            ctx.font = '12px JetBrains Mono, monospace';
+                                            ctx.fillText(`ACTIVE ${lastData.active_pitch_deg.toFixed(1)}deg ${lastData.active_rpm.toFixed(0)}RPM`, 18, 28);
+                                        }
+
                                         // Draw Path
+                                        if (renderedPath.length > 0) {
+                                            drawPath(renderedPath, frame, toScreen, '#4fc3f7', 4, []);
+                                        }
+                                    }
+
+                                    function drawPath(path, frame, toScreen, color, width, dash) {
                                         ctx.beginPath();
-                                        ctx.lineWidth = 4;
+                                        ctx.lineWidth = width;
                                         ctx.lineCap = 'round';
                                         ctx.lineJoin = 'round';
-                                        
-                                        ctx.strokeStyle = '#4fc3f7'; 
+                                        ctx.setLineDash(dash);
+                                        ctx.strokeStyle = color; 
 
                                         // We need to calculate distance from robot for each point
                                         // The points are in global (x,y,z). 
                                         // Distance = sqrt((px-rx)^2 + (py-ry)^2)
-                                        for (let i = 0; i < lastData.path_count; i++) {
-                                            const dx = lastData.flight_path_x[i] - lastData.in_rx;
-                                            const dy = lastData.flight_path_y[i] - lastData.in_ry;
+                                        for (let i = 0; i < path.length; i++) {
+                                            const dx = path[i].x - frame.robotX;
+                                            const dy = path[i].y - frame.robotY;
                                             const dist = Math.sqrt(dx*dx + dy*dy);
-                                            const z = lastData.flight_path_z[i];
+                                            const z = path[i].z;
                                             
                                             const p = toScreen(dist, z);
                                             if (i === 0) ctx.moveTo(p.x, p.y);
                                             else ctx.lineTo(p.x, p.y);
                                         }
                                         ctx.stroke();
+                                        ctx.setLineDash([]);
                                     }
 
-                                    window.addEventListener('resize', draw);
+                                    window.addEventListener('resize', () => {
+                                        canvasCssWidth = 0;
+                                        scheduleDraw();
+                                    });
                                     connect();
                                 </script>
                             </body>

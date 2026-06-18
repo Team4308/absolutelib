@@ -16,7 +16,7 @@ package ca.team4308.absolutelib.math.trajectories.shooter;
  * <h2>Usage</h2>
  * <pre>{@code
  * MovementCompensator comp = new MovementCompensator(config);
- * ShotParameters adjusted = comp.compensate(baseShotParams, vxMps, vyMps, yawToTargetRad);
+ * ShotParameters adjusted = comp.compensate(baseShotParams, vxMps, vyMps, omegaRadPs, yawToTargetRad);
  * }</pre>
  */
 
@@ -45,21 +45,22 @@ public final class MovementCompensator {
      * target position for movement), only the yaw lead is computed to avoid
      * double-compensation of the radial component.</p>
      * 
-     * @param base              base shot parameters (from lookup or solver)
-     * @param robotVxMps        field-relative robot velocity X (m/s)
-     * @param robotVyMps        field-relative robot velocity Y (m/s)
-     * @param yawToTargetRad    yaw angle from robot to target (radians)
+     * @param base                  base shot parameters (from lookup or solver)
+     * @param robotVxMps            field-relative robot velocity X (m/s)
+     * @param robotVyMps            field-relative robot velocity Y (m/s)
+     * @param robotOmegaRadPerSec   robot angular velocity (radians/s)
+     * @param yawToTargetRad        yaw angle from robot to target (radians)
      * @return movement-compensated shot parameters
      */
 
     public ShotParameters compensate(ShotParameters base, double robotVxMps, double robotVyMps,
-                                     double yawToTargetRad) {
+                                     double robotOmegaRadPerSec, double yawToTargetRad) {
         if (!base.valid) {
             return base;
         }
 
         double speed = Math.hypot(robotVxMps, robotVyMps);
-        if (speed < 0.05) {
+        if (speed < 0.05 && Math.abs(robotOmegaRadPerSec) < 0.05) {
             return base;
         }
 
@@ -72,10 +73,15 @@ public final class MovementCompensator {
 
         double tof = base.distanceMeters / horizontalSpeed;
 
+        double tangentialVelocity = robotOmegaRadPerSec * config.getShooterRadiusMeters();
         double lateralVelocity = -robotVxMps * Math.sin(yawToTargetRad)
-                                + robotVyMps * Math.cos(yawToTargetRad);
+                                + robotVyMps * Math.cos(yawToTargetRad)
+                                + tangentialVelocity;
 
         double yawLead = Math.atan2(-lateralVelocity * tof, base.distanceMeters);
+        
+        // Add feed-forward yaw lead due to system latency
+        yawLead += robotOmegaRadPerSec * config.getSystemLatencySeconds();
 
         double gain = config.getMovingCompensationGain();
         if (gain <= 0.0) {
@@ -110,6 +116,7 @@ public final class MovementCompensator {
         }
 
     yawLead = Math.atan2(-lateralVelocity * tof, effectiveDistance);
+    yawLead += robotOmegaRadPerSec * config.getSystemLatencySeconds();
     yawLead *= gain;
 
         double rpmAdjustment = -radialVelocity * (base.rpm / exitVelocity) * gain;
@@ -131,21 +138,28 @@ public final class MovementCompensator {
      * Calculates the yaw lead angle to account for lateral robot movement.
      * The turret or drivetrain should apply this offset.
      * 
-     * @param robotVxMps     field-relative X velocity (m/s)
-     * @param robotVyMps     field-relative Y velocity (m/s)
-     * @param yawToTargetRad current yaw to target (radians)
-     * @param tofSeconds     estimated time of flight (seconds)
-     * @param distanceMeters distance to target (meters)
+     * @param robotVxMps          field-relative X velocity (m/s)
+     * @param robotVyMps          field-relative Y velocity (m/s)
+     * @param robotOmegaRadPerSec angular velocity (radians/s)
+     * @param yawToTargetRad      current yaw to target (radians)
+     * @param tofSeconds          estimated time of flight (seconds)
+     * @param distanceMeters      distance to target (meters)
      * @return yaw lead offset in radians (add to current yaw)
      */
 
     public double calculateYawLead(double robotVxMps, double robotVyMps,
+                                   double robotOmegaRadPerSec,
                                    double yawToTargetRad, double tofSeconds,
                                    double distanceMeters) {
+        double tangentialVelocity = robotOmegaRadPerSec * config.getShooterRadiusMeters();
         double lateralVelocity = -robotVxMps * Math.sin(yawToTargetRad)
-                                + robotVyMps * Math.cos(yawToTargetRad);
+                                + robotVyMps * Math.cos(yawToTargetRad)
+                                + tangentialVelocity;
 
-        return Math.atan2(-lateralVelocity * tofSeconds, distanceMeters);
+        double yawLead = Math.atan2(-lateralVelocity * tofSeconds, distanceMeters);
+        yawLead += robotOmegaRadPerSec * config.getSystemLatencySeconds();
+        
+        return yawLead;
     }
 
     private static double clamp(double value, double min, double max) {

@@ -44,7 +44,7 @@
  * ShooterSystem system = new ShooterSystem(config, table);
  * 
  * // 3. Calculate
- * ShotParameters shot = system.calculate(distance, measuredRpm, vx, vy, yaw);
+ * ShotParameters shot = system.calculate(distance, measuredRpm, vx, vy, omegaRadPs, yaw);
  * 
  * // 4. Validate & fire
  * if (system.isReadyToFire(measuredRpm)) {

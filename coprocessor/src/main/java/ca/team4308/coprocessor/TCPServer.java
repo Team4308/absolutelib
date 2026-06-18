@@ -327,6 +327,9 @@ public class TCPServer implements Runnable {
         if (result != null) {
             packet.setFlightPath(result.getFlightPath());
         }
+        packet.activeRpm = request.activeRpm;
+        packet.activePitchDeg = request.activePitchDegrees;
+        packet.setActiveFlightPath(solverWrapper.projectActiveFlightPath(request));
         
         // Flywheel Sim
         if (result != null && result.hasFlywheelData()) {

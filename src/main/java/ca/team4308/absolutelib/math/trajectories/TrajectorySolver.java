@@ -1138,7 +1138,7 @@ public class TrajectorySolver {
                     input.getShooterX(), input.getShooterY(), input.getShooterZ(),
                     actualVelocity, pitchRad, requiredYaw,
                     pitchFw.ballSpinRpm,
-                    input.getRobotVx(), input.getRobotVy(),
+                    input.getEffectiveRobotVx(), input.getEffectiveRobotVy(),
                     effectiveTargetX, effectiveTargetY, input.getTargetZ(),
                     input.getTargetRadius()
             );
@@ -1148,7 +1148,7 @@ public class TrajectorySolver {
                         gp,
                         input.getShooterX(), input.getShooterY(), input.getShooterZ(),
                         pitchRad, requiredYaw, pitchFw.ballSpinRpm,
-                        input.getRobotVx(), input.getRobotVy(),
+                        input.getEffectiveRobotVx(), input.getEffectiveRobotVy(),
                         effectiveTargetX, effectiveTargetY, input.getTargetZ(),
                         input.getTargetRadius(), actualVelocity);
                 if (refined != null) {
@@ -1302,7 +1302,7 @@ public class TrajectorySolver {
                     input.getShooterX(), input.getShooterY(), input.getShooterZ(),
                     actualVelocity, pitchRad, requiredYaw,
                     pitchFw.ballSpinRpm,
-                    input.getRobotVx(), input.getRobotVy(),
+                    input.getEffectiveRobotVx(), input.getEffectiveRobotVy(),
                     iterTargetX, iterTargetY, input.getTargetZ(),
                     input.getTargetRadius()
             );
@@ -1312,7 +1312,7 @@ public class TrajectorySolver {
                         gp,
                         input.getShooterX(), input.getShooterY(), input.getShooterZ(),
                         pitchRad, requiredYaw, pitchFw.ballSpinRpm,
-                        input.getRobotVx(), input.getRobotVy(),
+                        input.getEffectiveRobotVx(), input.getEffectiveRobotVy(),
                         iterTargetX, iterTargetY, input.getTargetZ(),
                         input.getTargetRadius(), actualVelocity);
                 if (refined != null) {
@@ -1434,7 +1434,7 @@ public class TrajectorySolver {
                     input.getShooterX(), input.getShooterY(), input.getShooterZ(),
                     actualVelocity, pitchRad, requiredYaw,
                     pitchFw.ballSpinRpm,
-                    input.getRobotVx(), input.getRobotVy(),
+                    input.getEffectiveRobotVx(), input.getEffectiveRobotVy(),
                     iterTargetX, iterTargetY, input.getTargetZ(),
                     input.getTargetRadius()
             );
@@ -1445,7 +1445,7 @@ public class TrajectorySolver {
                         gp,
                         input.getShooterX(), input.getShooterY(), input.getShooterZ(),
                         pitchRad, requiredYaw, pitchFw.ballSpinRpm,
-                        input.getRobotVx(), input.getRobotVy(),
+                        input.getEffectiveRobotVx(), input.getEffectiveRobotVy(),
                         iterTargetX, iterTargetY, input.getTargetZ(),
                         input.getTargetRadius(), actualVelocity);
                 if (refined != null && refined.hitTarget) {
@@ -1546,7 +1546,7 @@ public class TrajectorySolver {
         double targetRadius, double timeOfFlight,
         double entryAngleDeg, double requiredWheelRpm,
         double distanceMeters, double maxHeight) {
-        double robotVelNorm = Math.hypot(input.getRobotVx(), input.getRobotVy());
+        double robotVelNorm = Math.hypot(input.getEffectiveRobotVx(), input.getEffectiveRobotVy());
         double accuracyScore;
         if (targetRadius > 0) {
             double relMiss = missDistance / targetRadius;
@@ -1846,8 +1846,8 @@ public class TrajectorySolver {
         // using them as a high-weight scoring bias in computeSweepQualityScore 
         // instead of a hard override. This ensures physics checks are always performed.
 
-        boolean moving = Math.abs(input.getRobotVx()) > SolverConstants.getMovementThresholdMps()
-                || Math.abs(input.getRobotVy()) > SolverConstants.getMovementThresholdMps();
+        boolean moving = Math.abs(input.getEffectiveRobotVx()) > SolverConstants.getMovementThresholdMps()
+                || Math.abs(input.getEffectiveRobotVy()) > SolverConstants.getMovementThresholdMps();
 
         // Cache the flywheel in a local variable so parallel precompute runs don't
         // race on the shared solver state.
@@ -1862,8 +1862,8 @@ public class TrajectorySolver {
 
         for (int i = 0; i < convergenceIterations; i++) {
             if (moving) {
-                effectiveTargetX = input.getTargetX() - input.getRobotVx() * estimatedTof;
-                effectiveTargetY = input.getTargetY() - input.getRobotVy() * estimatedTof;
+                effectiveTargetX = input.getTargetX() - input.getEffectiveRobotVx() * estimatedTof;
+                effectiveTargetY = input.getTargetY() - input.getEffectiveRobotVy() * estimatedTof;
                 double dx = effectiveTargetX - input.getShooterX();
                 double dy = effectiveTargetY - input.getShooterY();
                 distance = Math.sqrt(dx * dx + dy * dy);
@@ -2056,7 +2056,7 @@ public class TrajectorySolver {
                             gamePiece,
                             input.getShooterX(), input.getShooterY(), input.getShooterZ(),
                             fw.exitVelocityMps, bestPitchAngle, bestYaw, fw.ballSpinRpm,
-                            input.getRobotVx(), input.getRobotVy(),
+                            input.getEffectiveRobotVx(), input.getEffectiveRobotVy(),
                             effectiveTargetX, effectiveTargetY, input.getTargetZ(),
                             input.getTargetRadius());
 
@@ -2065,7 +2065,7 @@ public class TrajectorySolver {
                                 gamePiece,
                                 input.getShooterX(), input.getShooterY(), input.getShooterZ(),
                                 bestPitchAngle, bestYaw, fw.ballSpinRpm,
-                                input.getRobotVx(), input.getRobotVy(),
+                                input.getEffectiveRobotVx(), input.getEffectiveRobotVy(),
                                 effectiveTargetX, effectiveTargetY, input.getTargetZ(),
                                 input.getTargetRadius(), fw.exitVelocityMps);
                         if (refined != null) {
@@ -2305,7 +2305,7 @@ public class TrajectorySolver {
                 input.getShooterX(), input.getShooterY(), input.getShooterZ(),
                 velocity, pitchRadians, input.getRequiredYawRadians(),
                 simResult.ballSpinRpm,
-                input.getRobotVx(), input.getRobotVy(),
+                input.getEffectiveRobotVx(), input.getEffectiveRobotVy(),
                 input.getTargetX(), input.getTargetY(), input.getTargetZ(),
                 input.getTargetRadius()
         );
@@ -2362,8 +2362,8 @@ public class TrajectorySolver {
         double actualVelocity = simResult.exitVelocityMps;
         double ballSpin = simResult.ballSpinRpm;
 
-        boolean moving = Math.abs(input.getRobotVx()) > SolverConstants.getMovementThresholdMps()
-                || Math.abs(input.getRobotVy()) > SolverConstants.getMovementThresholdMps();
+        boolean moving = Math.abs(input.getEffectiveRobotVx()) > SolverConstants.getMovementThresholdMps()
+                || Math.abs(input.getEffectiveRobotVy()) > SolverConstants.getMovementThresholdMps();
         int convergenceIterations = moving
                 ? SolverConstants.getMovingConvergenceIterations()
                 : SolverConstants.getStationaryIterations();
@@ -2421,7 +2421,7 @@ public class TrajectorySolver {
                     gamePiece,
                     input.getShooterX(), input.getShooterY(), input.getShooterZ(),
                     actualVelocity, pitchRad, requiredYaw, ballSpin,
-                    input.getRobotVx(), input.getRobotVy(),
+                    input.getEffectiveRobotVx(), input.getEffectiveRobotVy(),
                     effectiveTargetX, effectiveTargetY, input.getTargetZ(),
                     input.getTargetRadius()
             );

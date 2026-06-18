@@ -29,7 +29,7 @@ import ca.team4308.absolutelib.math.trajectories.TrajectorySolver;
  * system.setMode(ShotMode.LOOKUP_WITH_SOLVER_FALLBACK);
  *
  * // In periodic:
- * ShotParameters shot = system.calculate(dist, rpm, vx, vy, yaw);
+ * ShotParameters shot = system.calculate(dist, rpm, vx, vy, omegaRadPs, yaw);
  * if (shot.valid) {
  *     pivot.setPosition(shot.pitchDegrees);
  *     flywheel.setVelocity(shot.rpm);
@@ -139,11 +139,12 @@ public final class ShooterSystem {
      * @param measuredRpm current flywheel RPM from sensors (0 if not available)
      * @param robotVxMps field-relative X velocity (0 if stationary)
      * @param robotVyMps field-relative Y velocity (0 if stationary)
+     * @param robotOmegaRadPerSec angular velocity of the robot (radians/sec)
      * @param yawToTargetRad yaw angle from robot to target in radians
      * @return validated shot parameters ready for use
      */
     public ShotParameters calculate(double distanceMeters, double measuredRpm,
-            double robotVxMps, double robotVyMps,
+            double robotVxMps, double robotVyMps, double robotOmegaRadPerSec,
             double yawToTargetRad) {
         SafetyValidator.ValidationResult distCheck = safetyValidator.validateDistance(distanceMeters);
         if (!distCheck.safe) {
@@ -237,10 +238,13 @@ public final class ShooterSystem {
         // TrajectorySolver already incorporates robot velocity in its physics simulation.
         ShotParameters compensated;
         if (base.source == ShotParameters.Source.SOLVER) {
-            compensated = base;
+            // TrajectorySolver incorporates linear velocity internally, but we still
+            // need to apply the yaw lead from tangential velocity and latency in the compensator.
+            compensated = movementCompensator.compensate(
+                    base, robotVxMps, robotVyMps, robotOmegaRadPerSec, yawToTargetRad);
         } else {
             compensated = movementCompensator.compensate(
-                    base, robotVxMps, robotVyMps, yawToTargetRad);
+                    base, robotVxMps, robotVyMps, robotOmegaRadPerSec, yawToTargetRad);
         }
 
         ShotParameters corrected;
@@ -273,7 +277,7 @@ public final class ShooterSystem {
      * Simplified calculate for stationary robot with no RPM feedback.
      */
     public ShotParameters calculate(double distanceMeters) {
-        return calculate(distanceMeters, 0, 0, 0, 0);
+        return calculate(distanceMeters, 0, 0, 0, 0, 0);
     }
 
     /**

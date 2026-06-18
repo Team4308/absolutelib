@@ -40,6 +40,20 @@ public class FullTelemetryPacket {
     @JsonProperty("flight_path_z")
     public double[] flightPathZ = new double[0];
 
+    // Active hardware projection path
+    @JsonProperty("active_rpm")
+    public double activeRpm;
+    @JsonProperty("active_pitch_deg")
+    public double activePitchDeg;
+    @JsonProperty("active_path_count")
+    public int activePathCount;
+    @JsonProperty("active_path_x")
+    public double[] activePathX = new double[0];
+    @JsonProperty("active_path_y")
+    public double[] activePathY = new double[0];
+    @JsonProperty("active_path_z")
+    public double[] activePathZ = new double[0];
+
     // Flywheel Sim
     @JsonProperty("fw_wheel_rpm")
     public double fwWheelRpm;
@@ -137,11 +151,26 @@ public class FullTelemetryPacket {
     public FullTelemetryPacket() {}
 
     public void setFlightPath(List<edu.wpi.first.math.geometry.Pose3d> flightPath) {
+        setPath(flightPath, false);
+    }
+
+    public void setActiveFlightPath(List<edu.wpi.first.math.geometry.Pose3d> flightPath) {
+        setPath(flightPath, true);
+    }
+
+    private void setPath(List<edu.wpi.first.math.geometry.Pose3d> flightPath, boolean activePath) {
         if (flightPath == null || flightPath.isEmpty()) {
-            this.pathCount = 0;
-            this.flightPathX = new double[0];
-            this.flightPathY = new double[0];
-            this.flightPathZ = new double[0];
+            if (activePath) {
+                this.activePathCount = 0;
+                this.activePathX = new double[0];
+                this.activePathY = new double[0];
+                this.activePathZ = new double[0];
+            } else {
+                this.pathCount = 0;
+                this.flightPathX = new double[0];
+                this.flightPathY = new double[0];
+                this.flightPathZ = new double[0];
+            }
             return;
         }
 
@@ -160,16 +189,28 @@ public class FullTelemetryPacket {
             sampled.add(flightPath.get(flightPath.size() - 1));
         }
 
-        this.pathCount = sampled.size();
-        this.flightPathX = new double[this.pathCount];
-        this.flightPathY = new double[this.pathCount];
-        this.flightPathZ = new double[this.pathCount];
+        int count = sampled.size();
+        double[] xs = new double[count];
+        double[] ys = new double[count];
+        double[] zs = new double[count];
 
-        for (int i = 0; i < this.pathCount; i++) {
+        for (int i = 0; i < count; i++) {
             edu.wpi.first.math.geometry.Pose3d pose = sampled.get(i);
-            this.flightPathX[i] = pose.getX();
-            this.flightPathY[i] = pose.getY();
-            this.flightPathZ[i] = pose.getZ();
+            xs[i] = pose.getX();
+            ys[i] = pose.getY();
+            zs[i] = pose.getZ();
+        }
+
+        if (activePath) {
+            this.activePathCount = count;
+            this.activePathX = xs;
+            this.activePathY = ys;
+            this.activePathZ = zs;
+        } else {
+            this.pathCount = count;
+            this.flightPathX = xs;
+            this.flightPathY = ys;
+            this.flightPathZ = zs;
         }
     }
 }

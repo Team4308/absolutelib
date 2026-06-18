@@ -49,6 +49,9 @@ public final class ShooterConfig {
 
     private final double safetyMaxExitVelocity;
     private final double rpmDropRecoveryBoost;
+    
+    private final double systemLatencySeconds;
+    private final double shooterRadiusMeters;
 
     private ShooterConfig(Builder b) {
         this.minPitchDegrees = b.minPitchDegrees;
@@ -65,6 +68,8 @@ public final class ShooterConfig {
         this.movingIterations = b.movingIterations;
         this.safetyMaxExitVelocity = b.safetyMaxExitVelocity;
         this.rpmDropRecoveryBoost = b.rpmDropRecoveryBoost;
+        this.systemLatencySeconds = b.systemLatencySeconds;
+        this.shooterRadiusMeters = b.shooterRadiusMeters;
     }
 
     public double getMinPitchDegrees() { return minPitchDegrees; }
@@ -81,6 +86,8 @@ public final class ShooterConfig {
     public int getMovingIterations() { return movingIterations; }
     public double getSafetyMaxExitVelocity() { return safetyMaxExitVelocity; }
     public double getRpmDropRecoveryBoost() { return rpmDropRecoveryBoost; }
+    public double getSystemLatencySeconds() { return systemLatencySeconds; }
+    public double getShooterRadiusMeters() { return shooterRadiusMeters; }
 
     /** Converts RPM to approximate exit velocity using the configured factor. */
     public double rpmToVelocity(double rpm) {
@@ -111,6 +118,8 @@ public final class ShooterConfig {
                 .movingIterations(5)
                 .safetyMaxExitVelocity(30.0)
                 .rpmDropRecoveryBoost(0.0)
+                .systemLatencySeconds(0.05)
+                .shooterRadiusMeters(0.2)
                 .build();
     }
 
@@ -127,7 +136,9 @@ public final class ShooterConfig {
                 .movingCompensationGain(movingCompensationGain)
                 .movingIterations(movingIterations)
                 .safetyMaxExitVelocity(safetyMaxExitVelocity)
-                .rpmDropRecoveryBoost(rpmDropRecoveryBoost);
+                .rpmDropRecoveryBoost(rpmDropRecoveryBoost)
+                .systemLatencySeconds(systemLatencySeconds)
+                .shooterRadiusMeters(shooterRadiusMeters);
     }
 
     public static final class Builder {
@@ -145,6 +156,8 @@ public final class ShooterConfig {
         private int movingIterations = 5;
         private double safetyMaxExitVelocity = 30.0;
         private double rpmDropRecoveryBoost = 0.0;
+        private double systemLatencySeconds = 0.05;
+        private double shooterRadiusMeters = 0.2;
 
         /** Set min and max pitch in degrees. */
         public Builder pitchLimits(double minDeg, double maxDeg) {
@@ -212,6 +225,18 @@ public final class ShooterConfig {
         /** Flat RPM boost applied to the final output to compensate for the wheels dropping speed upon ball contact. */
         public Builder rpmDropRecoveryBoost(double boostRpm) {
             this.rpmDropRecoveryBoost = boostRpm;
+            return this;
+        }
+
+        /** System latency (feed time + spin-up) in seconds. */
+        public Builder systemLatencySeconds(double latency) {
+            this.systemLatencySeconds = latency;
+            return this;
+        }
+
+        /** Distance from the robot's center of rotation to the shooter barrel in meters. */
+        public Builder shooterRadiusMeters(double radius) {
+            this.shooterRadiusMeters = radius;
             return this;
         }
 

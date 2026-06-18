@@ -47,6 +47,12 @@ public class TrajectoryRequest {
     @JsonProperty("current_rpm")
     public double currentRpm;
 
+    @JsonProperty("active_rpm")
+    public double activeRpm;
+
+    @JsonProperty("active_pitch_deg")
+    public double activePitchDegrees;
+
     // Optional battery voltage / percentage from robot
     @JsonProperty("battery")
     public double battery = 100.0;
@@ -54,8 +60,8 @@ public class TrajectoryRequest {
     public TrajectoryRequest() {
     }
 
-    // Binary Protocol Support (96 bytes)
-    public static final int BINARY_SIZE = 96;
+    // Binary Protocol Support (112 bytes)
+    public static final int BINARY_SIZE = 112;
     public static final byte MAGIC_BYTE = 0x42;
 
     public void toBuffer(ByteBuffer buffer) {
@@ -71,6 +77,8 @@ public class TrajectoryRequest {
         buffer.putDouble(targetY);
         buffer.putDouble(targetZ);
         buffer.putDouble(currentRpm);
+        buffer.putDouble(activeRpm);
+        buffer.putDouble(activePitchDegrees);
     }
 
     public static TrajectoryRequest fromBuffer(ByteBuffer buffer) {
@@ -87,6 +95,8 @@ public class TrajectoryRequest {
         req.targetY = buffer.getDouble();
         req.targetZ = buffer.getDouble();
         req.currentRpm = buffer.getDouble();
+        req.activeRpm = buffer.getDouble();
+        req.activePitchDegrees = buffer.getDouble();
         // Buffer format; keep safe default if no extra data.
         if (buffer.remaining() >= Double.BYTES) {
             req.battery = buffer.getDouble();

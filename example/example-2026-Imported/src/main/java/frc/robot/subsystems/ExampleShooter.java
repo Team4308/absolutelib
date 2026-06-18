@@ -403,11 +403,12 @@ public class ExampleShooter extends AbsoluteSubsystem {
         lastDistanceMeters = Math.hypot(dx, dy);
         targetYawDegrees = Math.toDegrees(yawRad);
 
-        double vx = 0, vy = 0;
+        double vx = 0, vy = 0, omega = 0;
         if (chassisSpeedsSupplier != null) {
             ChassisSpeeds speeds = chassisSpeedsSupplier.get();
             vx = speeds.vxMetersPerSecond;
             vy = speeds.vyMetersPerSecond;
+            omega = speeds.omegaRadiansPerSecond;
         }
 
         double measuredRpm = currentRpmSupplier != null ? currentRpmSupplier.get() : 0;
@@ -419,7 +420,7 @@ public class ExampleShooter extends AbsoluteSubsystem {
         req.robotHeadingRad = yawRad;
         req.vxMps = vx;
         req.vyMps = vy;
-        req.omegaRadPerSecond = chassisSpeedsSupplier != null ? chassisSpeedsSupplier.get().omegaRadiansPerSecond : 0.0;
+        req.omegaRadPerSecond = omega;
         req.targetX = targetPosition.getX();
         req.targetY = targetPosition.getY();
         req.targetZ = targetPosition.getZ();
@@ -479,11 +480,11 @@ public class ExampleShooter extends AbsoluteSubsystem {
                             .targetPositionMeters(targetPosition.getX(), targetPosition.getY(), targetPosition.getZ())
                             .targetRadiusMeters(0.45)
                             .includeAirResistance(true)
-                            .robotVelocity(vx, vy)
+                            .robotVelocity(vx, vy, omega, shooterSystem.getConfig().getShooterRadiusMeters())
                             .build()
             );
             recordOutput("Shooter/CalculatedOnCoProcessor", false);
-            currentShot = shooterSystem.calculate(lastDistanceMeters, measuredRpm, vx, vy, yawRad);
+            currentShot = shooterSystem.calculate(lastDistanceMeters, measuredRpm, vx, vy, omega, yawRad);
         }
         long endTime = System.nanoTime();
         lastComputationTimeMs = (endTime - startTime) / 1_000_000.0;

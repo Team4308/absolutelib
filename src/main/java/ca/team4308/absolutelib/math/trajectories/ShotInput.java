@@ -73,6 +73,8 @@ public class ShotInput {
 
     private final double robotVx;
     private final double robotVy;
+    private final double robotOmegaRadPerSec;
+    private final double shooterRadiusMeters;
 
     private final boolean includeAirResistance;
 
@@ -101,6 +103,7 @@ public class ShotInput {
                       double targetX, double targetY, double targetZ,
                       double targetRadius,
                       double robotVx, double robotVy,
+                      double robotOmegaRadPerSec, double shooterRadiusMeters,
                       boolean includeAirResistance,
                       ShotPreference shotPreference, int maxCandidates,
                       double minPitchDegrees, double maxPitchDegrees,
@@ -119,6 +122,8 @@ public class ShotInput {
         this.targetRadius = targetRadius;
         this.robotVx = robotVx;
         this.robotVy = robotVy;
+        this.robotOmegaRadPerSec = robotOmegaRadPerSec;
+        this.shooterRadiusMeters = shooterRadiusMeters;
         this.includeAirResistance = includeAirResistance;
         this.shotPreference = shotPreference;
         this.maxCandidates = maxCandidates;
@@ -150,6 +155,8 @@ public class ShotInput {
         private double targetRadius = 0.15;
         private double robotVx = 0;
         private double robotVy = 0;
+        private double robotOmegaRadPerSec = 0;
+        private double shooterRadiusMeters = 0;
         private boolean includeAirResistance = true;
 
         private ShotPreference shotPreference = ShotPreference.AUTO;
@@ -270,12 +277,24 @@ public class ShotInput {
         }
 
         /**
-         * Sets robot velocity in meters/sec (field-relative).
+         * Sets robot velocity in meters/sec (field-relative) and angular velocity.
          */
-
+        public Builder robotVelocity(double vx, double vy, double omegaRadPerSec, double shooterRadiusM) {
+            this.robotVx = vx;
+            this.robotVy = vy;
+            this.robotOmegaRadPerSec = omegaRadPerSec;
+            this.shooterRadiusMeters = shooterRadiusM;
+            return this;
+        }
+        
+        /**
+         * Sets robot velocity in meters/sec (field-relative) without angular velocity.
+         */
         public Builder robotVelocity(double vx, double vy) {
             this.robotVx = vx;
             this.robotVy = vy;
+            this.robotOmegaRadPerSec = 0;
+            this.shooterRadiusMeters = 0;
             return this;
         }
 
@@ -476,7 +495,7 @@ public class ShotInput {
                 shooterYaw,
                 targetX, targetY, targetZ,
                 targetRadius,
-                robotVx, robotVy,
+                robotVx, robotVy, robotOmegaRadPerSec, shooterRadiusMeters,
                 includeAirResistance,
                 shotPreference, maxCandidates,
                 minPitchDegrees, maxPitchDegrees,
@@ -583,6 +602,19 @@ public class ShotInput {
     public double getTargetRadius() { return targetRadius; }
     public double getRobotVx() { return robotVx; }
     public double getRobotVy() { return robotVy; }
+    
+    /** Gets effective field-relative X velocity including tangential spin velocity */
+    public double getEffectiveRobotVx() {
+        return robotVx - robotOmegaRadPerSec * shooterRadiusMeters * Math.sin(shooterYaw);
+    }
+    
+    /** Gets effective field-relative Y velocity including tangential spin velocity */
+    public double getEffectiveRobotVy() {
+        return robotVy + robotOmegaRadPerSec * shooterRadiusMeters * Math.cos(shooterYaw);
+    }
+    
+    public double getRobotOmegaRadPerSec() { return robotOmegaRadPerSec; }
+    public double getShooterRadiusMeters() { return shooterRadiusMeters; }
     public boolean isIncludeAirResistance() { return includeAirResistance; }
 
     public ShotPreference getShotPreference() { return shotPreference; }

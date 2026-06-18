@@ -94,11 +94,11 @@ public class TrajectoryWrapper {
                         .targetPositionMeters(req.targetX, req.targetY, req.targetZ)
                         .targetRadiusMeters(0.45)
                         .includeAirResistance(true)
-                        .robotVelocity(req.vxMps, req.vyMps)
+                        .robotVelocity(req.vxMps, req.vyMps, req.omegaRadPerSecond, shooterSystem.getConfig().getShooterRadiusMeters())
                         .build()
         );
 
-        ShotParameters shot = shooterSystem.calculate(distanceMeters, req.currentRpm, req.vxMps, req.vyMps, yawRadians);
+        ShotParameters shot = shooterSystem.calculate(distanceMeters, req.currentRpm, req.vxMps, req.vyMps, req.omegaRadPerSecond, yawRadians);
 
         // Optional Prediction Loop
         if (Config.PREDICTION_ENABLED && shot.valid) {
@@ -121,10 +121,10 @@ public class TrajectoryWrapper {
                                 .targetPositionMeters(req.targetX, req.targetY, req.targetZ)
                                 .targetRadiusMeters(0.45)
                                 .includeAirResistance(true)
-                                .robotVelocity(req.vxMps, req.vyMps)
+                                .robotVelocity(req.vxMps, req.vyMps, req.omegaRadPerSecond, shooterSystem.getConfig().getShooterRadiusMeters())
                                 .build()
                     );
-                    shot = shooterSystem.calculate(pDistance, req.currentRpm, req.vxMps, req.vyMps, pYaw);
+                    shot = shooterSystem.calculate(pDistance, req.currentRpm, req.vxMps, req.vyMps, req.omegaRadPerSecond, pYaw);
                     yawRadians = pYaw;
                 }
             }
@@ -157,6 +157,56 @@ public class TrajectoryWrapper {
     
     public ShooterSystem getShooterSystem() {
         return shooterSystem;
+    }
+
+    public java.util.List<edu.wpi.first.math.geometry.Pose3d> projectActiveFlightPath(TrajectoryRequest req) {
+        if (req == null || req.activeRpm <= 0 || !Double.isFinite(req.activePitchDegrees)) {
+            return java.util.List.of();
+        }
+
+        double exitVelocity = shooterSystem.getConfig().rpmToVelocity(req.activeRpm);
+        if (exitVelocity <= 0 || !Double.isFinite(exitVelocity)) {
+            return java.util.List.of();
+        }
+
+        try {
+            double yawRadians = Math.atan2(req.targetY - req.robotY, req.targetX - req.robotX);
+            ca.team4308.absolutelib.math.trajectories.physics.ProjectileMotion projectileMotion =
+                    new ca.team4308.absolutelib.math.trajectories.physics.ProjectileMotion(
+                            ca.team4308.absolutelib.math.trajectories.physics.AirResistance.withMagnus());
+            ca.team4308.absolutelib.math.trajectories.physics.ProjectileMotion.TrajectoryResult sim =
+                    projectileMotion.simulate(
+                            ca.team4308.absolutelib.math.trajectories.gamepiece.GamePieces.REBUILT_2026_BALL,
+                            req.robotX, req.robotY, shooterHeightMeters,
+                            exitVelocity,
+                            Math.toRadians(req.activePitchDegrees),
+                            yawRadians,
+                            0,
+                            req.vxMps, req.vyMps,
+                            req.targetX, req.targetY, req.targetZ,
+                            0.45);
+
+            java.util.List<edu.wpi.first.math.geometry.Pose3d> path = new java.util.ArrayList<>();
+            if (sim.trajectory == null) {
+                return path;
+            }
+
+            for (ca.team4308.absolutelib.math.trajectories.physics.ProjectileMotion.TrajectoryState state : sim.trajectory) {
+                if (state == null) {
+                    break;
+                }
+                path.add(new edu.wpi.first.math.geometry.Pose3d(
+                        new edu.wpi.first.math.geometry.Translation3d(state.x, state.y, state.z),
+                        new edu.wpi.first.math.geometry.Rotation3d(
+                                0.0,
+                                Math.atan2(state.vz, Math.sqrt(state.vx * state.vx + state.vy * state.vy)),
+                                Math.atan2(state.vy, state.vx))));
+            }
+
+            return path;
+        } catch (Exception e) {
+            return java.util.List.of();
+        }
     }
 
     public void updateConfiguration(ca.team4308.absolutelib.math.trajectories.network.ConfigurationPacket config) {

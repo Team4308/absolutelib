@@ -1,6 +1,11 @@
 # Changelog for AbsoluteLib v2
 
-
+# 2.2.5 - Angular Velocity & Latency Compensation
+- **Tangential Velocity Compensation**: `MovementCompensator` now natively accounts for tangential spin momentum when calculating yaw lead, making 'Shoot-on-the-Fly' highly accurate during rapid turns.
+- **System Latency Feed-Forward**: Solved the issue where robot chassis spin causes heading drift between code calculation and the physical ball exiting the barrel.
+- **Physics Engine Parity**: Updated `ShotInput` and `TrajectorySolver` to integrate effective velocities into the RK4 simulation, perfectly modeling the lateral drift from spinning.
+- **Coprocessor Trajectory Input**: Updated `TrajectoryWrapper` to pipe `omegaRadPerSecond` directly into the coprocessor UDP packets.
+- **Documentation Updates**: Updated trajectory code examples and interactive web documentation to reflect the new `omega` parameters.
 
 # 2.2.3 - Full Network Synchronization
 - **Bidirectional Trajectory Sync**: Implemented a 1:1 network parity layer that mirrors all robot-side trajectory configurations to the coprocessor in real-time.
