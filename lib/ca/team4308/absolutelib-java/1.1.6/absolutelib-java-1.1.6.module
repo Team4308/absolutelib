@@ -1,0 +1,263 @@
+{
+  "formatVersion": "1.1",
+  "component": {
+    "group": "ca.team4308",
+    "module": "absolutelib-java",
+    "version": "1.1.6",
+    "attributes": {
+      "org.gradle.status": "release"
+    }
+  },
+  "createdBy": {
+    "gradle": {
+      "version": "9.1.0"
+    }
+  },
+  "variants": [
+    {
+      "name": "apiElements",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.jvm.version": 17,
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-api"
+      },
+      "files": [
+        {
+          "name": "absolutelib-java-1.1.6.jar",
+          "url": "absolutelib-java-1.1.6.jar",
+          "size": 128400,
+          "sha512": "21af7874f50c37466cea6ff70ce0efa413a673474e56f37740ec9afffefd1dfc82be7a7723b0cc150a432dddde2e23d6d241ba01fd7a19cec1204601d1c10ce9",
+          "sha256": "13048c5380221083ee347982c9f5c9fa1adf49b102dc52be18e0cd5c9db7a9be",
+          "sha1": "154caff6afba95a56e447ce7d1519730f56bf306",
+          "md5": "21fedbd2b3887f55e51ec1f81aa4a8ac"
+        }
+      ]
+    },
+    {
+      "name": "runtimeElements",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.jvm.version": 17,
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-runtime"
+      },
+      "dependencies": [
+        {
+          "group": "edu.wpi.first.cscore",
+          "module": "cscore-java",
+          "version": {
+            "requires": "2025.1.1"
+          }
+        },
+        {
+          "group": "edu.wpi.first.cameraserver",
+          "module": "cameraserver-java",
+          "version": {
+            "requires": "2025.1.1"
+          }
+        },
+        {
+          "group": "edu.wpi.first.ntcore",
+          "module": "ntcore-java",
+          "version": {
+            "requires": "2025.1.1"
+          }
+        },
+        {
+          "group": "edu.wpi.first.wpilibj",
+          "module": "wpilibj-java",
+          "version": {
+            "requires": "2025.1.1"
+          }
+        },
+        {
+          "group": "edu.wpi.first.wpilibNewCommands",
+          "module": "wpilibNewCommands-java",
+          "version": {
+            "requires": "2025.1.1"
+          }
+        },
+        {
+          "group": "edu.wpi.first.wpimath",
+          "module": "wpimath-java",
+          "version": {
+            "requires": "2025.1.1"
+          }
+        },
+        {
+          "group": "edu.wpi.first.hal",
+          "module": "hal-java",
+          "version": {
+            "requires": "2025.1.1"
+          }
+        },
+        {
+          "group": "edu.wpi.first.wpiutil",
+          "module": "wpiutil-java",
+          "version": {
+            "requires": "2025.1.1"
+          }
+        },
+        {
+          "group": "edu.wpi.first.wpiunits",
+          "module": "wpiunits-java",
+          "version": {
+            "requires": "2025.1.1"
+          }
+        },
+        {
+          "group": "edu.wpi.first.apriltag",
+          "module": "apriltag-java",
+          "version": {
+            "requires": "2025.1.1"
+          }
+        },
+        {
+          "group": "com.ctre.phoenix",
+          "module": "api-java",
+          "version": {
+            "requires": "5.33.1"
+          }
+        },
+        {
+          "group": "com.ctre.phoenix",
+          "module": "wpiapi-java",
+          "version": {
+            "requires": "5.33.1"
+          }
+        },
+        {
+          "group": "com.ctre.phoenix6",
+          "module": "wpiapi-java",
+          "version": {
+            "requires": "25.4.0"
+          }
+        },
+        {
+          "group": "com.revrobotics.frc",
+          "module": "REVLib-java",
+          "version": {
+            "requires": "2025.0.0"
+          }
+        },
+        {
+          "group": "com.fasterxml.jackson.core",
+          "module": "jackson-annotations",
+          "version": {
+            "requires": "2.17.2"
+          }
+        },
+        {
+          "group": "com.fasterxml.jackson.core",
+          "module": "jackson-core",
+          "version": {
+            "requires": "2.17.2"
+          }
+        },
+        {
+          "group": "com.fasterxml.jackson.core",
+          "module": "jackson-databind",
+          "version": {
+            "requires": "2.17.2"
+          }
+        },
+        {
+          "group": "com.google.code.gson",
+          "module": "gson",
+          "version": {
+            "requires": "2.10.1"
+          }
+        },
+        {
+          "group": "org.slf4j",
+          "module": "slf4j-api",
+          "version": {
+            "requires": "2.0.9"
+          }
+        },
+        {
+          "group": "org.slf4j",
+          "module": "slf4j-simple",
+          "version": {
+            "requires": "2.0.9"
+          }
+        },
+        {
+          "group": "org.littletonrobotics.akit",
+          "module": "akit-java",
+          "version": {
+            "requires": "4.1.2"
+          }
+        },
+        {
+          "group": "us.hebi.quickbuf",
+          "module": "quickbuf-runtime",
+          "version": {
+            "requires": "1.3.3"
+          }
+        },
+        {
+          "group": "com.pathplanner.lib",
+          "module": "PathplannerLib-java",
+          "version": {
+            "requires": "2025.2.7"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "absolutelib-java-1.1.6.jar",
+          "url": "absolutelib-java-1.1.6.jar",
+          "size": 128400,
+          "sha512": "21af7874f50c37466cea6ff70ce0efa413a673474e56f37740ec9afffefd1dfc82be7a7723b0cc150a432dddde2e23d6d241ba01fd7a19cec1204601d1c10ce9",
+          "sha256": "13048c5380221083ee347982c9f5c9fa1adf49b102dc52be18e0cd5c9db7a9be",
+          "sha1": "154caff6afba95a56e447ce7d1519730f56bf306",
+          "md5": "21fedbd2b3887f55e51ec1f81aa4a8ac"
+        }
+      ]
+    },
+    {
+      "name": "sourcesElements",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.usage": "java-runtime"
+      },
+      "files": [
+        {
+          "name": "absolutelib-java-1.1.6-sources.jar",
+          "url": "absolutelib-java-1.1.6-sources.jar",
+          "size": 62372,
+          "sha512": "34635b80d973bcbb3ab09493bf4afef4651a432321ca0ed45521bd996736df0f9d207bed1f462f89323e9761cb56deb24acb15b95b5c5583b2b4ed03f381d85a",
+          "sha256": "717a3f80c1df1f6e4de43b55ec37d3e2f31fe6f6c8f023d2c324f166956ca9de",
+          "sha1": "89073eea0dab8d4622ad24d6d04bc0dd39552def",
+          "md5": "f469462777a96b8eff9e1d9b0f6ef21f"
+        }
+      ]
+    },
+    {
+      "name": "javadocElements",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "javadoc",
+        "org.gradle.usage": "java-runtime"
+      },
+      "files": [
+        {
+          "name": "absolutelib-java-1.1.6-javadoc.jar",
+          "url": "absolutelib-java-1.1.6-javadoc.jar",
+          "size": 380305,
+          "sha512": "d50568a34176d9f7489068ef355e1dedc119b70e77ea71abbc3ae03321c58993504b66f347f817d4a1089a0c3f6f7d8ae35c5d071b517193c9d659f8f5ddd6a0",
+          "sha256": "6c37b745229f457e89adf276cec8ae651c1238d5a8f52d6d4e711624f21d6bab",
+          "sha1": "4a3f4e894b064d681dbe44362a1e9ff6b6364fe2",
+          "md5": "7c5aeb15c56bbfe9b883af66474006f8"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,1345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trajectory Debug — AbsoluteLib</title>
+    <style>
+        :root {
+            --bg: #0a0e14;
+            --bg-lighter: #0f1319;
+            --panel: rgba(18, 24, 33, 0.85);
+            --panel-solid: #121821;
+            --panel-hover: rgba(28, 35, 48, 0.9);
+            --text: #e2e8f0;
+            --text-muted: #8899aa;
+            --heading: #f0f4f8;
+            --accent: #60a5fa;
+            --accent-dim: rgba(96, 165, 250, 0.15);
+            --accent-hover: #93c5fd;
+            --accent-glow: rgba(96, 165, 250, 0.25);
+            --success: #34d399;
+            --success-dim: rgba(52, 211, 153, 0.15);
+            --warning: #fbbf24;
+            --warning-dim: rgba(251, 191, 36, 0.15);
+            --danger: #f87171;
+            --danger-dim: rgba(248, 113, 113, 0.15);
+            --purple: #a78bfa;
+            --purple-dim: rgba(167, 139, 250, 0.15);
+            --cyan: #22d3ee;
+            --orange: #fb923c;
+            --border: rgba(255, 255, 255, 0.06);
+            --border-hover: rgba(255, 255, 255, 0.12);
+            --glass: rgba(255, 255, 255, 0.03);
+            --radius: 12px;
+            --radius-sm: 8px;
+            --radius-xs: 6px;
+            --shadow: 0 4px 24px rgba(0, 0, 0, 0.3);
+            --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.2);
+            --transition: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        html, body { height: 100%; }
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+            font-size: 13px;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.5;
+            overflow: hidden;
+        }
+
+        /* Header */
+        .header {
+            display: flex; align-items: center; gap: 16px;
+            padding: 10px 20px;
+            background: linear-gradient(135deg, rgba(96,165,250,0.08), rgba(167,139,250,0.06), transparent 70%);
+            border-bottom: 1px solid var(--border);
+            backdrop-filter: blur(20px);
+        }
+        .header-brand {
+            display: flex; align-items: center; gap: 10px;
+        }
+
+        .header h1 {
+            font-size: 1rem; color: var(--heading); font-weight: 700;
+            letter-spacing: -0.3px;
+        }
+        .header .subtitle {
+            color: var(--text-muted); font-size: 0.75rem; font-weight: 400;
+            opacity: 0.7;
+        }
+        .header-version {
+            background: var(--accent-dim); color: var(--accent); border-radius: 20px;
+            padding: 2px 10px; font-size: 0.65rem; font-weight: 600;
+        }
+
+        /* Connection bar */
+        .connection-bar {
+            display: flex; align-items: center; gap: 10px;
+            padding: 8px 20px;
+            background: var(--panel); border-bottom: 1px solid var(--border);
+            backdrop-filter: blur(12px);
+            flex-wrap: wrap;
+        }
+        .connection-bar label { color: var(--text-muted); font-size: 0.8rem; font-weight: 500; }
+        .connection-bar input[type="text"] {
+            background: var(--bg); border: 1px solid var(--border); color: var(--text);
+            padding: 6px 12px; border-radius: var(--radius-xs); font-size: 0.8rem; width: 150px;
+            transition: border-color var(--transition);
+        }
+        .connection-bar input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-dim); }
+
+        .btn {
+            padding: 5px 14px; border: 1px solid var(--border); border-radius: var(--radius-xs);
+            background: var(--glass); color: var(--text); cursor: pointer; font-size: 0.8rem;
+            font-weight: 500; transition: all var(--transition);
+        }
+        .btn:hover { background: var(--accent-dim); border-color: var(--accent); color: var(--accent); }
+        .btn.active { background: var(--success-dim); color: var(--success); border-color: rgba(52,211,153,0.3); }
+        .btn.danger { background: var(--danger-dim); color: var(--danger); border-color: rgba(248,113,113,0.3); }
+
+        .conn-status {
+            display: flex; align-items: center; gap: 8px;
+            background: var(--glass); border-radius: 20px; padding: 4px 12px 4px 8px;
+            border: 1px solid var(--border);
+        }
+        .status-dot {
+            width: 8px; height: 8px; border-radius: 50%; background: var(--danger);
+            transition: background var(--transition);
+        }
+        .status-dot.connected { background: var(--success); box-shadow: 0 0 8px rgba(52,211,153,0.5); }
+        .status-dot.connecting { background: var(--warning); animation: pulse 1.2s infinite ease-in-out; }
+        @keyframes pulse { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.4; transform: scale(0.85); } }
+        .status-text { font-size: 0.75rem; color: var(--text-muted); font-weight: 500; }
+        .topic-count {
+            font-size: 0.7rem; color: var(--text-muted); opacity: 0.7;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .toolbar-right {
+            display: flex; align-items: center; gap: 8px; margin-left: auto;
+        }
+        .toolbar-right label { font-size: 0.75rem; color: var(--text-muted); cursor: pointer; display: flex; align-items: center; gap: 4px; }
+        .toolbar-right input[type="checkbox"] { accent-color: var(--accent); }
+
+        /* Main layout */
+        .main { display: flex; height: calc(100vh - 88px); overflow: hidden; }
+
+        /* Left panel */
+        .stats-panel {
+            width: 340px; min-width: 340px; padding: 10px;
+            overflow-y: auto; border-right: 1px solid var(--border);
+            scrollbar-width: thin; scrollbar-color: var(--border) transparent;
+        }
+        .stats-panel::-webkit-scrollbar { width: 5px; }
+        .stats-panel::-webkit-scrollbar-track { background: transparent; }
+        .stats-panel::-webkit-scrollbar-thumb { background: var(--border); border-radius: 10px; }
+
+        .card {
+            background: var(--panel); border: 1px solid var(--border);
+            border-radius: var(--radius); padding: 14px; margin-bottom: 8px;
+            backdrop-filter: blur(12px);
+            transition: border-color var(--transition), box-shadow var(--transition);
+        }
+        .card:hover { border-color: var(--border-hover); box-shadow: var(--shadow-sm); }
+        .card h3 {
+            font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.8px;
+            color: var(--text-muted); margin-bottom: 10px; font-weight: 600;
+            display: flex; align-items: center; gap: 8px;
+        }
+        .card h3 .indicator {
+            width: 7px; height: 7px; border-radius: 50%; display: inline-block;
+            transition: background var(--transition);
+        }
+        .stat-row {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 3px 0; font-size: 0.8rem;
+        }
+        .stat-row .label { color: var(--text-muted); font-weight: 400; }
+        .stat-row .value {
+            color: var(--text); font-weight: 600;
+            font-variant-numeric: tabular-nums; text-align: right;
+            max-width: 55%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        }
+        .stat-row .value.success { color: var(--success); }
+        .stat-row .value.danger { color: var(--danger); }
+        .stat-row .value.warning { color: var(--warning); }
+        .stat-row .value.accent { color: var(--accent); }
+        .stat-row .value.purple { color: var(--purple); }
+        .stat-row .value.cyan { color: var(--cyan); }
+
+        .divider { border-top: 1px solid var(--border); margin: 8px 0; }
+
+        /* Sparkline in cards */
+        .sparkline-row { display: flex; justify-content: space-between; align-items: center; padding: 3px 0; }
+        .sparkline-row .label { color: var(--text-muted); font-size: 0.8rem; }
+        .sparkline-row .spark-wrap { display: flex; align-items: center; gap: 8px; }
+        .sparkline-row .value { font-weight: 600; font-size: 0.8rem; font-variant-numeric: tabular-nums; min-width: 50px; text-align: right; }
+        canvas.sparkline { width: 80px; height: 24px; display: block; }
+
+        /* RPM gauge */
+        .gauge-container { display: flex; align-items: center; justify-content: center; padding: 8px 0; }
+        .gauge-wrap { position: relative; width: 100px; height: 60px; }
+        canvas.gauge-canvas { width: 100px; height: 60px; }
+        .gauge-label {
+            position: absolute; bottom: 2px; left: 0; right: 0; text-align: center;
+            font-size: 0.68rem; color: var(--text-muted); font-weight: 500;
+        }
+
+        /* Rejection bar */
+        .bar-container {
+            height: 8px; background: rgba(255,255,255,0.04); border-radius: 4px;
+            margin: 6px 0; overflow: hidden; display: flex;
+        }
+        .bar-segment { height: 100%; transition: width 0.4s ease; }
+        .bar-legend {
+            display: flex; flex-wrap: wrap; gap: 5px; margin-top: 4px; font-size: 0.68rem;
+        }
+        .bar-legend span { display: flex; align-items: center; gap: 3px; color: var(--text-muted); }
+        .bar-legend span::before {
+            content: ""; display: inline-block; width: 7px; height: 7px; border-radius: 2px;
+        }
+        .bar-legend .leg-accepted::before { background: var(--success); }
+        .bar-legend .leg-collision::before { background: var(--danger); }
+        .bar-legend .leg-arc::before { background: var(--warning); }
+        .bar-legend .leg-clearance::before { background: var(--purple); }
+        .bar-legend .leg-miss::before { background: var(--accent); }
+        .bar-legend .leg-flyover::before { background: var(--orange); }
+
+        /* Right panel */
+        .right-panel { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+
+        /* Tabs */
+        .tab-bar {
+            display: flex; gap: 0; border-bottom: 1px solid var(--border);
+            background: var(--panel); padding: 0 12px;
+            overflow-x: auto; scrollbar-width: none;
+        }
+        .tab-bar::-webkit-scrollbar { display: none; }
+        .tab {
+            padding: 10px 14px; font-size: 0.78rem; cursor: pointer;
+            border-bottom: 2px solid transparent; color: var(--text-muted);
+            white-space: nowrap; font-weight: 500;
+            transition: all var(--transition);
+        }
+        .tab:hover { color: var(--text); background: var(--glass); }
+        .tab.active { color: var(--accent); border-bottom-color: var(--accent); background: var(--accent-dim); }
+
+        .tab-content { flex: 1; overflow: hidden; display: none; }
+        .tab-content.active { display: flex; flex-direction: column; }
+
+        /* Canvas views */
+        .canvas-wrapper { flex: 1; position: relative; min-height: 0; }
+        .canvas-wrapper canvas { width: 100%; height: 100%; background: var(--bg); display: block; }
+        .canvas-controls {
+            position: absolute; top: 10px; right: 10px; display: flex; gap: 6px; z-index: 2;
+        }
+        .canvas-controls select, .canvas-controls button {
+            background: var(--panel); color: var(--text); border: 1px solid var(--border);
+            padding: 4px 10px; border-radius: var(--radius-xs); font-size: 0.75rem;
+            cursor: pointer; backdrop-filter: blur(8px);
+            transition: all var(--transition);
+        }
+        .canvas-controls select:hover, .canvas-controls button:hover {
+            border-color: var(--accent); background: var(--accent-dim);
+        }
+        .canvas-legend {
+            position: absolute; bottom: 10px; left: 10px;
+            background: rgba(10,14,20,0.88); border: 1px solid var(--border);
+            border-radius: var(--radius-xs); padding: 8px 12px; font-size: 0.7rem;
+            backdrop-filter: blur(8px);
+        }
+        .canvas-legend div { display: flex; align-items: center; gap: 6px; padding: 2px 0; color: var(--text-muted); }
+        .canvas-legend .swatch { width: 16px; height: 3px; border-radius: 2px; display: inline-block; }
+        .canvas-title {
+            position: absolute; top: 10px; left: 14px;
+            font-size: 0.72rem; font-weight: 600; color: var(--heading);
+            letter-spacing: 0.3px;
+        }
+
+        /* Chart grid */
+        .chart-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0; flex: 1; overflow: hidden; }
+        .chart-grid .chart-cell { position: relative; border: 1px solid var(--border); min-height: 0; }
+        .chart-grid .chart-cell canvas { width: 100%; height: 100%; display: block; background: var(--bg); }
+
+        /* Split panels */
+        .split-pane { display: flex; flex: 1; overflow: hidden; }
+        .split-pane > div { flex: 1; overflow-y: auto; min-width: 0; }
+        .split-pane > div:first-child { border-right: 1px solid var(--border); }
+
+        /* Log */
+        #log-container {
+            flex: 1; overflow-y: auto; padding: 12px 16px;
+            font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+            font-size: 0.75rem; line-height: 1.6;
+        }
+        .log-entry { padding: 1px 0; white-space: pre-wrap; word-break: break-all; }
+        .log-entry.info { color: var(--text-muted); }
+        .log-entry.success { color: var(--success); }
+        .log-entry.warn { color: var(--warning); }
+        .log-entry.error { color: var(--danger); }
+        .log-entry.data { color: var(--accent); }
+        .log-entry .ts { color: rgba(136,153,170,0.5); margin-right: 8px; }
+
+        /* Summary / raw */
+        #summary-text, #detailed-table {
+            white-space: pre-wrap;
+            font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+            font-size: 0.75rem; padding: 14px 18px; flex: 1; overflow-y: auto; color: var(--text);
+        }
+        #raw-container { flex: 1; overflow-y: auto; padding: 12px 16px; }
+        .nt-table { width: 100%; border-collapse: collapse; }
+        .nt-table th, .nt-table td {
+            text-align: left; padding: 4px 12px; border-bottom: 1px solid var(--border); font-size: 0.75rem;
+        }
+        .nt-table th {
+            color: var(--text-muted); font-weight: 600; position: sticky; top: 0;
+            background: var(--bg); font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.5px;
+        }
+        .nt-table td.key {
+            font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+            color: var(--accent); font-size: 0.72rem;
+        }
+        .nt-table td.val { color: var(--text); font-variant-numeric: tabular-nums; }
+        .nt-table tr:hover td { background: var(--glass); }
+
+        /* History chart rows */
+        .history-stack { display: flex; flex-direction: column; flex: 1; overflow: hidden; }
+        .history-stack .chart-row { flex: 1; position: relative; border-bottom: 1px solid var(--border); min-height: 120px; }
+        .history-stack .chart-row:last-child { border-bottom: none; }
+        .history-stack .chart-row canvas { width: 100%; height: 100%; display: block; background: var(--bg); }
+
+        @media (max-width: 900px) {
+            .stats-panel { width: 280px; min-width: 280px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="header-brand">
+            <div>
+                <h1>Trajectory Debug</h1>
+                <span class="subtitle">AbsoluteLib NT4 Dashboard</span>
+            </div>
+        </div>
+        <span class="header-version">v3.0</span>
+    </div>
+
+    <div class="connection-bar">
+        <label>Robot IP</label>
+        <input type="text" id="robotIp" value="127.0.0.1" placeholder="10.TE.AM.2">
+        <button class="btn" id="connectBtn" onclick="toggleConnection()">Connect</button>
+        <div class="conn-status">
+            <span class="status-dot" id="statusDot"></span>
+            <span class="status-text" id="statusText">Disconnected</span>
+        </div>
+        <span class="topic-count" id="topicCount"></span>
+        <div class="toolbar-right">
+            <label><input type="checkbox" id="autoScroll" checked> Auto-scroll</label>
+            <button class="btn" onclick="clearLog()">Clear</button>
+            <button class="btn" onclick="exportLog()">Export</button>
+        </div>
+    </div>
+
+    <div class="main">
+        <div class="stats-panel">
+
+            <!-- Shot Status -->
+            <div class="card">
+                <h3><span class="indicator" id="shotIndicator" style="background:var(--danger)"></span>Shot Status</h3>
+                <div class="stat-row"><span class="label">Valid</span><span class="value" id="s-validShot">&mdash;</span></div>
+                <div class="stat-row"><span class="label">Status</span><span class="value" id="s-status">&mdash;</span></div>
+                <div class="stat-row"><span class="label">Source</span><span class="value accent" id="s-source">&mdash;</span></div>
+                <div class="stat-row"><span class="label">Mode</span><span class="value purple" id="s-mode">&mdash;</span></div>
+                <div class="stat-row"><span class="label">Confidence</span><span class="value cyan" id="s-confidence">&mdash;</span></div>
+            </div>
+
+            <!-- Shot Parameters with sparklines -->
+            <div class="card">
+                <h3>Shot Parameters</h3>
+                <div class="sparkline-row">
+                    <span class="label">Distance</span>
+                    <span class="spark-wrap">
+                        <canvas class="sparkline" id="spark-distance" width="160" height="48"></canvas>
+                        <span class="value accent" id="s-distance">&mdash;</span>
+                    </span>
+                </div>
+                <div class="divider"></div>
+                <div class="sparkline-row">
+                    <span class="label">Pitch</span>
+                    <span class="spark-wrap">
+                        <canvas class="sparkline" id="spark-pitch" width="160" height="48"></canvas>
+                        <span class="value" id="s-pitch">&mdash;</span>
+                    </span>
+                </div>
+                <div class="stat-row"><span class="label">Yaw Adjust</span><span class="value" id="s-yawAdjust">&mdash;</span></div>
+                <div class="divider"></div>
+                <div class="sparkline-row">
+                    <span class="label">Target RPM</span>
+                    <span class="spark-wrap">
+                        <canvas class="sparkline" id="spark-rpm" width="160" height="48"></canvas>
+                        <span class="value accent" id="s-rpm">&mdash;</span>
+                    </span>
+                </div>
+                <div class="stat-row"><span class="label">Measured RPM</span><span class="value" id="s-measuredRpm">&mdash;</span></div>
+                <div class="stat-row"><span class="label">RPM Deficit</span><span class="value" id="s-rpmDeficit">&mdash;</span></div>
+                <div class="stat-row"><span class="label">Ready</span><span class="value" id="s-readyToFire">&mdash;</span></div>
+                <div class="divider"></div>
+                <div class="stat-row"><span class="label">Exit Velocity</span><span class="value" id="s-velocity">&mdash;</span></div>
+                <div class="stat-row"><span class="label">Time of Flight</span><span class="value" id="s-tof">&mdash;</span></div>
+                <div class="stat-row"><span class="label">Max Height</span><span class="value" id="s-maxHeight">&mdash;</span></div>
+                <div class="stat-row"><span class="label">Margin</span><span class="value" id="s-margin">&mdash;</span></div>
+            </div>
+
+            <!-- RPM Gauge -->
+            <div class="card">
+                <h3>RPM Readiness</h3>
+                <div class="gauge-container">
+                    <div class="gauge-wrap">
+                        <canvas class="gauge-canvas" id="rpmGauge" width="200" height="120"></canvas>
+                        <div class="gauge-label" id="gauge-label">&mdash;</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Trajectory Path -->
+            <div class="card">
+                <h3>Trajectory Path</h3>
+                <div class="stat-row"><span class="label">Path Points</span><span class="value accent" id="s-pathLength">&mdash;</span></div>
+                <div class="stat-row"><span class="label">Start</span><span class="value" id="s-pathStart">&mdash;</span></div>
+                <div class="stat-row"><span class="label">End</span><span class="value" id="s-pathEnd">&mdash;</span></div>
+                <div class="stat-row"><span class="label">Horiz. Range</span><span class="value" id="s-horizRange">&mdash;</span></div>
+                <div class="stat-row"><span class="label">Vert. Range</span><span class="value" id="s-vertRange">&mdash;</span></div>
+            </div>
+
+            <!-- Solver Debug -->
+            <div class="card">
+                <h3>Solver Debug</h3>
+                <div class="stat-row"><span class="label">Total Tested</span><span class="value" id="s-totalTested">&mdash;</span></div>
+                <div class="stat-row"><span class="label">Accepted</span><span class="value success" id="s-accepted">&mdash;</span></div>
+                <div class="stat-row"><span class="label">Rejected</span><span class="value danger" id="s-totalRejected">&mdash;</span></div>
+                <div class="divider"></div>
+                <div style="font-size:0.65rem;color:var(--text-muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.6px;font-weight:600;">Rejection Breakdown</div>
+                <div class="bar-container" id="rejectionBar"></div>
+                <div class="bar-legend">
+                    <span class="leg-accepted">OK</span>
+                    <span class="leg-collision">Collision</span>
+                    <span class="leg-arc">Arc</span>
+                    <span class="leg-clearance">Clear.</span>
+                    <span class="leg-miss">Miss</span>
+                    <span class="leg-flyover">Flyover</span>
+                </div>
+                <div style="margin-top:6px;">
+                    <div class="stat-row"><span class="label">Collision</span><span class="value danger" id="s-rejCollision">&mdash;</span></div>
+                    <div class="stat-row"><span class="label">Arc Too Low</span><span class="value warning" id="s-rejArc">&mdash;</span></div>
+                    <div class="stat-row"><span class="label">Clearance</span><span class="value purple" id="s-rejClearance">&mdash;</span></div>
+                    <div class="stat-row"><span class="label">Missed</span><span class="value accent" id="s-rejMiss">&mdash;</span></div>
+                    <div class="stat-row"><span class="label">Flyover</span><span class="value warning" id="s-rejFlyover">&mdash;</span></div>
+                </div>
+                <div class="divider"></div>
+                <div class="stat-row"><span class="label">Best Score</span><span class="value success" id="s-bestScore">&mdash;</span></div>
+                <div class="stat-row"><span class="label">Best Pitch</span><span class="value success" id="s-bestPitch">&mdash;</span></div>
+            </div>
+
+            <!-- Positions -->
+            <div class="card">
+                <h3>Positions</h3>
+                <div class="stat-row"><span class="label">Robot</span><span class="value" id="s-robotPos">&mdash;</span></div>
+                <div class="stat-row"><span class="label">Shooter</span><span class="value" id="s-shooterPos">&mdash;</span></div>
+                <div class="stat-row"><span class="label">Target</span><span class="value" id="s-targetPos">&mdash;</span></div>
+                <div class="stat-row"><span class="label">Shooter Height</span><span class="value" id="s-shooterH">&mdash;</span></div>
+            </div>
+        </div>
+
+        <!-- Right panel with tabs -->
+        <div class="right-panel">
+            <div class="tab-bar">
+                <div class="tab active" data-tab="trajectory" onclick="switchTab('trajectory')">Trajectory</div>
+                <div class="tab" data-tab="analytics" onclick="switchTab('analytics')">Analytics</div>
+                <div class="tab" data-tab="history" onclick="switchTab('history')">History</div>
+                <div class="tab" data-tab="candidates" onclick="switchTab('candidates')">Candidates</div>
+                <div class="tab" data-tab="log" onclick="switchTab('log')">Log</div>
+                <div class="tab" data-tab="debug" onclick="switchTab('debug')">Debug</div>
+                <div class="tab" data-tab="raw" onclick="switchTab('raw')">Raw NT</div>
+            </div>
+
+            <!-- Trajectory Tab -->
+            <div class="tab-content active" id="tab-trajectory">
+                <div class="split-pane" style="overflow:hidden;">
+                    <div class="canvas-wrapper" style="border-right:1px solid var(--border);">
+                        <canvas id="sideCanvas"></canvas>
+                        <span class="canvas-title">Side View (Distance vs Height)</span>
+                        <div class="canvas-legend" id="sideLegend">
+                            <div><span class="swatch" style="background:var(--accent)"></span>Flight Path</div>
+                            <div><span class="swatch" style="background:var(--success)"></span>Target</div>
+                            <div><span class="swatch" style="background:var(--danger)"></span>Peak Height</div>
+                            <div><span class="swatch" style="background:var(--warning)"></span>Start</div>
+                        </div>
+                    </div>
+                    <div class="canvas-wrapper">
+                        <canvas id="topCanvas"></canvas>
+                        <span class="canvas-title">Top-Down View (XY)</span>
+                        <div class="canvas-legend" id="topLegend">
+                            <div><span class="swatch" style="background:var(--accent)"></span>Ground Track</div>
+                            <div><span class="swatch" style="background:var(--success)"></span>Target Ring</div>
+                            <div><span class="swatch" style="background:var(--warning)"></span>Robot</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Analytics Tab -->
+            <div class="tab-content" id="tab-analytics">
+                <div class="chart-grid">
+                    <div class="chart-cell">
+                        <canvas id="heightProfileCanvas"></canvas>
+                        <span class="canvas-title">Height Profile</span>
+                    </div>
+                    <div class="chart-cell">
+                        <canvas id="velocityProfileCanvas"></canvas>
+                        <span class="canvas-title">Velocity Profile</span>
+                    </div>
+                    <div class="chart-cell">
+                        <canvas id="scoreDistCanvas"></canvas>
+                        <span class="canvas-title">Score Distribution</span>
+                    </div>
+                    <div class="chart-cell">
+                        <canvas id="rejectionDonutCanvas"></canvas>
+                        <span class="canvas-title">Rejection Breakdown</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- History Tab -->
+            <div class="tab-content" id="tab-history">
+                <div class="history-stack">
+                    <div class="chart-row">
+                        <canvas id="historyRpmCanvas"></canvas>
+                        <span class="canvas-title">RPM History</span>
+                    </div>
+                    <div class="chart-row">
+                        <canvas id="historyPitchCanvas"></canvas>
+                        <span class="canvas-title">Pitch &amp; Distance</span>
+                    </div>
+                    <div class="chart-row">
+                        <canvas id="historyScoreCanvas"></canvas>
+                        <span class="canvas-title">Solver Score</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Candidates Tab -->
+            <div class="tab-content" id="tab-candidates">
+                <div class="split-pane">
+                    <div class="canvas-wrapper">
+                        <canvas id="candidateCanvas"></canvas>
+                        <span class="canvas-title">Candidate Analysis</span>
+                        <div class="canvas-controls">
+                            <select id="candidateYAxis" onchange="drawCandidateChart()">
+                                <option value="score">Score</option>
+                                <option value="closest">Closest Approach</option>
+                                <option value="maxH">Max Height</option>
+                                <option value="tof">Time of Flight</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div id="detailed-table">Waiting for debug data...</div>
+                </div>
+            </div>
+
+            <!-- Log Tab -->
+            <div class="tab-content" id="tab-log">
+                <div id="log-container"></div>
+            </div>
+
+            <!-- Debug Tab -->
+            <div class="tab-content" id="tab-debug">
+                <div id="summary-text">Waiting for debug data...</div>
+            </div>
+
+            <!-- Raw NT Tab -->
+            <div class="tab-content" id="tab-raw">
+                <div id="raw-container">
+                    <table class="nt-table">
+                        <thead><tr><th>Key</th><th>Value</th><th>Updated</th></tr></thead>
+                        <tbody id="raw-tbody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+<script>
+/* ===================== NT4 Client ===================== */
+class NT4Client {
+    constructor() {
+        this.ws = null; this.connected = false; this.connecting = false;
+        this.topics = new Map(); this.topicsByName = new Map();
+        this.values = new Map(); this.listeners = [];
+        this.nextSubId = 1; this.reconnectTimer = null;
+        this.binaryMsgCount = 0; this.textMsgCount = 0;
+    }
+    connect(address) {
+        if (this.ws) this.disconnect();
+        this.connecting = true; updateConnectionUI();
+        const url = `ws://${address}:5810/nt/trajectory-debug`;
+        log('info', `Connecting to ${url} ...`);
+        try { this.ws = new WebSocket(url, ['networktables.first.wpi.edu']); }
+        catch (e) { log('error', `WebSocket failed: ${e.message}`); this.connecting = false; updateConnectionUI(); return; }
+        this.ws.binaryType = 'arraybuffer';
+        this.ws.onopen = () => {
+            this.connected = true; this.connecting = false;
+            this.binaryMsgCount = 0; this.textMsgCount = 0;
+            log('success', 'Connected to NetworkTables 4');
+            updateConnectionUI();
+            this._subscribe(['']);
+        };
+        this.ws.onmessage = (event) => {
+            if (typeof event.data === 'string') { this.textMsgCount++; this._handleText(event.data); }
+            else { this.binaryMsgCount++; this._handleBinary(event.data); }
+        };
+        this.ws.onclose = (event) => {
+            const was = this.connected; this.connected = false; this.connecting = false; updateConnectionUI();
+            if (was) { log('warn', `Disconnected (${event.code}). Reconnecting in 3s...`);
+                this.reconnectTimer = setTimeout(() => this.connect(address), 3000); }
+        };
+        this.ws.onerror = () => log('error', 'WebSocket error');
+    }
+    disconnect() {
+        if (this.reconnectTimer) { clearTimeout(this.reconnectTimer); this.reconnectTimer = null; }
+        if (this.ws) { this.ws.onclose = null; this.ws.close(); this.ws = null; }
+        this.connected = false; this.connecting = false;
+        this.topics.clear(); this.topicsByName.clear(); updateConnectionUI();
+        log('info', 'Disconnected');
+    }
+    _subscribe(prefixes) {
+        this.ws.send(JSON.stringify([{
+            method: 'subscribe',
+            params: { topics: prefixes, subuid: this.nextSubId++, options: { all: true, prefix: true, periodic: 0.05 } }
+        }]));
+        log('info', 'Subscribed (all topics)');
+    }
+    _handleText(data) {
+        let msgs; try { msgs = JSON.parse(data); } catch { return; }
+        if (!Array.isArray(msgs)) msgs = [msgs];
+        for (const m of msgs) {
+            if (m.method === 'announce') {
+                const p = m.params;
+                this.topics.set(p.id, { name: p.name, type: p.type });
+                this.topicsByName.set(p.name, p.id);
+            } else if (m.method === 'unannounce') {
+                const t = this.topics.get(m.params.id);
+                if (t) { this.topicsByName.delete(t.name); this.topics.delete(m.params.id); }
+            }
+        }
+    }
+    _handleBinary(buffer) {
+        try {
+            let offset = 0;
+            while (offset < buffer.byteLength) {
+                const d = decodeMsgpack(new Uint8Array(buffer, offset));
+                if (!d || !Array.isArray(d.value)) break;
+                offset += d.bytesRead;
+                const arr = d.value;
+                if (arr.length >= 4) {
+                    const topic = this.topics.get(arr[0]);
+                    if (topic) {
+                        this.values.set(topic.name, { value: arr[3], timestamp: arr[1], type: topic.type });
+                        for (const cb of this.listeners) try { cb(topic.name, arr[3], arr[1]); } catch {}
+                    }
+                }
+            }
+        } catch {}
+    }
+    onValue(cb) { this.listeners.push(cb); }
+    getValue(k) { return this.values.get(k); }
+    getAllValues() { return this.values; }
+}
+
+/* ===================== MsgPack Decoder ===================== */
+function decodeMsgpack(u8) {
+    let pos = 0;
+    function read() {
+        if (pos >= u8.length) throw 'EOF';
+        const b = u8[pos++];
+        if (b <= 0x7f) return b;
+        if ((b & 0xf0) === 0x80) { const n = b & 0x0f, o = {}; for (let i=0;i<n;i++){const k=read();o[k]=read();} return o; }
+        if ((b & 0xf0) === 0x90) { const n = b & 0x0f, a = []; for (let i=0;i<n;i++) a.push(read()); return a; }
+        if ((b & 0xe0) === 0xa0) { const n = b & 0x1f, s = new TextDecoder().decode(u8.slice(pos,pos+n)); pos+=n; return s; }
+        if (b >= 0xe0) return b - 256;
+        switch(b) {
+            case 0xc0: return null; case 0xc2: return false; case 0xc3: return true;
+            case 0xc4: { const n=u8[pos++]; const r=u8.slice(pos,pos+n); pos+=n; return r; }
+            case 0xc5: { const n=rU16(); const r=u8.slice(pos,pos+n); pos+=n; return r; }
+            case 0xc6: { const n=rU32(); const r=u8.slice(pos,pos+n); pos+=n; return r; }
+            case 0xca: { const v=new DataView(u8.buffer,u8.byteOffset+pos,4).getFloat32(0); pos+=4; return v; }
+            case 0xcb: { const v=new DataView(u8.buffer,u8.byteOffset+pos,8).getFloat64(0); pos+=8; return v; }
+            case 0xcc: return u8[pos++];
+            case 0xcd: return rU16();
+            case 0xce: return rU32();
+            case 0xcf: return rU64();
+            case 0xd0: { const v=u8[pos++]; return v>127?v-256:v; }
+            case 0xd1: { const v=rU16(); return v>32767?v-65536:v; }
+            case 0xd2: { const v=rU32(); return v>0x7fffffff?v-0x100000000:v; }
+            case 0xd3: return rI64();
+            case 0xd9: { const n=u8[pos++]; const s=new TextDecoder().decode(u8.slice(pos,pos+n)); pos+=n; return s; }
+            case 0xda: { const n=rU16(); const s=new TextDecoder().decode(u8.slice(pos,pos+n)); pos+=n; return s; }
+            case 0xdb: { const n=rU32(); const s=new TextDecoder().decode(u8.slice(pos,pos+n)); pos+=n; return s; }
+            case 0xdc: { const n=rU16(); const a=[]; for(let i=0;i<n;i++) a.push(read()); return a; }
+            case 0xdd: { const n=rU32(); const a=[]; for(let i=0;i<n;i++) a.push(read()); return a; }
+            case 0xde: { const n=rU16(); const o={}; for(let i=0;i<n;i++){const k=read();o[k]=read();} return o; }
+            case 0xdf: { const n=rU32(); const o={}; for(let i=0;i<n;i++){const k=read();o[k]=read();} return o; }
+            case 0xd4: pos+=2; return null; case 0xd5: pos+=3; return null;
+            case 0xd6: pos+=5; return null; case 0xd7: pos+=9; return null;
+            case 0xd8: pos+=17; return null;
+            case 0xc7: { const n=u8[pos++]; pos+=1+n; return null; }
+            case 0xc8: { const n=rU16(); pos+=1+n; return null; }
+            case 0xc9: { const n=rU32(); pos+=1+n; return null; }
+            default: throw `Unknown byte 0x${b.toString(16)}`;
+        }
+    }
+    function rU16(){ const v=(u8[pos]<<8)|u8[pos+1]; pos+=2; return v; }
+    function rU32(){ const v=(u8[pos]<<24|u8[pos+1]<<16|u8[pos+2]<<8|u8[pos+3])>>>0; pos+=4; return v; }
+    function rU64(){ return rU32()*0x100000000+rU32(); }
+    function rI64(){ const h=rU32(),l=rU32(); return h>0x7fffffff?-(0x100000000*(0xffffffff-h)+(0x100000000-l)):h*0x100000000+l; }
+    try { return { value: read(), bytesRead: pos }; } catch { return null; }
+}
+
+/* ===================== Global State ===================== */
+const nt = new NT4Client();
+let logEntries = [];
+const MAX_LOG = 2000;
+let lastUIUpdate = 0;
+const UI_INTERVAL = 70;
+let resolvedPrefix = null;
+
+const PREFIXES = [
+    '/RealOutputs/subsystems/ExampleShooter/',
+    '/RealOutputs/ExampleShooter/',
+    '/ReplayOutputs/subsystems/ExampleShooter/',
+    '/ReplayOutputs/ExampleShooter/',
+    '/SmartDashboard/subsystems/ExampleShooter/',
+    '/SmartDashboard/ExampleShooter/',
+    '/subsystems/ExampleShooter/',
+    'ExampleShooter/',
+    '/ExampleShooter/',
+];
+
+const HIST_MAX = 150;
+const history = { targetRpm: [], measuredRpm: [], pitch: [], distance: [], score: [] };
+function pushHistory(key, val) {
+    if (!isFinite(val)) return;
+    history[key].push(val);
+    if (history[key].length > HIST_MAX) history[key].shift();
+}
+
+/* ===================== Value Accessors ===================== */
+function findValue(suffix) {
+    if (resolvedPrefix) { const v = nt.getValue(resolvedPrefix + suffix); if (v) return v.value; }
+    for (const pfx of PREFIXES) { const v = nt.getValue(pfx + suffix); if (v) { resolvedPrefix = pfx; return v.value; } }
+    for (const [key, entry] of nt.getAllValues()) {
+        if (key.endsWith('/' + suffix)) {
+            const pfx = key.substring(0, key.length - suffix.length);
+            if (pfx && !PREFIXES.includes(pfx)) { PREFIXES.push(pfx); log('success', `Auto-discovered prefix: "${pfx}"`); }
+            resolvedPrefix = pfx; return entry.value;
+        }
+    }
+    return undefined;
+}
+function getNum(s, d) { const v = findValue(s); if (v == null) return '\u2014'; const n = Number(v); return isNaN(n) ? String(v) : n.toFixed(d != null ? d : 2); }
+function getStr(s) { const v = findValue(s); return v != null ? String(v) : '\u2014'; }
+function getBool(s) { const v = findValue(s); return v == null ? '\u2014' : v ? 'Yes' : 'No'; }
+function getArr(s) { const v = findValue(s); return Array.isArray(v) ? v : null; }
+function setText(id, t) { const el = document.getElementById(id); if (el && el.textContent !== t) el.textContent = t; }
+
+/* ===================== Connection UI ===================== */
+function updateConnectionUI() {
+    const dot = document.getElementById('statusDot');
+    const text = document.getElementById('statusText');
+    const btn = document.getElementById('connectBtn');
+    dot.className = 'status-dot' + (nt.connected ? ' connected' : nt.connecting ? ' connecting' : '');
+    text.textContent = nt.connected ? 'Connected' : nt.connecting ? 'Connecting\u2026' : 'Disconnected';
+    btn.textContent = nt.connected ? 'Disconnect' : 'Connect';
+    btn.className = nt.connected ? 'btn danger' : 'btn';
+    document.getElementById('topicCount').textContent = nt.connected ? `${nt.topics.size} topics \u00b7 ${nt.values.size} values` : '';
+}
+function toggleConnection() {
+    if (nt.connected || nt.connecting) nt.disconnect();
+    else { const ip = document.getElementById('robotIp').value.trim(); if (ip) nt.connect(ip); }
+}
+
+/* ===================== Logging ===================== */
+function log(level, msg) {
+    const now = new Date();
+    const ts = now.toLocaleTimeString('en-US', {hour12:false}) + '.' + String(now.getMilliseconds()).padStart(3,'0');
+    logEntries.push({ level, msg, ts });
+    if (logEntries.length > MAX_LOG) logEntries.shift();
+    const c = document.getElementById('log-container');
+    const div = document.createElement('div');
+    div.className = `log-entry ${level}`;
+    div.innerHTML = `<span class="ts">${ts}</span>${msg.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}`;
+    c.appendChild(div);
+    if (c.children.length > MAX_LOG) c.removeChild(c.firstChild);
+    if (document.getElementById('autoScroll').checked) c.scrollTop = c.scrollHeight;
+}
+function clearLog() { logEntries = []; document.getElementById('log-container').innerHTML = ''; }
+function exportLog() {
+    const t = logEntries.map(e => `[${e.ts}] [${e.level}] ${e.msg}`).join('\n');
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([t], {type:'text/plain'}));
+    a.download = `trajectory-debug-${Date.now()}.log`; a.click();
+}
+
+/* ===================== Tabs ===================== */
+function switchTab(name) {
+    document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
+    document.querySelectorAll('.tab-content').forEach(t => t.classList.toggle('active', t.id === `tab-${name}`));
+    requestAnimationFrame(() => {
+        if (name === 'trajectory') canvasRedraw();
+        if (name === 'candidates') drawCandidateChart();
+        if (name === 'analytics') drawAnalytics();
+        if (name === 'history') drawHistory();
+    });
+}
+
+/* ===================== Chart Utilities ===================== */
+function niceStep(range) {
+    if (range <= 0) return 1;
+    const r = range / 6;
+    const p = Math.pow(10, Math.floor(Math.log10(r)));
+    const n = r / p;
+    if (n < 1.5) return p; if (n < 3.5) return 2 * p; if (n < 7.5) return 5 * p; return 10 * p;
+}
+
+function drawGrid(ctx, canvas, pad, minX, maxX, minY, maxY, toCX, toCY) {
+    const w = canvas.width || canvas.logicalWidth || canvas.clientWidth;
+    const h = canvas.height || canvas.logicalHeight || canvas.clientHeight;
+    ctx.strokeStyle = 'rgba(255,255,255,0.04)'; ctx.lineWidth = 0.5;
+    ctx.font = '10px Inter, system-ui, sans-serif'; ctx.fillStyle = 'rgba(136,153,170,0.6)';
+    const stepX = niceStep(maxX - minX), stepY = niceStep(maxY - minY);
+    for (let x = Math.ceil(minX / stepX) * stepX; x <= maxX; x += stepX) {
+        const cx = toCX(x);
+        if (cx < pad || cx > w - 10) continue;
+        ctx.beginPath(); ctx.moveTo(cx, pad - 5); ctx.lineTo(cx, h - pad); ctx.stroke();
+        ctx.fillText(x.toFixed(stepX < 1 ? 1 : 0), cx - 8, h - pad + 14);
+    }
+    for (let y = Math.ceil(minY / stepY) * stepY; y <= maxY; y += stepY) {
+        const cy = toCY(y);
+        if (cy < 10 || cy > h - pad) continue;
+        ctx.beginPath(); ctx.moveTo(pad, cy); ctx.lineTo(w - pad, cy); ctx.stroke();
+        ctx.fillText(y.toFixed(stepY < 1 ? 1 : 0), 5, cy + 4);
+    }
+}
+
+function sizeCanvas(canvas) {
+    const parent = canvas.parentElement;
+    const dpr = window.devicePixelRatio || 1;
+    const w = parent.clientWidth, h = parent.clientHeight;
+    canvas.width = w * dpr; canvas.height = h * dpr;
+    canvas.style.width = w + 'px'; canvas.style.height = h + 'px';
+    const ctx = canvas.getContext('2d');
+    ctx.scale(dpr, dpr);
+    ctx.logicalWidth = w; ctx.logicalHeight = h;
+    return ctx;
+}
+
+function noDataMsg(ctx, w, h, msg) {
+    ctx.font = '12px Inter, system-ui, sans-serif';
+    ctx.fillStyle = 'rgba(136,153,170,0.5)';
+    ctx.textAlign = 'center';
+    ctx.fillText(msg || 'No data available', w / 2, h / 2);
+    ctx.textAlign = 'left';
+}
+
+function hexToRgba(hex, alpha) {
+    if (hex.startsWith('#')) {
+        const r = parseInt(hex.slice(1,3), 16), g = parseInt(hex.slice(3,5), 16), b = parseInt(hex.slice(5,7), 16);
+        return `rgba(${r},${g},${b},${alpha})`;
+    }
+    return hex;
+}
+
+/* ===================== Sparklines ===================== */
+function drawSparkline(canvasId, data, color) {
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) return;
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = 160 * dpr; canvas.height = 48 * dpr;
+    const ctx = canvas.getContext('2d');
+    ctx.scale(dpr, dpr);
+    const w = 160, h = 48;
+    if (!data || data.length < 2) { ctx.fillStyle = 'rgba(255,255,255,0.02)'; ctx.fillRect(0, 0, w, h); return; }
+    const min = Math.min(...data), max = Math.max(...data), range = max - min || 1;
+    const pts = data.map((v, i) => ({ x: (i / (data.length - 1)) * w, y: h - 4 - ((v - min) / range) * (h - 8) }));
+    const grad = ctx.createLinearGradient(0, 0, 0, h);
+    grad.addColorStop(0, hexToRgba(color, 0.2)); grad.addColorStop(1, 'transparent');
+    ctx.beginPath(); ctx.moveTo(pts[0].x, h);
+    pts.forEach(p => ctx.lineTo(p.x, p.y));
+    ctx.lineTo(pts[pts.length-1].x, h); ctx.closePath(); ctx.fillStyle = grad; ctx.fill();
+    ctx.beginPath(); pts.forEach((p, i) => i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y));
+    ctx.strokeStyle = color; ctx.lineWidth = 1.5; ctx.stroke();
+    const last = pts[pts.length - 1];
+    ctx.beginPath(); ctx.arc(last.x, last.y, 2.5, 0, Math.PI * 2); ctx.fillStyle = color; ctx.fill();
+}
+
+/* ===================== RPM Gauge ===================== */
+function drawRpmGauge() {
+    const canvas = document.getElementById('rpmGauge');
+    if (!canvas) return;
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = 200 * dpr; canvas.height = 120 * dpr;
+    const ctx = canvas.getContext('2d'); ctx.scale(dpr, dpr);
+    const w = 200, h = 120, cx = w / 2, cy = h - 10, radius = 70;
+    const targetRpm = Number(findValue('TargetRPM')) || 0;
+    const measuredRpm = Number(findValue('MeasuredRPM')) || 0;
+    const ratio = targetRpm > 0 ? Math.min(measuredRpm / targetRpm, 1.3) : 0;
+    ctx.beginPath(); ctx.arc(cx, cy, radius, Math.PI, 0, false);
+    ctx.strokeStyle = 'rgba(255,255,255,0.06)'; ctx.lineWidth = 12; ctx.lineCap = 'round'; ctx.stroke();
+    if (ratio > 0) {
+        const angle = Math.PI + ratio * Math.PI;
+        const color = ratio >= 0.95 ? '#34d399' : ratio >= 0.8 ? '#fbbf24' : '#f87171';
+        const grad = ctx.createLinearGradient(cx - radius, cy, cx + radius, cy);
+        grad.addColorStop(0, 'rgba(96,165,250,0.8)'); grad.addColorStop(1, color);
+        ctx.beginPath(); ctx.arc(cx, cy, radius, Math.PI, Math.min(angle, Math.PI * 2), false);
+        ctx.strokeStyle = grad; ctx.lineWidth = 12; ctx.lineCap = 'round'; ctx.stroke();
+    }
+    ctx.textAlign = 'center';
+    ctx.font = 'bold 18px Inter, system-ui, sans-serif';
+    ctx.fillStyle = ratio >= 0.95 ? '#34d399' : ratio >= 0.8 ? '#fbbf24' : '#f87171';
+    ctx.fillText(Math.round(measuredRpm), cx, cy - 18);
+    ctx.font = '10px Inter, system-ui, sans-serif'; ctx.fillStyle = 'rgba(136,153,170,0.7)';
+    ctx.fillText(`/ ${Math.round(targetRpm)} RPM`, cx, cy - 4);
+    ctx.fillText(`${(ratio * 100).toFixed(0)}%`, cx, cy + 10);
+    ctx.textAlign = 'left';
+    document.getElementById('gauge-label').textContent =
+        ratio >= 0.95 ? 'READY' : ratio >= 0.8 ? 'SPINNING UP' : targetRpm > 0 ? 'NOT READY' : '\u2014';
+}
+
+/* ===================== Main Trajectory Views ===================== */
+function canvasRedraw() { drawSideView(); drawTopView(); }
+
+function drawSideView() {
+    const ctx = sizeCanvas(document.getElementById('sideCanvas'));
+    const w = ctx.logicalWidth, h = ctx.logicalHeight;
+    ctx.fillStyle = '#0a0e14'; ctx.fillRect(0, 0, w, h);
+    const pathX = getArr('Trajectory/PathX'), pathY = getArr('Trajectory/PathY'), pathZ = getArr('Trajectory/PathZ');
+    const targetZVal = Number(findValue('TargetZ')) || 2.1;
+    const maxH = Number(findValue('Trajectory/MaxHeight')) || targetZVal + 1;
+    if (!pathX || pathX.length < 2) { noDataMsg(ctx, w, h, 'No trajectory \u2014 waiting for solver...'); return; }
+    const sx = pathX[0], sy = pathY[0];
+    const dist = pathX.map((x, i) => Math.sqrt((x - sx) ** 2 + (pathY[i] - sy) ** 2));
+    const maxDist = Math.max(...dist, 1), maxZVal = Math.max(maxH, ...pathZ, targetZVal) + 0.5;
+    const pad = 50, cw = w - pad * 2, ch = h - pad * 2 - 10;
+    const toCX = d => pad + d * (cw / maxDist);
+    const toCY = z => h - pad - z * (ch / maxZVal);
+    drawGrid(ctx, {width:w,height:h}, pad, 0, maxDist, 0, maxZVal, toCX, toCY);
+    // Gradient path
+    for (let i = 1; i < dist.length; i++) {
+        const t = i / (dist.length - 1);
+        ctx.strokeStyle = `hsl(${215 - t*30}, 80%, ${65 + t*10}%)`;
+        ctx.lineWidth = 2.5; ctx.beginPath();
+        ctx.moveTo(toCX(dist[i-1]), toCY(pathZ[i-1])); ctx.lineTo(toCX(dist[i]), toCY(pathZ[i])); ctx.stroke();
+    }
+    // Glow
+    ctx.globalAlpha = 0.12; ctx.strokeStyle = '#60a5fa'; ctx.lineWidth = 8; ctx.beginPath();
+    for (let i = 0; i < dist.length; i++) { if (i === 0) ctx.moveTo(toCX(dist[i]), toCY(pathZ[i])); else ctx.lineTo(toCX(dist[i]), toCY(pathZ[i])); }
+    ctx.stroke(); ctx.globalAlpha = 1;
+    // Dots
+    ctx.fillStyle = 'rgba(96, 165, 250, 0.25)';
+    for (let i = 0; i < dist.length; i += Math.max(1, Math.floor(dist.length / 50))) {
+        ctx.beginPath(); ctx.arc(toCX(dist[i]), toCY(pathZ[i]), 2, 0, Math.PI * 2); ctx.fill();
+    }
+    // Start
+    ctx.fillStyle = '#fbbf24'; ctx.beginPath(); ctx.arc(toCX(0), toCY(pathZ[0]), 5, 0, Math.PI * 2); ctx.fill();
+    ctx.font = '10px Inter, system-ui, sans-serif'; ctx.fillStyle = '#fbbf24';
+    ctx.fillText(`Start (${pathZ[0].toFixed(2)}m)`, toCX(0) + 10, toCY(pathZ[0]) - 6);
+    // End
+    const endDist = dist[dist.length - 1], endZ = pathZ[pathZ.length - 1];
+    ctx.fillStyle = '#34d399'; ctx.beginPath(); ctx.arc(toCX(endDist), toCY(endZ), 5, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#34d399'; ctx.fillText(`Target (${endZ.toFixed(2)}m)`, toCX(endDist) + 10, toCY(endZ) - 6);
+    // Peak
+    const peakZ = Math.max(...pathZ), peakIdx = pathZ.indexOf(peakZ);
+    ctx.setLineDash([3, 4]); ctx.strokeStyle = 'rgba(248,113,113,0.35)'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(pad, toCY(peakZ)); ctx.lineTo(w - pad, toCY(peakZ)); ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle = '#f87171'; ctx.beginPath(); ctx.arc(toCX(dist[peakIdx]), toCY(peakZ), 4, 0, Math.PI * 2); ctx.fill();
+    ctx.font = '10px Inter, system-ui, sans-serif'; ctx.fillText(`Peak: ${peakZ.toFixed(2)}m`, toCX(dist[peakIdx]) + 8, toCY(peakZ) - 6);
+    // Target ref
+    ctx.setLineDash([2, 3]); ctx.strokeStyle = 'rgba(52,211,153,0.25)'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(pad, toCY(targetZVal)); ctx.lineTo(w - pad, toCY(targetZVal)); ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle = 'rgba(136,153,170,0.4)'; ctx.font = '9px Inter, system-ui, sans-serif';
+    ctx.fillText(`${dist.length} pts \u00b7 ${maxDist.toFixed(2)}m range`, pad + 5, h - 8);
+}
+
+function drawTopView() {
+    const ctx = sizeCanvas(document.getElementById('topCanvas'));
+    const w = ctx.logicalWidth, h = ctx.logicalHeight;
+    ctx.fillStyle = '#0a0e14'; ctx.fillRect(0, 0, w, h);
+    const pathX = getArr('Trajectory/PathX'), pathY = getArr('Trajectory/PathY'), pathZ = getArr('Trajectory/PathZ');
+    const robotX = Number(findValue('RobotX')) || 0, robotY = Number(findValue('RobotY')) || 0;
+    const targetX = Number(findValue('TargetX')) || 6, targetY = Number(findValue('TargetY')) || 4;
+    if (!pathX || pathX.length < 2) { noDataMsg(ctx, w, h, 'No trajectory path data'); return; }
+    const allX = [...pathX, robotX, targetX], allY = [...pathY, robotY, targetY];
+    const minXv = Math.min(...allX) - 1, maxXv = Math.max(...allX) + 1, minYv = Math.min(...allY) - 1, maxYv = Math.max(...allY) + 1;
+    const pad = 50, cw = w - pad * 2, ch = h - pad * 2;
+    const scX = cw / (maxXv - minXv), scY = ch / (maxYv - minYv), scale = Math.min(scX, scY);
+    const toCX = x => pad + (x - minXv) * scale, toCY = y => h - pad - (y - minYv) * scale;
+    drawGrid(ctx, {width:w,height:h}, pad, minXv, maxXv, minYv, maxYv, toCX, toCY);
+    const maxZ = Math.max(...pathZ), minZ = Math.min(...pathZ);
+    for (let i = 1; i < pathX.length; i++) {
+        const t = maxZ > minZ ? (pathZ[i] - minZ) / (maxZ - minZ) : 0.5;
+        ctx.strokeStyle = `hsl(${210 - t*60}, ${70+t*20}%, ${60+t*15}%)`; ctx.lineWidth = 2.5;
+        ctx.beginPath(); ctx.moveTo(toCX(pathX[i-1]), toCY(pathY[i-1])); ctx.lineTo(toCX(pathX[i]), toCY(pathY[i])); ctx.stroke();
+    }
+    ctx.strokeStyle = 'rgba(52,211,153,0.6)'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(toCX(targetX), toCY(targetY), 0.53 * scale, 0, Math.PI * 2); ctx.stroke();
+    ctx.fillStyle = '#34d399'; ctx.beginPath(); ctx.arc(toCX(targetX), toCY(targetY), 4, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#fbbf24'; ctx.beginPath(); ctx.arc(toCX(robotX), toCY(robotY), 6, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = 'rgba(251,191,36,0.4)'; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(toCX(robotX), toCY(robotY), 11, 0, Math.PI * 2); ctx.stroke();
+    ctx.fillStyle = '#60a5fa'; ctx.beginPath(); ctx.arc(toCX(pathX[0]), toCY(pathY[0]), 4, 0, Math.PI * 2); ctx.fill();
+    const last = pathX.length - 1;
+    ctx.fillStyle = '#34d399'; ctx.beginPath(); ctx.arc(toCX(pathX[last]), toCY(pathY[last]), 4, 0, Math.PI * 2); ctx.fill();
+    ctx.font = '10px Inter, system-ui, sans-serif';
+    ctx.fillStyle = '#fbbf24'; ctx.fillText('Robot', toCX(robotX) + 13, toCY(robotY) - 4);
+    ctx.fillStyle = '#34d399'; ctx.fillText('Target', toCX(targetX) + 10, toCY(targetY) - 10);
+}
+
+/* ===================== Analytics Charts ===================== */
+function drawAnalytics() { drawHeightProfile(); drawVelocityProfile(); drawScoreDistribution(); drawRejectionDonut(); }
+
+function drawHeightProfile() {
+    const ctx = sizeCanvas(document.getElementById('heightProfileCanvas'));
+    const w = ctx.logicalWidth, h = ctx.logicalHeight;
+    ctx.fillStyle = '#0a0e14'; ctx.fillRect(0, 0, w, h);
+    const pathX = getArr('Trajectory/PathX'), pathY = getArr('Trajectory/PathY'), pathZ = getArr('Trajectory/PathZ');
+    if (!pathX || pathX.length < 2) { noDataMsg(ctx, w, h); return; }
+    const sx = pathX[0], sy = pathY[0];
+    const dist = pathX.map((x, i) => Math.sqrt((x - sx) ** 2 + (pathY[i] - sy) ** 2));
+    const maxDist = Math.max(...dist, 0.1), maxZ = Math.max(...pathZ) * 1.15;
+    const targetZ = Number(findValue('TargetZ')) || 2.1;
+    const pad = 45, padTop = 35, cw = w - pad - 15, ch = h - padTop - pad;
+    const toCX = d => pad + d / maxDist * cw, toCY = z => h - pad - z / maxZ * ch;
+    drawGrid(ctx, {width:w,height:h}, pad, 0, maxDist, 0, maxZ, toCX, toCY);
+    // Filled area
+    const grad = ctx.createLinearGradient(0, toCY(maxZ*0.9), 0, h-pad);
+    grad.addColorStop(0, 'rgba(96,165,250,0.2)'); grad.addColorStop(1, 'rgba(96,165,250,0.02)');
+    ctx.beginPath(); ctx.moveTo(toCX(dist[0]), h - pad);
+    for (let i = 0; i < dist.length; i++) ctx.lineTo(toCX(dist[i]), toCY(pathZ[i]));
+    ctx.lineTo(toCX(dist[dist.length-1]), h - pad); ctx.closePath(); ctx.fillStyle = grad; ctx.fill();
+    ctx.beginPath();
+    for (let i = 0; i < dist.length; i++) { if (i===0) ctx.moveTo(toCX(dist[i]), toCY(pathZ[i])); else ctx.lineTo(toCX(dist[i]), toCY(pathZ[i])); }
+    ctx.strokeStyle = '#60a5fa'; ctx.lineWidth = 2; ctx.stroke();
+    ctx.setLineDash([3,3]); ctx.strokeStyle = 'rgba(52,211,153,0.4)'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(pad, toCY(targetZ)); ctx.lineTo(w-15, toCY(targetZ)); ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle = 'rgba(52,211,153,0.6)'; ctx.font = '9px Inter, system-ui, sans-serif';
+    ctx.fillText(`Target: ${targetZ.toFixed(1)}m`, w - 90, toCY(targetZ) - 4);
+    ctx.fillStyle = 'rgba(136,153,170,0.5)'; ctx.textAlign = 'center';
+    ctx.fillText('Distance (m)', w / 2, h - 5); ctx.textAlign = 'left';
+}
+
+function drawVelocityProfile() {
+    const ctx = sizeCanvas(document.getElementById('velocityProfileCanvas'));
+    const w = ctx.logicalWidth, h = ctx.logicalHeight;
+    ctx.fillStyle = '#0a0e14'; ctx.fillRect(0, 0, w, h);
+    const pathX = getArr('Trajectory/PathX'), pathY = getArr('Trajectory/PathY'), pathZ = getArr('Trajectory/PathZ');
+    if (!pathX || pathX.length < 3) { noDataMsg(ctx, w, h, 'Velocity estimated from position deltas'); return; }
+    const speeds = [], horizSpeeds = [], vertSpeeds = [];
+    for (let i = 1; i < pathX.length; i++) {
+        const dx=pathX[i]-pathX[i-1], dy=pathY[i]-pathY[i-1], dz=pathZ[i]-pathZ[i-1];
+        horizSpeeds.push(Math.sqrt(dx*dx+dy*dy)); vertSpeeds.push(dz); speeds.push(Math.sqrt(dx*dx+dy*dy+dz*dz));
+    }
+    const maxSpeed = Math.max(...speeds, 0.001) * 1.15;
+    const pad = 45, padTop = 35, cw = w-pad-15, ch = h-padTop-pad;
+    const toCX = i => pad + i / (speeds.length - 1) * cw;
+    const toY = v => h - pad - v / maxSpeed * ch;
+    ctx.strokeStyle = 'rgba(255,255,255,0.04)'; ctx.lineWidth = 0.5;
+    for (let i = 0; i < 6; i++) { const y = padTop + i*ch/5; ctx.beginPath(); ctx.moveTo(pad,y); ctx.lineTo(w-15,y); ctx.stroke(); }
+    ctx.beginPath(); speeds.forEach((s,i)=>{if(i===0)ctx.moveTo(toCX(i),toY(s));else ctx.lineTo(toCX(i),toY(s));}); ctx.strokeStyle='#60a5fa'; ctx.lineWidth=2; ctx.stroke();
+    ctx.beginPath(); horizSpeeds.forEach((s,i)=>{if(i===0)ctx.moveTo(toCX(i),toY(s));else ctx.lineTo(toCX(i),toY(s));}); ctx.strokeStyle='#34d399'; ctx.lineWidth=1.5; ctx.stroke();
+    const vMax = Math.max(Math.abs(Math.min(...vertSpeeds)), Math.abs(Math.max(...vertSpeeds))) * 1.3 || 1;
+    const toVY = v => h - pad - ch/2 - (v / vMax) * (ch/2);
+    ctx.beginPath(); vertSpeeds.forEach((v,i)=>{if(i===0)ctx.moveTo(toCX(i),toVY(v));else ctx.lineTo(toCX(i),toVY(v));}); ctx.strokeStyle='#fbbf24'; ctx.lineWidth=1.5; ctx.setLineDash([3,2]); ctx.stroke(); ctx.setLineDash([]);
+    ctx.font = '9px Inter, system-ui, sans-serif';
+    const lx = pad+8, ly = padTop+12;
+    ctx.fillStyle='#60a5fa'; ctx.fillRect(lx,ly,12,2); ctx.fillText('Total',lx+16,ly+4);
+    ctx.fillStyle='#34d399'; ctx.fillRect(lx,ly+14,12,2); ctx.fillText('Horizontal',lx+16,ly+18);
+    ctx.fillStyle='#fbbf24'; ctx.fillRect(lx,ly+28,12,2); ctx.fillText('Vertical',lx+16,ly+32);
+    ctx.fillStyle='rgba(136,153,170,0.5)'; ctx.textAlign='center'; ctx.fillText('Point Index',w/2,h-5); ctx.textAlign='left';
+}
+
+function drawScoreDistribution() {
+    const ctx = sizeCanvas(document.getElementById('scoreDistCanvas'));
+    const w = ctx.logicalWidth, h = ctx.logicalHeight;
+    ctx.fillStyle = '#0a0e14'; ctx.fillRect(0, 0, w, h);
+    const scores = getArr('Debug/AcceptedScores');
+    if (!scores || scores.length < 1) { noDataMsg(ctx, w, h, 'No accepted candidates'); return; }
+    const numBins = Math.min(20, Math.max(5, Math.ceil(scores.length / 2)));
+    const minS = Math.min(...scores), maxS = Math.max(...scores), binWidth = (maxS - minS) / numBins || 1;
+    const bins = Array(numBins).fill(0);
+    scores.forEach(s => { const idx = Math.min(Math.floor((s - minS) / binWidth), numBins - 1); bins[idx]++; });
+    const maxBin = Math.max(...bins, 1);
+    const pad = 45, padTop = 35, cw = w-pad-15, ch = h-padTop-pad, barW = cw / numBins - 2;
+    for (let i = 0; i < numBins; i++) {
+        const bh = (bins[i] / maxBin) * ch, x = pad + i*(cw/numBins)+1, y = h-pad-bh;
+        const grad = ctx.createLinearGradient(x, y, x, h-pad);
+        grad.addColorStop(0, 'rgba(96,165,250,0.8)'); grad.addColorStop(1, 'rgba(96,165,250,0.3)');
+        ctx.fillStyle = grad;
+        const r = Math.min(3, barW/4);
+        ctx.beginPath(); ctx.moveTo(x+r,y); ctx.lineTo(x+barW-r,y); ctx.quadraticCurveTo(x+barW,y,x+barW,y+r);
+        ctx.lineTo(x+barW,h-pad); ctx.lineTo(x,h-pad); ctx.lineTo(x,y+r); ctx.quadraticCurveTo(x,y,x+r,y); ctx.fill();
+        if (bins[i] > 0) { ctx.fillStyle='rgba(255,255,255,0.6)'; ctx.font='8px Inter, system-ui, sans-serif'; ctx.textAlign='center'; ctx.fillText(bins[i],x+barW/2,y-3); }
+    }
+    const bestScore = Number(findValue('Debug/BestScore'));
+    if (isFinite(bestScore) && maxS > minS) {
+        const bx = pad + ((bestScore-minS)/(maxS-minS))*cw;
+        ctx.strokeStyle='#34d399'; ctx.lineWidth=2; ctx.setLineDash([3,2]);
+        ctx.beginPath(); ctx.moveTo(bx,padTop); ctx.lineTo(bx,h-pad); ctx.stroke(); ctx.setLineDash([]);
+        ctx.fillStyle='#34d399'; ctx.font='9px Inter, system-ui, sans-serif'; ctx.textAlign='center';
+        ctx.fillText(`Best: ${bestScore.toFixed(1)}`,bx,padTop+10);
+    }
+    ctx.fillStyle='rgba(136,153,170,0.5)'; ctx.font='9px Inter, system-ui, sans-serif';
+    ctx.textAlign='center'; ctx.fillText('Score',w/2,h-5); ctx.textAlign='left';
+    ctx.fillText(minS.toFixed(0),pad,h-pad+12); ctx.textAlign='right'; ctx.fillText(maxS.toFixed(0),w-15,h-pad+12); ctx.textAlign='left';
+}
+
+function drawRejectionDonut() {
+    const ctx = sizeCanvas(document.getElementById('rejectionDonutCanvas'));
+    const w = ctx.logicalWidth, h = ctx.logicalHeight;
+    ctx.fillStyle = '#0a0e14'; ctx.fillRect(0, 0, w, h);
+    const acc=Number(findValue('Debug/Accepted'))||0, rejC=Number(findValue('Debug/RejectedCollision'))||0,
+          rejA=Number(findValue('Debug/RejectedArcTooLow'))||0, rejCl=Number(findValue('Debug/RejectedClearance'))||0,
+          rejM=Number(findValue('Debug/RejectedMiss'))||0, rejF=Number(findValue('Debug/RejectedFlyover'))||0;
+    const total = acc+rejC+rejA+rejCl+rejM+rejF;
+    if (total===0) { noDataMsg(ctx, w, h, 'No solver data'); return; }
+    const slices = [{val:acc,color:'#34d399',label:'Accepted'},{val:rejC,color:'#f87171',label:'Collision'},
+        {val:rejA,color:'#fbbf24',label:'Arc Low'},{val:rejCl,color:'#a78bfa',label:'Clearance'},
+        {val:rejM,color:'#60a5fa',label:'Missed'},{val:rejF,color:'#fb923c',label:'Flyover'}].filter(s=>s.val>0);
+    const cx = w*0.4, cy = h/2+10, outerR = Math.min(w*0.3, h*0.35), innerR = outerR*0.55;
+    let angle = -Math.PI/2;
+    for (const s of slices) {
+        const sweep = (s.val/total)*Math.PI*2;
+        ctx.beginPath(); ctx.arc(cx,cy,outerR,angle,angle+sweep); ctx.arc(cx,cy,innerR,angle+sweep,angle,true);
+        ctx.closePath(); ctx.fillStyle=s.color; ctx.fill(); angle += sweep;
+    }
+    ctx.textAlign='center'; ctx.font='bold 16px Inter, system-ui, sans-serif'; ctx.fillStyle='#e2e8f0';
+    ctx.fillText(total,cx,cy-2); ctx.font='9px Inter, system-ui, sans-serif'; ctx.fillStyle='rgba(136,153,170,0.7)';
+    ctx.fillText('total',cx,cy+12); ctx.textAlign='left';
+    const lx = w*0.7, ly = h*0.15; ctx.font='10px Inter, system-ui, sans-serif';
+    slices.forEach((s,i) => {
+        const y = ly + i*22; ctx.fillStyle=s.color; ctx.beginPath(); ctx.arc(lx,y,4,0,Math.PI*2); ctx.fill();
+        ctx.fillStyle='#e2e8f0'; ctx.fillText(s.label,lx+12,y+4);
+        ctx.fillStyle='rgba(136,153,170,0.7)'; ctx.fillText(`${s.val} (${(s.val/total*100).toFixed(0)}%)`,lx+12,y+16);
+    });
+}
+
+/* ===================== History Charts ===================== */
+function drawHistory() {
+    drawHistoryChart('historyRpmCanvas',[{data:history.targetRpm,color:'#60a5fa',label:'Target RPM'},{data:history.measuredRpm,color:'#34d399',label:'Measured RPM'}]);
+    drawHistoryChart('historyPitchCanvas',[{data:history.pitch,color:'#a78bfa',label:'Pitch (\u00b0)'},{data:history.distance,color:'#fbbf24',label:'Distance (m)',secondary:true}]);
+    drawHistoryChart('historyScoreCanvas',[{data:history.score,color:'#22d3ee',label:'Best Score'}]);
+}
+
+function drawHistoryChart(canvasId, series) {
+    const canvas = document.getElementById(canvasId); if (!canvas) return;
+    const ctx = sizeCanvas(canvas);
+    const w = ctx.logicalWidth, h = ctx.logicalHeight;
+    ctx.fillStyle = '#0a0e14'; ctx.fillRect(0, 0, w, h);
+    const maxLen = Math.max(...series.map(s=>s.data.length), 0);
+    if (maxLen < 2) { noDataMsg(ctx, w, h, 'Waiting for data history...'); return; }
+    const pad=45, padTop=30, padRight=15, cw=w-pad-padRight, ch=h-padTop-30;
+    let minV=Infinity,maxV=-Infinity,minV2=Infinity,maxV2=-Infinity;
+    for (const s of series) { if (!s.data.length) continue;
+        if (s.secondary){minV2=Math.min(minV2,...s.data);maxV2=Math.max(maxV2,...s.data);}
+        else{minV=Math.min(minV,...s.data);maxV=Math.max(maxV,...s.data);} }
+    if(!isFinite(minV)){minV=0;maxV=1;} const range=maxV-minV||1, range2=maxV2-minV2||1;
+    ctx.strokeStyle='rgba(255,255,255,0.04)'; ctx.lineWidth=0.5;
+    for(let i=0;i<=4;i++){const y=padTop+i*ch/4; ctx.beginPath();ctx.moveTo(pad,y);ctx.lineTo(w-padRight,y);ctx.stroke();
+        const val=maxV-i*range/4; ctx.fillStyle='rgba(136,153,170,0.5)'; ctx.font='9px Inter, system-ui, sans-serif';
+        ctx.fillText(val.toFixed(val>100?0:1),3,y+3);}
+    for (const s of series) { if(s.data.length<2)continue;
+        const rng=s.secondary?range2:range, mn=s.secondary?minV2:minV;
+        const toCY=v=>padTop+ch-((v-mn)/rng)*ch;
+        const fillGrad=ctx.createLinearGradient(0,padTop,0,padTop+ch);
+        fillGrad.addColorStop(0,hexToRgba(s.color,0.15));fillGrad.addColorStop(1,'transparent');
+        ctx.beginPath();ctx.moveTo(pad,padTop+ch);
+        s.data.forEach((v,i)=>{ctx.lineTo(pad+(i/(s.data.length-1))*cw,toCY(v));});
+        ctx.lineTo(pad+cw,padTop+ch);ctx.closePath();ctx.fillStyle=fillGrad;ctx.fill();
+        ctx.beginPath();s.data.forEach((v,i)=>{const x=pad+(i/(s.data.length-1))*cw;if(i===0)ctx.moveTo(x,toCY(v));else ctx.lineTo(x,toCY(v));});
+        ctx.strokeStyle=s.color;ctx.lineWidth=s.secondary?1.5:2;if(s.secondary){ctx.setLineDash([4,3]);}ctx.stroke();ctx.setLineDash([]);
+        const lastV=s.data[s.data.length-1]; ctx.fillStyle=s.color;
+        ctx.beginPath();ctx.arc(pad+cw,toCY(lastV),3,0,Math.PI*2);ctx.fill();
+    }
+    ctx.font='9px Inter, system-ui, sans-serif'; let lx=pad+8;
+    for(const s of series){ctx.fillStyle=s.color;ctx.fillRect(lx,padTop+6,12,2);ctx.fillText(s.label,lx+16,padTop+10);lx+=ctx.measureText(s.label).width+30;}
+    ctx.fillStyle='rgba(136,153,170,0.4)';ctx.textAlign='center';ctx.fillText(`Last ${maxLen} samples`,w/2,h-5);ctx.textAlign='left';
+}
+
+/* ===================== Candidate Chart ===================== */
+function drawCandidateChart() {
+    const ctx = sizeCanvas(document.getElementById('candidateCanvas'));
+    const w = ctx.logicalWidth, h = ctx.logicalHeight;
+    ctx.fillStyle = '#0a0e14'; ctx.fillRect(0, 0, w, h);
+    const allPitch=getArr('Debug/AllPitches'), allStatus=getArr('Debug/AllStatus'), allClosest=getArr('Debug/AllClosest');
+    const accPitch=getArr('Debug/AcceptedPitches'), accScore=getArr('Debug/AcceptedScores');
+    const accTOF=getArr('Debug/AcceptedTOF'), accMaxH=getArr('Debug/AcceptedMaxHeight');
+    if (!allPitch||allPitch.length===0) { noDataMsg(ctx,w,h,'No candidate data \u2014 enable solver debug'); return; }
+    const yAxisType = document.getElementById('candidateYAxis').value;
+    const pad=50, cw=w-pad*2, ch=h-pad*2, minP=Math.min(...allPitch)-1, maxP=Math.max(...allPitch)+1;
+    const statusColors={'NONE':'#34d399','COLLISION':'#f87171','ARC_TOO_LOW':'#fbbf24','CLEARANCE_TOO_LOW':'#a78bfa','MISSED_TARGET':'#60a5fa','FLYOVER':'#fb923c'};
+    if (yAxisType==='closest'&&allClosest) {
+        const finite=allClosest.filter(x=>isFinite(x)), maxY=(finite.length>0?Math.max(...finite):1)*1.1;
+        const toCX=p=>pad+(p-minP)/(maxP-minP)*cw, toCY=v=>h-pad-(v/maxY)*ch;
+        drawGrid(ctx,{width:w,height:h},pad,minP,maxP,0,maxY,toCX,toCY);
+        for(let i=0;i<allPitch.length;i++){if(!isFinite(allClosest[i]))continue;ctx.fillStyle=statusColors[allStatus[i]]||'#8899aa';
+            ctx.globalAlpha=0.8;ctx.beginPath();ctx.arc(toCX(allPitch[i]),toCY(allClosest[i]),4,0,Math.PI*2);ctx.fill();ctx.globalAlpha=1;}
+    } else if(accPitch&&accPitch.length>0) {
+        let yData,yLabel;
+        if(yAxisType==='score'){yData=accScore;yLabel='Score';}else if(yAxisType==='maxH'){yData=accMaxH;yLabel='Max Height (m)';}else{yData=accTOF;yLabel='TOF (s)';}
+        if(!yData||yData.length===0){noDataMsg(ctx,w,h,'No data for axis');return;}
+        const minY=Math.min(...yData)*0.9, maxY=Math.max(...yData)*1.1||1;
+        const toCX=p=>pad+(p-minP)/(maxP-minP)*cw, toCY=v=>h-pad-((v-minY)/(maxY-minY))*ch;
+        drawGrid(ctx,{width:w,height:h},pad,minP,maxP,minY,maxY,toCX,toCY);
+        ctx.globalAlpha=0.7;ctx.fillStyle='#34d399';
+        for(let i=0;i<accPitch.length;i++){ctx.beginPath();ctx.arc(toCX(accPitch[i]),toCY(yData[i]),5,0,Math.PI*2);ctx.fill();}
+        ctx.globalAlpha=1;
+        if(accPitch.length>1){const sorted=accPitch.map((p,i)=>({p,y:yData[i]})).sort((a,b)=>a.p-b.p);
+            ctx.strokeStyle='rgba(52,211,153,0.4)';ctx.lineWidth=1.5;ctx.beginPath();
+            sorted.forEach((s,i)=>{if(i===0)ctx.moveTo(toCX(s.p),toCY(s.y));else ctx.lineTo(toCX(s.p),toCY(s.y));});ctx.stroke();}
+        const bestP=Number(findValue('Debug/BestPitchDeg'));
+        if(isFinite(bestP)){const bestIdx=accPitch.findIndex(p=>Math.abs(p-bestP)<0.5);
+            if(bestIdx>=0){ctx.strokeStyle='#fbbf24';ctx.lineWidth=2;ctx.beginPath();ctx.arc(toCX(accPitch[bestIdx]),toCY(yData[bestIdx]),9,0,Math.PI*2);ctx.stroke();
+                ctx.fillStyle='#fbbf24';ctx.font='9px Inter, system-ui, sans-serif';ctx.fillText('BEST',toCX(accPitch[bestIdx])+12,toCY(yData[bestIdx])-4);}}
+        if(allPitch&&allStatus){for(let i=0;i<allPitch.length;i++){if(allStatus[i]==='NONE')continue;
+            const cx2=toCX(allPitch[i]),cy2=h-pad-ch*0.04;ctx.strokeStyle=statusColors[allStatus[i]]||'#8899aa';ctx.lineWidth=1.2;
+            ctx.beginPath();ctx.moveTo(cx2-3,cy2-3);ctx.lineTo(cx2+3,cy2+3);ctx.stroke();
+            ctx.beginPath();ctx.moveTo(cx2+3,cy2-3);ctx.lineTo(cx2-3,cy2+3);ctx.stroke();}}
+    } else { noDataMsg(ctx,w,h,'No accepted candidates'); }
+}
+
+/* ===================== Main UI Update Loop ===================== */
+function updateUI() {
+    const now = performance.now();
+    if (now - lastUIUpdate < UI_INTERVAL) { requestAnimationFrame(updateUI); return; }
+    lastUIUpdate = now;
+    if (!nt.connected) { requestAnimationFrame(updateUI); return; }
+    updateConnectionUI();
+    // Shot status
+    const valid = findValue('ValidShot');
+    setText('s-validShot', valid != null ? (valid ? 'YES' : 'NO') : '\u2014');
+    const el = document.getElementById('s-validShot');
+    if (el) el.className = 'value ' + (valid ? 'success' : 'danger');
+    document.getElementById('shotIndicator').style.background = valid ? 'var(--success)' : 'var(--danger)';
+    setText('s-status', getStr('Trajectory/Status'));
+    setText('s-source', getStr('ShotSource'));
+    setText('s-mode', getStr('Mode'));
+    setText('s-confidence', getNum('Trajectory/Confidence', 1) + '%');
+    // Shot params
+    const distVal=Number(findValue('Distance')), pitchVal=Number(findValue('TargetPitchDeg'));
+    const rpmVal=Number(findValue('TargetRPM')), measuredVal=Number(findValue('MeasuredRPM'));
+    const scoreVal=Number(findValue('Debug/BestScore'));
+    setText('s-distance', (isFinite(distVal)?distVal.toFixed(3):'\u2014')+' m');
+    setText('s-pitch', (isFinite(pitchVal)?pitchVal.toFixed(2):'\u2014')+'\u00b0');
+    setText('s-yawAdjust', getNum('Trajectory/YawAdjustDeg',2)+'\u00b0');
+    setText('s-rpm', isFinite(rpmVal)?Math.round(rpmVal).toString():'\u2014');
+    setText('s-measuredRpm', isFinite(measuredVal)?Math.round(measuredVal).toString():'\u2014');
+    setText('s-rpmDeficit', getNum('RpmDeficit',0));
+    const rpmDefEl=document.getElementById('s-rpmDeficit');
+    if(rpmDefEl){const def=Number(findValue('RpmDeficit'));rpmDefEl.className='value '+(isFinite(def)?(Math.abs(def)<100?'success':def>0?'danger':'warning'):'');}
+    setText('s-readyToFire', getBool('ReadyToFire'));
+    const readyEl=document.getElementById('s-readyToFire');
+    if(readyEl)readyEl.className='value '+(findValue('ReadyToFire')?'success':'danger');
+    setText('s-velocity', getNum('Trajectory/Velocity',2)+' m/s');
+    setText('s-tof', getNum('Trajectory/TimeOfFlight',3)+' s');
+    setText('s-maxHeight', getNum('Trajectory/MaxHeight',2)+' m');
+    setText('s-margin', getNum('Trajectory/Margin',3)+' m');
+    // History
+    if(isFinite(rpmVal))pushHistory('targetRpm',rpmVal); if(isFinite(measuredVal))pushHistory('measuredRpm',measuredVal);
+    if(isFinite(pitchVal))pushHistory('pitch',pitchVal); if(isFinite(distVal))pushHistory('distance',distVal);
+    if(isFinite(scoreVal))pushHistory('score',scoreVal);
+    // Sparklines
+    drawSparkline('spark-distance',history.distance,'#60a5fa');
+    drawSparkline('spark-pitch',history.pitch,'#a78bfa');
+    drawSparkline('spark-rpm',history.targetRpm,'#60a5fa');
+    drawRpmGauge();
+    // Path info
+    const pathX=getArr('Trajectory/PathX'), pathY=getArr('Trajectory/PathY'), pathZ=getArr('Trajectory/PathZ');
+    if(pathX&&pathX.length>0){setText('s-pathLength',String(pathX.length));
+        setText('s-pathStart',`(${pathX[0].toFixed(2)}, ${pathY[0].toFixed(2)}, ${pathZ[0].toFixed(2)})`);
+        const last=pathX.length-1;setText('s-pathEnd',`(${pathX[last].toFixed(2)}, ${pathY[last].toFixed(2)}, ${pathZ[last].toFixed(2)})`);
+        setText('s-horizRange',Math.sqrt((pathX[last]-pathX[0])**2+(pathY[last]-pathY[0])**2).toFixed(2)+' m');
+        setText('s-vertRange',`${Math.min(...pathZ).toFixed(2)} \u2192 ${Math.max(...pathZ).toFixed(2)} m`);}
+    // Solver debug
+    setText('s-totalTested',getNum('Debug/TotalTested',0)); setText('s-accepted',getNum('Debug/Accepted',0)); setText('s-totalRejected',getNum('Debug/TotalRejected',0));
+    const rejC=Number(findValue('Debug/RejectedCollision'))||0, rejA=Number(findValue('Debug/RejectedArcTooLow'))||0,
+          rejCl=Number(findValue('Debug/RejectedClearance'))||0, rejM=Number(findValue('Debug/RejectedMiss'))||0, rejF=Number(findValue('Debug/RejectedFlyover'))||0;
+    const acc=Number(findValue('Debug/Accepted'))||0;
+    setText('s-rejCollision',String(rejC)); setText('s-rejArc',String(rejA)); setText('s-rejClearance',String(rejCl));
+    setText('s-rejMiss',String(rejM)); setText('s-rejFlyover',String(rejF));
+    setText('s-bestScore',getNum('Debug/BestScore',1)); setText('s-bestPitch',getNum('Debug/BestPitchDeg',2)+'\u00b0');
+    const total=acc+rejC+rejA+rejCl+rejM+rejF;
+    if(total>0){const bar=document.getElementById('rejectionBar');bar.innerHTML='';
+        [{c:acc,color:'var(--success)'},{c:rejC,color:'var(--danger)'},{c:rejA,color:'var(--warning)'},
+         {c:rejCl,color:'var(--purple)'},{c:rejM,color:'var(--accent)'},{c:rejF,color:'var(--orange)'}]
+        .forEach(s=>{if(s.c<=0)return;const d=document.createElement('div');d.className='bar-segment';d.style.width=(s.c/total*100)+'%';d.style.background=s.color;bar.appendChild(d);});}
+    // Positions
+    const rx=findValue('RobotX'),ry=findValue('RobotY');setText('s-robotPos',rx!=null?`(${Number(rx).toFixed(2)}, ${Number(ry).toFixed(2)})`:'\u2014');
+    const sx=findValue('ShooterX'),sy=findValue('ShooterY');setText('s-shooterPos',sx!=null?`(${Number(sx).toFixed(2)}, ${Number(sy).toFixed(2)})`:'\u2014');
+    const tx=findValue('TargetX'),ty=findValue('TargetY'),tz=findValue('TargetZ');
+    setText('s-targetPos',tx!=null?`(${Number(tx).toFixed(2)}, ${Number(ty).toFixed(2)}, ${Number(tz).toFixed(2)})`:'\u2014');
+    setText('s-shooterH',getNum('ShooterHeight',2)+' m');
+    // Summaries
+    const summary=findValue('Debug/Summary'); if(summary)document.getElementById('summary-text').textContent=summary;
+    const detail=findValue('Debug/DetailedTable'); if(detail)document.getElementById('detailed-table').textContent=detail;
+    updateRawTable();
+    // Redraw active tab
+    const activeTab=document.querySelector('.tab.active');
+    if(activeTab){const tab=activeTab.dataset.tab;
+        if(tab==='trajectory')canvasRedraw(); if(tab==='candidates')drawCandidateChart();
+        if(tab==='analytics')drawAnalytics(); if(tab==='history')drawHistory();}
+    requestAnimationFrame(updateUI);
+}
+
+function updateRawTable() {
+    const tbody=document.getElementById('raw-tbody');const rows=[];
+    for(const[key,entry]of nt.getAllValues()){let v=entry.value;
+        if(Array.isArray(v))v=`[${v.length}] ${v.slice(0,5).map(x=>typeof x==='number'?x.toFixed(3):x).join(', ')}${v.length>5?'\u2026':''}`;
+        else if(v instanceof Uint8Array)v=`bytes[${v.length}]`;else if(typeof v==='object'&&v!==null)v=JSON.stringify(v).substring(0,100);
+        rows.push({key,val:String(v),hi:key.includes('ExampleShooter')||key.includes('Trajectory')});}
+    rows.sort((a,b)=>a.key.localeCompare(b.key));
+    if(tbody.children.length!==rows.length){tbody.innerHTML='';
+        for(const r of rows){const tr=document.createElement('tr');const s=r.hi?' style="background:rgba(96,165,250,0.04)"':'';
+            tr.innerHTML=`<td class="key"${s}>${r.key.replace(/&/g,'&amp;').replace(/</g,'&lt;')}</td><td class="val">${String(r.val).replace(/&/g,'&amp;').replace(/</g,'&lt;')}</td><td></td>`;
+            tbody.appendChild(tr);}}
+}
+
+/* ===================== Event Listeners ===================== */
+let lastLogged={}, logThrottle={};
+nt.onValue((key,value)=>{
+    if(!resolvedPrefix&&key.includes('ExampleShooter')){const idx=key.indexOf('ExampleShooter/');
+        if(idx>=0){const pfx=key.substring(0,idx)+'ExampleShooter/';resolvedPrefix=pfx;
+            if(!PREFIXES.includes(pfx))PREFIXES.push(pfx);log('success',`Auto-detected prefix: "${pfx}"`);}}
+    const short=key.includes('ExampleShooter/')?key.substring(key.indexOf('ExampleShooter/')+15):key;
+    const now=performance.now();
+    const important=['Trajectory/Status','Trajectory/StatusMessage','ValidShot'];
+    if(important.some(k=>short===k)){const s=String(value);if(lastLogged[short]!==s){lastLogged[short]=s;
+        log(short==='Trajectory/Status'?(value==='SUCCESS'?'success':'warn'):'data',`${short} = ${s.substring(0,200)}`);}}
+    if(short.startsWith('Debug/')&&(!logThrottle.debug||now-logThrottle.debug>2000)){logThrottle.debug=now;
+        log('data',`Solver: ${findValue('Debug/TotalTested')||'?'} tested, ${findValue('Debug/Accepted')||'?'} accepted`);}
+});
+
+/* ===================== Init ===================== */
+document.addEventListener('DOMContentLoaded',()=>{
+    log('info','Trajectory Debug Dashboard v3 loaded');
+    log('info','Enter robot IP and click Connect. Use localhost or 127.0.0.1 for simulation.');
+    const params=new URLSearchParams(window.location.search);const ip=params.get('ip');
+    if(ip){document.getElementById('robotIp').value=ip;nt.connect(ip);}
+    requestAnimationFrame(updateUI);
+    window.addEventListener('resize',()=>{canvasRedraw();const t=document.querySelector('.tab.active');
+        if(t){const n=t.dataset.tab;if(n==='analytics')drawAnalytics();if(n==='history')drawHistory();if(n==='candidates')drawCandidateChart();}});
+});
+document.addEventListener('keydown',(e)=>{if(e.key==='Enter'&&document.activeElement===document.getElementById('robotIp'))toggleConnection();});
+</script>
+</body>
+</html>

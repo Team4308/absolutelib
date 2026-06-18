@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Installation | AbsoluteLib V2</title>
+    <link rel="stylesheet" href="../styles.css">
+    <link rel="stylesheet"
+        href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script>hljs.highlightAll();</script>
+</head>
+
+<body>
+    <div class="layout">
+        <div id="sidebar-container"></div>
+        <script src="sidebar.js"></script>
+        <div class="overlay" id="overlay" onclick="toggleSidebar()"></div>
+        <main class="main-content">
+            <div class="content-container">
+                <section id="installation">
+                    <h2>Installation</h2>
+                    <p>Install via WPILib Vendor Libraries (online):</p>
+                    <pre><code class="language-text">https://team4308.github.io/absolutelib/lib/absolutelib.json</code></pre>
+
+                    <h4>Required Dependencies</h4>
+                    <p>Ensure you have the following vendor libraries installed to avoid build errors:</p>
+                    <ul>
+                        <li>Phoenix6 Replay &amp; Phoenix5 Replay</li>
+                        <li>REVLib</li>
+                        <li>AdvantageKit</li>
+                        <li>PhotonLib</li>
+                        <li>PathPlannerLib</li>
+                    </ul>
+                </section>
+
+                <section id="updating">
+                    <h2>Updating AbsoluteLib</h2>
+                    <p>When a new version is released, you can update your robot project using any of these methods:</p>
+
+                    <h4>Option 1: Check for Updates (Recommended)</h4>
+                    <ol>
+                        <li>Open WPILib VS Code and press <code>Ctrl+Shift+P</code></li>
+                        <li>Run <code>WPILib: Manage Vendor Libraries</code></li>
+                        <li>Select <strong>Check for updates (online)</strong></li>
+                        <li>If AbsoluteLib shows an available update, accept it</li>
+                    </ol>
+                    <p>This works automatically because the vendor JSON URL always points to the latest published version.</p>
+
+                    <h4>Option 2: Re-install Online</h4>
+                    <ol>
+                        <li>Open WPILib VS Code and press <code>Ctrl+Shift+P</code></li>
+                        <li>Run <code>WPILib: Manage Vendor Libraries</code></li>
+                        <li>Select <strong>Install new library (online)</strong></li>
+                        <li>Paste the URL:</li>
+                    </ol>
+                    <pre><code class="language-text">https://team4308.github.io/absolutelib/lib/absolutelib.json</code></pre>
+                    <p>If prompted to replace the existing version, confirm. Then rebuild your project.</p>
+
+                    <h4>Option 3: Manual JSON Edit</h4>
+                    <ol>
+                        <li>Open <code>vendordeps/absolutelib.json</code> in your robot project</li>
+                        <li>Update the <code>"version"</code> field to the new version number</li>
+                        <li>Update <code>javaDependencies[0].version</code> to match</li>
+                        <li>Rebuild your project</li>
+                    </ol>
+
+                    <h4>After Updating</h4>
+                    <p>Always do a clean build after updating to avoid stale cached artifacts:</p>
+                    <pre><code class="language-bash">./gradlew clean build</code></pre>
+                    <p>Check the <a href="../changelog-viewer.html">Changelog</a> for details on what changed in each version.</p>
+                </section>
+            </div>
+        </main>
+    </div>
+    <button class="mobile-toggle" onclick="toggleSidebar()">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="3" y1="12" x2="21" y2="12"></line>
+            <line x1="3" y1="6" x2="21" y2="6"></line>
+            <line x1="3" y1="18" x2="21" y2="18"></line>
+        </svg>
+    </button>
+    <script>
+        function toggleSidebar() {
+            document.getElementById('sidebar').classList.toggle('open');
+            document.getElementById('overlay').classList.toggle('open');
+        }
+    </script>
+</body>
+
+</html>

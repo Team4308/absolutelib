@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Shooter System | AbsoluteLib V2</title>
+    <link rel="stylesheet" href="../styles.css">
+    <link rel="stylesheet"
+        href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script>hljs.highlightAll();</script>
+</head>
+
+<body>
+    <div class="layout">
+        <div id="sidebar-container"></div>
+        <script src="sidebar.js"></script>
+        <div class="overlay" id="overlay" onclick="toggleSidebar()"></div>
+        <main class="main-content">
+            <div class="content-container">
+                <section id="shooter">
+                    <h2>Shooter System</h2>
+                    <p>The <code>ShooterSystem</code> is the high-level manager that integrates the
+                        <code>TrajectorySolver</code>,
+                        <code>ShotLookupTable</code>, and hardware control.
+                        It handles state machines, safety validation, movement compensation, and fallback references.
+                    </p>
+
+                    <h3>Shot Modes</h3>
+                    <ul>
+                        <li><strong>LOOKUP_ONLY:</strong> Uses a static lookup table (fastest, most reliable for static
+                            shots).</li>
+                        <li><strong>SOLVER_ONLY:</strong> Uses the physics solver for every frame (most flexible, higher
+                            CPU usage).</li>
+                        <li><strong>LOOKUP_WITH_SOLVER_FALLBACK:</strong> Tries lookup table first; if out of range,
+                            uses solver.</li>
+                        <li><strong>SOLVER_WITH_LOOKUP_FALLBACK:</strong> Tries solver first; if it fails (e.g., no
+                            solution), uses lookup table.</li>
+                        <li><strong>BLENDED:</strong> Interpolates between solver and lookup table for smooth
+                            transitions. Uses <code>Source.BLENDED</code> to prevent double movement compensation.</li>
+                    </ul>
+
+                    <h3>Lookup Table Setup</h3>
+                    <p>The <code>ShotLookupTable</code> uses <code>InterpolatingDoubleTreeMap</code> for smooth
+                        interpolation between data points. Distances are automatically clamped to the table bounds.</p>
+                    <pre><code class="language-java">// Build lookup table from practice data
+ShotLookupTable lookup = new ShotLookupTable();
+lookup.addEntry(2.0, 55.0, 3000);           // 2m: 55°, 3000 RPM
+lookup.addEntry(3.0, 45.0, 3500);           // 3m: 45°, 3500 RPM
+lookup.addEntry(4.0, 38.0, 4200, 0.45);     // 4m: 38°, 4200 RPM, 0.45s TOF
+lookup.addEntry(5.5, 30.0, 5000, 0.62);     // 5.5m: 30°, 5000 RPM, 0.62s TOF
+
+// For custom wheel diameters, pass an RPM-to-velocity factor
+ShotLookupTable customLookup = new ShotLookupTable(0.006); // different wheel size
+
+// You can also feed this table directly to the solver to enforce tuning point constraints
+solver.addTuningPoint(lookup);</code></pre>
+
+                    <h3>Example Implementation</h3>
+                    <pre><code class="language-java">// Initialize Dependencies
+ShooterConfig config = new ShooterConfig();
+ShotLookupTable lookup = new ShotLookupTable();
+// ... add entries ...
+TrajectorySolver solver = TrajectorySolver.builder()
+    .gamePiece(GamePieces.REBUILT_2026_BALL)
+    .config(SolverConfig.defaults())
+    .build();
+
+// Create System
+ShooterSystem system = new ShooterSystem(config, lookup, solver);
+system.setMode(ShotMode.SOLVER_WITH_LOOKUP_FALLBACK);
+
+// Periodic Loop
+public void periodic() {
+    ShotParameters shot = system.calculate(
+        distanceToTarget,
+        currentFlywheelRpm,
+        robotVx, robotVy,
+        yawToTarget
+    );
+
+    if (shot.isValid()) {
+        pivot.setPosition(shot.pitchDegrees);
+        flywheel.setVelocity(shot.rpm);
+        
+        if (system.isReadyToFire(currentFlywheelRpm) &amp;&amp; pivot.isAtSetpoint()) {
+            feeder.run();
+        }
+    } else {
+        pivot.setPosition(config.stowAngle);
+    }
+}</code></pre>
+
+                    <h3>Movement Compensation</h3>
+                    <p>The <code>MovementCompensator</code> automatically adjusts shots for robot movement.
+                        In v2.1.0 this includes:</p>
+                    <ul>
+                        <li><strong>NaN guard:</strong> Non-finite exit velocities are safely handled by returning the
+                            base shot unchanged.</li>
+                        <li><strong>Yaw accumulation:</strong> Movement yaw lead is added to the solver's existing yaw
+                            correction (spin drift, etc.) instead of replacing it.</li>
+                        <li><strong>Blended source awareness:</strong> Blended shots use <code>Source.BLENDED</code> to
+                            avoid double-compensation.</li>
+                    </ul>
+
+                    <h3>Safety Features</h3>
+                    <p>The system includes a <code>SafetyValidator</code> that prevents:</p>
+                    <ul>
+                        <li>Shots from too far away (max distance).</li>
+                        <li>Shots with impossible RPM or angles.</li>
+                        <li>Firing when the robot is moving too fast (if configured).</li>
+                    </ul>
+
+                    <h3>Flywheel Integration</h3>
+                    <p>The library includes a <code>FlywheelGenerator</code> for simulating thousands of flywheel
+                        configurations and a <code>FlywheelSimulator</code> for spin-up analysis.</p>
+                    <pre><code class="language-java">// Configure flywheel hardware
+FlywheelConfig flywheel = new FlywheelConfig(
+    FlywheelConfig.FlywheelType.DUAL_OVER_UNDER,
+    GamePieces.REBUILT_2026_BALL,
+    4.0,  // wheel diameter inches
+    FRCMotors.KRAKEN_X60,
+    1.0   // gear ratio
+);
+solver.setFlywheel(flywheel);
+
+// Generate optimal configurations
+FlywheelGenerator generator = new FlywheelGenerator(
+    GamePieces.REBUILT_2026_BALL,
+    GenerationParams.detailed()
+);
+GenerationResult result = generator.generateAndEvaluate(25.0); // 25 m/s target</code></pre>
+
+                    <h3>Shot Table Precompute (v2.2.0)</h3>
+                    <p>Generate a full-field shot lookup table offline using your robot's actual hardware configuration.
+                        Everything is configured via a single JSON file — no Java code needed.</p>
+
+                    <h4>JSON Config Example</h4>
+                    <pre><code class="language-json">{
+  "bounds": { "minX": 0.5, "maxX": 16.0, "minY": 0.5, "maxY": 7.7 },
+  "outline": { "lengthMeters": 0.8, "widthMeters": 0.7,
+               "shooterOffsetXMeters": 0.3, "shooterOffsetYMeters": 0.0 },
+
+  "shooterZMeters": 0.5,
+  "targetX": 0.0, "targetY": 5.55, "targetZ": 2.0,
+  "targetRadiusMeters": 0.45,
+  "includeAirResistance": true,
+
+  "motorName": "Kraken X60",
+  "wheelDiameterInches": 4.0,
+  "wheelWidthInches": 2.0,
+  "gearRatio": 1.0,
+  "motorsPerWheel": 1,
+  "wheelCount": 2,
+  "compressionRatio": 0.10,
+  "wheelArrangement": "DUAL_OVER_UNDER",
+
+  "gamePieceYear": 2026,
+  "solveMode": "SWEEP",
+  "sweepStepDegrees": 1.0,
+
+  "precisionMode": true,
+  "halfFieldOnly": true,
+  "fieldLengthMeters": 16.54,
+
+  "outputPath": "shot-table.json"
+}</code></pre>
+
+                    <h4>Alliance Mirroring</h4>
+                    <p>Precompute once for one alliance, then use <code>lookupMirrored()</code> at runtime for the
+                        other.
+                        The field is mirrored about the center X line (<code>fieldLengthMeters / 2</code>).</p>
+                    <pre><code class="language-java">// Load the precomputed table
+ShotTable table = ShotTablePrecompute.loadTable("shot-table.json");
+
+// For your alliance, look up directly:
+ShotTableEntry entry = table.lookupNearest(robotX, robotY);
+
+// For the opposite alliance, mirror X:
+ShotTableEntry mirrored = table.lookupMirrored(robotX, robotY);</code></pre>
+
+                    <h4>Supported Motors</h4>
+                    <p>Use any of these names in the <code>motorName</code> field:</p>
+                    <ul>
+                        <li><strong>Kraken X60</strong> / <strong>Kraken X60 FOC</strong></li>
+                        <li><strong>NEO</strong> / <strong>NEO Vortex</strong> / <strong>NEO 550</strong></li>
+                        <li><strong>Falcon 500</strong></li>
+                        <li><strong>CIM</strong> / <strong>Mini CIM</strong> / <strong>775pro</strong></li>
+                    </ul>
+
+                    <h4>Precision Mode</h4>
+                    <p>Set <code>"precisionMode": true</code> to automatically use finer grid (0.10m), tighter angle
+                        stepping (0.5°), and more candidates (100+). This is designed for offline precompute where
+                        computation time is unlimited. The resulting table stays well under 2 MB even at full-field
+                        resolution, easily fitting in RIO v2 RAM.</p>
+                </section>
+            </div>
+        </main>
+    </div>
+    <button class="mobile-toggle" onclick="toggleSidebar()">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="3" y1="12" x2="21" y2="12"></line>
+            <line x1="3" y1="6" x2="21" y2="6"></line>
+            <line x1="3" y1="18" x2="21" y2="18"></line>
+        </svg>
+    </button>
+    <script>
+        function toggleSidebar() {
+            document.getElementById('sidebar').classList.toggle('open');
+            document.getElementById('overlay').classList.toggle('open');
+        }
+    </script>
+</body>
+
+</html>

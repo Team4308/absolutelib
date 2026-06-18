@@ -1,0 +1,284 @@
+{
+  "formatVersion": "1.1",
+  "component": {
+    "group": "ca.team4308",
+    "module": "absolutelib-java",
+    "version": "2.2.0",
+    "attributes": {
+      "org.gradle.status": "release"
+    }
+  },
+  "createdBy": {
+    "gradle": {
+      "version": "9.1.0"
+    }
+  },
+  "variants": [
+    {
+      "name": "apiElements",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.jvm.version": 17,
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-api"
+      },
+      "files": [
+        {
+          "name": "absolutelib-java-2.2.0.jar",
+          "url": "absolutelib-java-2.2.0.jar",
+          "size": 750507,
+          "sha512": "97e065d2480ec74cd32a57f4e0ea9f94bf424a7810e0df1f2c52204eb8d8454c2fbb851fbc8e412c6d81a7ec9cfbdfdf31e2545a8bc00171ea68de07247b34f3",
+          "sha256": "60ee1c6fbd99162514b6d3ef3bf13817a0fb55aebe46dc88c5e6c8f754ebdb78",
+          "sha1": "c8f7aa741cad06f26347c9a64d2c2800411f1297",
+          "md5": "c289b6a40f06af619d763a7a7a48fbcc"
+        }
+      ]
+    },
+    {
+      "name": "runtimeElements",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.jvm.version": 17,
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-runtime"
+      },
+      "dependencies": [
+        {
+          "group": "edu.wpi.first.cscore",
+          "module": "cscore-java",
+          "version": {
+            "requires": "2026.1.1"
+          }
+        },
+        {
+          "group": "edu.wpi.first.cameraserver",
+          "module": "cameraserver-java",
+          "version": {
+            "requires": "2026.1.1"
+          }
+        },
+        {
+          "group": "edu.wpi.first.ntcore",
+          "module": "ntcore-java",
+          "version": {
+            "requires": "2026.1.1"
+          }
+        },
+        {
+          "group": "edu.wpi.first.wpilibj",
+          "module": "wpilibj-java",
+          "version": {
+            "requires": "2026.1.1"
+          }
+        },
+        {
+          "group": "edu.wpi.first.wpilibNewCommands",
+          "module": "wpilibNewCommands-java",
+          "version": {
+            "requires": "2026.1.1"
+          }
+        },
+        {
+          "group": "edu.wpi.first.wpimath",
+          "module": "wpimath-java",
+          "version": {
+            "requires": "2026.1.1"
+          }
+        },
+        {
+          "group": "edu.wpi.first.hal",
+          "module": "hal-java",
+          "version": {
+            "requires": "2026.1.1"
+          }
+        },
+        {
+          "group": "edu.wpi.first.wpiutil",
+          "module": "wpiutil-java",
+          "version": {
+            "requires": "2026.1.1"
+          }
+        },
+        {
+          "group": "edu.wpi.first.wpiunits",
+          "module": "wpiunits-java",
+          "version": {
+            "requires": "2026.1.1"
+          }
+        },
+        {
+          "group": "edu.wpi.first.apriltag",
+          "module": "apriltag-java",
+          "version": {
+            "requires": "2026.1.1"
+          }
+        },
+        {
+          "group": "com.ctre.phoenix",
+          "module": "api-java",
+          "version": {
+            "requires": "5.36.0"
+          }
+        },
+        {
+          "group": "com.ctre.phoenix",
+          "module": "wpiapi-java",
+          "version": {
+            "requires": "5.36.0"
+          }
+        },
+        {
+          "group": "com.ctre.phoenix6",
+          "module": "wpiapi-java",
+          "version": {
+            "requires": "26.1.0"
+          }
+        },
+        {
+          "group": "com.revrobotics.frc",
+          "module": "REVLib-java",
+          "version": {
+            "requires": "2026.0.1"
+          }
+        },
+        {
+          "group": "com.fasterxml.jackson.core",
+          "module": "jackson-annotations",
+          "version": {
+            "requires": "2.17.2"
+          }
+        },
+        {
+          "group": "com.fasterxml.jackson.core",
+          "module": "jackson-core",
+          "version": {
+            "requires": "2.17.2"
+          }
+        },
+        {
+          "group": "com.fasterxml.jackson.core",
+          "module": "jackson-databind",
+          "version": {
+            "requires": "2.17.2"
+          }
+        },
+        {
+          "group": "com.google.code.gson",
+          "module": "gson",
+          "version": {
+            "requires": "2.10.1"
+          }
+        },
+        {
+          "group": "org.slf4j",
+          "module": "slf4j-api",
+          "version": {
+            "requires": "2.0.9"
+          }
+        },
+        {
+          "group": "org.slf4j",
+          "module": "slf4j-simple",
+          "version": {
+            "requires": "2.0.9"
+          }
+        },
+        {
+          "group": "org.littletonrobotics.akit",
+          "module": "akit-java",
+          "version": {
+            "requires": "26.0.0"
+          }
+        },
+        {
+          "group": "us.hebi.quickbuf",
+          "module": "quickbuf-runtime",
+          "version": {
+            "requires": "1.3.3"
+          }
+        },
+        {
+          "group": "com.pathplanner.lib",
+          "module": "PathplannerLib-java",
+          "version": {
+            "requires": "2026.1.2"
+          }
+        },
+        {
+          "group": "org.photonvision",
+          "module": "photonlib-java",
+          "version": {
+            "requires": "v2026.1.1-rc-3"
+          }
+        },
+        {
+          "group": "org.photonvision",
+          "module": "photontargeting-java",
+          "version": {
+            "requires": "v2026.1.1-rc-3"
+          }
+        },
+        {
+          "group": "swervelib",
+          "module": "YAGSL-java",
+          "version": {
+            "requires": "2026.1.14"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "absolutelib-java-2.2.0.jar",
+          "url": "absolutelib-java-2.2.0.jar",
+          "size": 750507,
+          "sha512": "97e065d2480ec74cd32a57f4e0ea9f94bf424a7810e0df1f2c52204eb8d8454c2fbb851fbc8e412c6d81a7ec9cfbdfdf31e2545a8bc00171ea68de07247b34f3",
+          "sha256": "60ee1c6fbd99162514b6d3ef3bf13817a0fb55aebe46dc88c5e6c8f754ebdb78",
+          "sha1": "c8f7aa741cad06f26347c9a64d2c2800411f1297",
+          "md5": "c289b6a40f06af619d763a7a7a48fbcc"
+        }
+      ]
+    },
+    {
+      "name": "sourcesElements",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.usage": "java-runtime"
+      },
+      "files": [
+        {
+          "name": "absolutelib-java-2.2.0-sources.jar",
+          "url": "absolutelib-java-2.2.0-sources.jar",
+          "size": 591896,
+          "sha512": "d29534022601f1c609143359b06e171a3a3b46f62231001bd1aea64d085d0c6ad9b981d293303dbf094292b913995f77c3df18433faec4cd68fe819ae41968ee",
+          "sha256": "025c61729ec0f26be85d76a8d1b3a7df186e4c51d881f5ba3463a0dce82ba8f5",
+          "sha1": "e6de538f74d94f169fbb7dbcb11466f611aaeb86",
+          "md5": "ee24d603c1221c5b851fffd8a7274cd8"
+        }
+      ]
+    },
+    {
+      "name": "javadocElements",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "javadoc",
+        "org.gradle.usage": "java-runtime"
+      },
+      "files": [
+        {
+          "name": "absolutelib-java-2.2.0-javadoc.jar",
+          "url": "absolutelib-java-2.2.0-javadoc.jar",
+          "size": 818724,
+          "sha512": "de306fb26796d09ad4403c8ef35b9aad2d8d0a23a196eac5aa2d42a4a09307f8ad17f5dc8be2d144e82490acc941413693f82564a1cb06c64ad8a8071004e26c",
+          "sha256": "b96319b58e7022bfc0ff24cae88db84404636acc88f81adc2c8d2e903fef9e43",
+          "sha1": "a92cd10218530ab336b4a226813501837dbb6934",
+          "md5": "2a9da4a7b6710dd6376b1699779f3dc2"
+        }
+      ]
+    }
+  ]
+}

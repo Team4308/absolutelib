@@ -1,0 +1,1103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trajectory Debug — AbsoluteLib</title>
+    <style>
+        :root {
+            --bg: #0d1117;
+            --panel: #161b22;
+            --panel-hover: #1c2128;
+            --text: #e6edf3;
+            --text-muted: #8b949e;
+            --heading: #ffffff;
+            --accent: #58a6ff;
+            --accent-hover: #79c0ff;
+            --success: #3fb950;
+            --warning: #d29922;
+            --danger: #f85149;
+            --border: #30363d;
+            --purple: #a371f7;
+            --radius: 8px;
+            --radius-sm: 6px;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        html, body { height: 100%; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+            font-size: 14px;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.5;
+            overflow-x: hidden;
+        }
+        .header {
+            display: flex; align-items: center; gap: 16px;
+            padding: 12px 20px;
+            background: var(--panel); border-bottom: 1px solid var(--border);
+        }
+        .header h1 { font-size: 1.1rem; color: var(--heading); font-weight: 600; }
+        .header .subtitle { color: var(--text-muted); font-size: 0.85rem; }
+
+        .connection-bar {
+            display: flex; align-items: center; gap: 12px;
+            padding: 10px 20px;
+            background: var(--panel); border-bottom: 1px solid var(--border);
+            flex-wrap: wrap;
+        }
+        .connection-bar label { color: var(--text-muted); font-size: 0.85rem; }
+        .connection-bar input[type="text"] {
+            background: var(--bg); border: 1px solid var(--border); color: var(--text);
+            padding: 6px 10px; border-radius: var(--radius-sm); font-size: 0.85rem; width: 160px;
+        }
+        .connection-bar input:focus { outline: none; border-color: var(--accent); }
+        .btn {
+            padding: 6px 14px; border: 1px solid var(--border); border-radius: var(--radius-sm);
+            background: var(--panel-hover); color: var(--text); cursor: pointer; font-size: 0.85rem;
+        }
+        .btn:hover { background: var(--accent); color: #000; border-color: var(--accent); }
+        .btn.active { background: var(--success); color: #000; border-color: var(--success); }
+        .btn.danger { background: var(--danger); color: #fff; border-color: var(--danger); }
+
+        .status-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; background: var(--danger); }
+        .status-dot.connected { background: var(--success); }
+        .status-dot.connecting { background: var(--warning); animation: pulse 1s infinite; }
+        @keyframes pulse { 50% { opacity: 0.4; } }
+        .status-text { font-size: 0.8rem; color: var(--text-muted); }
+
+        .main { display: flex; height: calc(100vh - 96px); overflow: hidden; }
+
+        /* Left panel */
+        .stats-panel {
+            width: 360px; min-width: 360px; padding: 12px;
+            overflow-y: auto; border-right: 1px solid var(--border);
+        }
+        .card {
+            background: var(--panel); border: 1px solid var(--border);
+            border-radius: var(--radius); padding: 12px; margin-bottom: 10px;
+        }
+        .card h3 {
+            font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.6px;
+            color: var(--text-muted); margin-bottom: 8px;
+            display: flex; align-items: center; gap: 6px;
+        }
+        .card h3 .indicator {
+            width: 8px; height: 8px; border-radius: 50%; display: inline-block;
+        }
+        .stat-row {
+            display: flex; justify-content: space-between; padding: 2px 0; font-size: 0.82rem;
+        }
+        .stat-row .label { color: var(--text-muted); }
+        .stat-row .value { color: var(--text); font-weight: 500; font-variant-numeric: tabular-nums; text-align: right; max-width: 50%; }
+        .stat-row .value.success { color: var(--success); }
+        .stat-row .value.danger { color: var(--danger); }
+        .stat-row .value.warning { color: var(--warning); }
+        .stat-row .value.accent { color: var(--accent); }
+        .stat-row .value.purple { color: var(--purple); }
+
+        .bar-container {
+            height: 10px; background: var(--bg); border-radius: 5px;
+            margin: 6px 0; overflow: hidden; display: flex;
+        }
+        .bar-segment { height: 100%; transition: width 0.3s; }
+        .bar-legend {
+            display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; font-size: 0.72rem;
+        }
+        .bar-legend span::before {
+            content: ""; display: inline-block; width: 8px; height: 8px;
+            border-radius: 2px; margin-right: 3px; vertical-align: middle;
+        }
+        .bar-legend .leg-accepted::before { background: var(--success); }
+        .bar-legend .leg-collision::before { background: #f85149; }
+        .bar-legend .leg-arc::before { background: #d29922; }
+        .bar-legend .leg-clearance::before { background: #a371f7; }
+        .bar-legend .leg-miss::before { background: #79c0ff; }
+        .bar-legend .leg-flyover::before { background: #e3b341; }
+
+        .divider { border-top: 1px solid var(--border); margin: 6px 0; }
+
+        /* Right panel */
+        .right-panel { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+
+        .tab-bar {
+            display: flex; gap: 0; border-bottom: 1px solid var(--border);
+            background: var(--panel); padding: 0 16px;
+        }
+        .tab {
+            padding: 10px 14px; font-size: 0.82rem; cursor: pointer;
+            border-bottom: 2px solid transparent; color: var(--text-muted);
+        }
+        .tab:hover { color: var(--text); }
+        .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+        .tab-content { flex: 1; overflow: hidden; display: none; }
+        .tab-content.active { display: flex; flex-direction: column; }
+
+        /* Canvas views */
+        .canvas-wrapper { flex: 1; position: relative; }
+        .canvas-wrapper canvas { width: 100%; height: 100%; background: var(--bg); display: block; }
+        .canvas-controls {
+            position: absolute; top: 10px; right: 10px; display: flex; gap: 6px; z-index: 2;
+        }
+        .canvas-controls select, .canvas-controls button {
+            background: var(--panel); color: var(--text); border: 1px solid var(--border);
+            padding: 4px 8px; border-radius: var(--radius-sm); font-size: 0.8rem; cursor: pointer;
+        }
+        .canvas-legend {
+            position: absolute; bottom: 10px; left: 10px;
+            background: rgba(22,27,34,0.9); border: 1px solid var(--border);
+            border-radius: var(--radius-sm); padding: 8px 12px; font-size: 0.75rem;
+        }
+        .canvas-legend div { display: flex; align-items: center; gap: 6px; padding: 1px 0; }
+        .canvas-legend .swatch { width: 14px; height: 3px; border-radius: 2px; display: inline-block; }
+
+        /* Candidate chart */
+        #candidateChartContainer { flex: 1; position: relative; }
+
+        /* Log */
+        #log-container {
+            flex: 1; overflow-y: auto; padding: 12px 16px;
+            font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Monaco, Consolas, monospace;
+            font-size: 0.78rem; line-height: 1.5;
+        }
+        .log-entry { padding: 1px 0; white-space: pre-wrap; word-break: break-all; }
+        .log-entry.info { color: var(--text-muted); }
+        .log-entry.success { color: var(--success); }
+        .log-entry.warn { color: var(--warning); }
+        .log-entry.error { color: var(--danger); }
+        .log-entry.data { color: var(--accent); }
+        .log-entry .ts { color: var(--text-muted); margin-right: 8px; }
+
+        /* Summary / raw */
+        #summary-text, #detailed-table {
+            white-space: pre-wrap;
+            font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Monaco, Consolas, monospace;
+            font-size: 0.78rem; padding: 12px 16px; flex: 1; overflow-y: auto; color: var(--text);
+        }
+        #raw-container { flex: 1; overflow-y: auto; padding: 12px 16px; }
+        .nt-table { width: 100%; border-collapse: collapse; }
+        .nt-table th, .nt-table td {
+            text-align: left; padding: 3px 10px; border-bottom: 1px solid var(--border); font-size: 0.78rem;
+        }
+        .nt-table th { color: var(--text-muted); font-weight: 500; position: sticky; top: 0; background: var(--bg); }
+        .nt-table td.key {
+            font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Monaco, Consolas, monospace;
+            color: var(--accent);
+        }
+        .nt-table td.val { color: var(--text); font-variant-numeric: tabular-nums; }
+
+        .split-pane { display: flex; flex: 1; overflow: hidden; }
+        .split-pane > div { flex: 1; overflow-y: auto; }
+        .split-pane > div:first-child { border-right: 1px solid var(--border); }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Trajectory Debug</h1>
+        <span class="subtitle">AbsoluteLib - NT4 Reader</span>
+    </div>
+    <div class="connection-bar">
+        <label>Robot IP:</label>
+        <input type="text" id="robotIp" value="127.0.0.1" placeholder="10.TE.AM.2">
+        <button class="btn" id="connectBtn" onclick="toggleConnection()">Connect</button>
+        <span class="status-dot" id="statusDot"></span>
+        <span class="status-text" id="statusText">Disconnected</span>
+        <span class="status-text" id="topicCount" style="margin-left:8px;"></span>
+        <div style="flex:1"></div>
+        <label><input type="checkbox" id="autoScroll" checked> Auto-scroll</label>
+        <button class="btn" onclick="clearLog()">Clear</button>
+        <button class="btn" onclick="exportLog()">Export</button>
+    </div>
+
+    <div class="main">
+        <div class="stats-panel">
+
+            <!-- Shot Status -->
+            <div class="card">
+                <h3><span class="indicator" id="shotIndicator" style="background:var(--danger)"></span>Shot Status</h3>
+                <div class="stat-row"><span class="label">Valid</span><span class="value" id="s-validShot">—</span></div>
+                <div class="stat-row"><span class="label">Status</span><span class="value" id="s-status">—</span></div>
+                <div class="stat-row"><span class="label">Message</span><span class="value" id="s-statusMsg">—</span></div>
+                <div class="stat-row"><span class="label">Source</span><span class="value accent" id="s-source">—</span></div>
+                <div class="stat-row"><span class="label">Confidence</span><span class="value" id="s-confidence">—</span></div>
+                <div class="stat-row"><span class="label">Mode</span><span class="value purple" id="s-mode">—</span></div>
+            </div>
+
+            <!-- Shot Parameters -->
+            <div class="card">
+                <h3>Shot Parameters</h3>
+                <div class="stat-row"><span class="label">Distance</span><span class="value" id="s-distance">—</span></div>
+                <div class="divider"></div>
+                <div class="stat-row"><span class="label">Pitch</span><span class="value accent" id="s-pitch">—</span></div>
+                <div class="stat-row"><span class="label">Yaw</span><span class="value" id="s-yaw">—</span></div>
+                <div class="stat-row"><span class="label">Yaw Adjust</span><span class="value" id="s-yawAdjust">—</span></div>
+                <div class="divider"></div>
+                <div class="stat-row"><span class="label">Target RPM</span><span class="value accent" id="s-rpm">—</span></div>
+                <div class="stat-row"><span class="label">Measured RPM</span><span class="value" id="s-measuredRpm">—</span></div>
+                <div class="stat-row"><span class="label">RPM Deficit</span><span class="value" id="s-rpmDeficit">—</span></div>
+                <div class="stat-row"><span class="label">Ready to Fire</span><span class="value" id="s-readyToFire">—</span></div>
+                <div class="divider"></div>
+                <div class="stat-row"><span class="label">Exit Velocity</span><span class="value" id="s-velocity">—</span></div>
+                <div class="stat-row"><span class="label">Time of Flight</span><span class="value" id="s-tof">—</span></div>
+                <div class="stat-row"><span class="label">Max Height</span><span class="value" id="s-maxHeight">—</span></div>
+                <div class="stat-row"><span class="label">Margin of Error</span><span class="value" id="s-margin">—</span></div>
+            </div>
+
+            <!-- Trajectory Path Info -->
+            <div class="card">
+                <h3>Trajectory Path</h3>
+                <div class="stat-row"><span class="label">Path Points</span><span class="value accent" id="s-pathLength">—</span></div>
+                <div class="stat-row"><span class="label">Start Pos</span><span class="value" id="s-pathStart">—</span></div>
+                <div class="stat-row"><span class="label">End Pos</span><span class="value" id="s-pathEnd">—</span></div>
+                <div class="stat-row"><span class="label">Horiz. Range</span><span class="value" id="s-horizRange">—</span></div>
+                <div class="stat-row"><span class="label">Vert. Range</span><span class="value" id="s-vertRange">—</span></div>
+            </div>
+
+            <!-- Solver Debug -->
+            <div class="card">
+                <h3>Solver Debug</h3>
+                <div class="stat-row"><span class="label">Debug Enabled</span><span class="value" id="s-debugEnabled">—</span></div>
+                <div class="stat-row"><span class="label">Total Tested</span><span class="value" id="s-totalTested">—</span></div>
+                <div class="stat-row"><span class="label">Accepted</span><span class="value success" id="s-accepted">—</span></div>
+                <div class="stat-row"><span class="label">Rejected</span><span class="value danger" id="s-totalRejected">—</span></div>
+                <div class="divider"></div>
+                <div style="font-size: 0.72rem; color: var(--text-muted); margin-bottom: 4px;">REJECTION BREAKDOWN</div>
+                <div class="bar-container" id="rejectionBar"></div>
+                <div class="bar-legend">
+                    <span class="leg-accepted">OK</span>
+                    <span class="leg-collision">Collision</span>
+                    <span class="leg-arc">Arc</span>
+                    <span class="leg-clearance">Clear.</span>
+                    <span class="leg-miss">Miss</span>
+                    <span class="leg-flyover">Flyover</span>
+                </div>
+                <div style="margin-top: 6px;">
+                    <div class="stat-row"><span class="label">Collision</span><span class="value danger" id="s-rejCollision">—</span></div>
+                    <div class="stat-row"><span class="label">Arc Too Low</span><span class="value warning" id="s-rejArc">—</span></div>
+                    <div class="stat-row"><span class="label">Clearance</span><span class="value purple" id="s-rejClearance">—</span></div>
+                    <div class="stat-row"><span class="label">Missed</span><span class="value accent" id="s-rejMiss">—</span></div>
+                    <div class="stat-row"><span class="label">Flyover</span><span class="value warning" id="s-rejFlyover">—</span></div>
+                </div>
+                <div class="divider"></div>
+                <div class="stat-row"><span class="label">Best Score</span><span class="value success" id="s-bestScore">—</span></div>
+                <div class="stat-row"><span class="label">Best Pitch</span><span class="value success" id="s-bestPitch">—</span></div>
+            </div>
+
+            <!-- Positions -->
+            <div class="card">
+                <h3>Positions</h3>
+                <div class="stat-row"><span class="label">Robot</span><span class="value" id="s-robotPos">—</span></div>
+                <div class="stat-row"><span class="label">Shooter</span><span class="value" id="s-shooterPos">—</span></div>
+                <div class="stat-row"><span class="label">Target</span><span class="value" id="s-targetPos">—</span></div>
+                <div class="stat-row"><span class="label">Shooter Height</span><span class="value" id="s-shooterH">—</span></div>
+            </div>
+
+            <!-- Config -->
+            <div class="card">
+                <h3>Config</h3>
+                <div class="stat-row"><span class="label">Tracking</span><span class="value" id="s-tracking">—</span></div>
+                <div class="stat-row"><span class="label">Source Detail</span><span class="value" id="s-sourceDetail">—</span></div>
+            </div>
+        </div>
+
+        <div class="right-panel">
+            <div class="tab-bar">
+                <div class="tab active" data-tab="trajectory" onclick="switchTab('trajectory')">3D Trajectory</div>
+                <div class="tab" data-tab="candidates" onclick="switchTab('candidates')">Candidates</div>
+                <div class="tab" data-tab="log" onclick="switchTab('log')">Live Log</div>
+                <div class="tab" data-tab="debug" onclick="switchTab('debug')">Debug Detail</div>
+                <div class="tab" data-tab="raw" onclick="switchTab('raw')">Raw NT</div>
+            </div>
+
+            <!-- Trajectory Tab: side + top views -->
+            <div class="tab-content active" id="tab-trajectory">
+                <div class="split-pane" style="overflow:hidden;">
+                    <div class="canvas-wrapper" style="border-right:1px solid var(--border);">
+                        <canvas id="sideCanvas"></canvas>
+                        <div class="canvas-controls">
+                            <button onclick="canvasRedraw()">Refresh</button>
+                        </div>
+                        <div class="canvas-legend" id="sideLegend">
+                            <div><span class="swatch" style="background:#58a6ff"></span>Flight Path</div>
+                            <div><span class="swatch" style="background:#3fb950"></span>Target</div>
+                            <div><span class="swatch" style="background:#f85149"></span>Peak Height</div>
+                        </div>
+                    </div>
+                    <div class="canvas-wrapper">
+                        <canvas id="topCanvas"></canvas>
+                        <div class="canvas-legend" id="topLegend">
+                            <div><span class="swatch" style="background:#58a6ff"></span>Ground Track</div>
+                            <div><span class="swatch" style="background:#3fb950"></span>Target Ring</div>
+                            <div><span class="swatch" style="background:#d29922"></span>Robot</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Candidates Tab -->
+            <div class="tab-content" id="tab-candidates">
+                <div class="split-pane">
+                    <div class="canvas-wrapper">
+                        <canvas id="candidateCanvas"></canvas>
+                        <div class="canvas-controls">
+                            <select id="candidateYAxis" onchange="drawCandidateChart()">
+                                <option value="score">Score</option>
+                                <option value="closest">Closest Approach</option>
+                                <option value="maxH">Max Height</option>
+                                <option value="tof">Time of Flight</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div id="detailed-table">Waiting for debug data...</div>
+                </div>
+            </div>
+
+            <!-- Log Tab -->
+            <div class="tab-content" id="tab-log">
+                <div id="log-container"></div>
+            </div>
+
+            <!-- Debug Summary Tab -->
+            <div class="tab-content" id="tab-debug">
+                <div id="summary-text">Waiting for debug data...</div>
+            </div>
+
+            <!-- Raw NT Tab -->
+            <div class="tab-content" id="tab-raw">
+                <div id="raw-container">
+                    <table class="nt-table">
+                        <thead><tr><th>Key</th><th>Value</th><th>Updated</th></tr></thead>
+                        <tbody id="raw-tbody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+<script>
+// Network tables 4, ideally i should make it support more data types but hardcoded for now
+class NT4Client {
+    constructor() {
+        this.ws = null; this.connected = false; this.connecting = false;
+        this.topics = new Map(); this.topicsByName = new Map();
+        this.values = new Map(); this.listeners = [];
+        this.nextSubId = 1; this.reconnectTimer = null;
+        this.binaryMsgCount = 0; this.textMsgCount = 0;
+    }
+
+    connect(address) {
+        if (this.ws) this.disconnect();
+        this.connecting = true; updateConnectionUI();
+        const url = `ws://${address}:5810/nt/trajectory-debug`;
+        log('info', `Connecting to ${url} ...`);
+        try { this.ws = new WebSocket(url, ['networktables.first.wpi.edu']); }
+        catch (e) { log('error', `WebSocket failed: ${e.message}`); this.connecting = false; updateConnectionUI(); return; }
+        this.ws.binaryType = 'arraybuffer';
+        this.ws.onopen = () => {
+            this.connected = true; this.connecting = false;
+            this.binaryMsgCount = 0; this.textMsgCount = 0;
+            log('success', 'Connected to NetworkTables 4');
+            updateConnectionUI();
+            this._subscribe(['']);
+        };
+        this.ws.onmessage = (event) => {
+            if (typeof event.data === 'string') { this.textMsgCount++; this._handleText(event.data); }
+            else { this.binaryMsgCount++; this._handleBinary(event.data); }
+        };
+        this.ws.onclose = (event) => {
+            const was = this.connected; this.connected = false; this.connecting = false; updateConnectionUI();
+            if (was) { log('warn', `Disconnected (${event.code}). Reconnecting in 3s...`);
+                this.reconnectTimer = setTimeout(() => this.connect(address), 3000); }
+        };
+        this.ws.onerror = () => log('error', 'WebSocket error');
+    }
+
+    disconnect() {
+        if (this.reconnectTimer) { clearTimeout(this.reconnectTimer); this.reconnectTimer = null; }
+        if (this.ws) { this.ws.onclose = null; this.ws.close(); this.ws = null; }
+        this.connected = false; this.connecting = false;
+        this.topics.clear(); this.topicsByName.clear(); updateConnectionUI();
+        log('info', 'Disconnected');
+    }
+
+    _subscribe(prefixes) {
+        this.ws.send(JSON.stringify([{
+            method: 'subscribe',
+            params: { topics: prefixes, subuid: this.nextSubId++, options: { all: true, prefix: true, periodic: 0.05 } }
+        }]));
+        log('info', `Subscribed (all topics)`);
+    }
+
+    _handleText(data) {
+        let msgs; try { msgs = JSON.parse(data); } catch { return; }
+        if (!Array.isArray(msgs)) msgs = [msgs];
+        for (const m of msgs) {
+            if (m.method === 'announce') {
+                const p = m.params;
+                this.topics.set(p.id, { name: p.name, type: p.type });
+                this.topicsByName.set(p.name, p.id);
+            } else if (m.method === 'unannounce') {
+                const t = this.topics.get(m.params.id);
+                if (t) { this.topicsByName.delete(t.name); this.topics.delete(m.params.id); }
+            }
+        }
+    }
+
+    _handleBinary(buffer) {
+        try {
+            let offset = 0;
+            while (offset < buffer.byteLength) {
+                const d = decodeMsgpack(new Uint8Array(buffer, offset));
+                if (!d || !Array.isArray(d.value)) break;
+                offset += d.bytesRead;
+                const arr = d.value;
+                if (arr.length >= 4) {
+                    const topic = this.topics.get(arr[0]);
+                    if (topic) {
+                        this.values.set(topic.name, { value: arr[3], timestamp: arr[1], type: topic.type });
+                        for (const cb of this.listeners) try { cb(topic.name, arr[3], arr[1]); } catch {}
+                    }
+                }
+            }
+        } catch {}
+    }
+
+    onValue(cb) { this.listeners.push(cb); }
+    getValue(k) { return this.values.get(k); }
+    getAllValues() { return this.values; }
+}
+
+
+
+// Wtf is this code holy shit thank god for being able to steal other peoples code 
+function decodeMsgpack(u8) {
+    let pos = 0;
+    function read() {
+        if (pos >= u8.length) throw 'EOF';
+        const b = u8[pos++];
+        if (b <= 0x7f) return b;
+        if ((b & 0xf0) === 0x80) { const n = b & 0x0f, o = {}; for (let i=0;i<n;i++){const k=read();o[k]=read();} return o; }
+        if ((b & 0xf0) === 0x90) { const n = b & 0x0f, a = []; for (let i=0;i<n;i++) a.push(read()); return a; }
+        if ((b & 0xe0) === 0xa0) { const n = b & 0x1f, s = new TextDecoder().decode(u8.slice(pos,pos+n)); pos+=n; return s; }
+        if (b >= 0xe0) return b - 256;
+        switch(b) {
+            case 0xc0: return null; case 0xc2: return false; case 0xc3: return true;
+            case 0xc4: { const n=u8[pos++]; const r=u8.slice(pos,pos+n); pos+=n; return r; }
+            case 0xc5: { const n=rU16(); const r=u8.slice(pos,pos+n); pos+=n; return r; }
+            case 0xc6: { const n=rU32(); const r=u8.slice(pos,pos+n); pos+=n; return r; }
+            case 0xca: { const v=new DataView(u8.buffer,u8.byteOffset+pos,4).getFloat32(0); pos+=4; return v; }
+            case 0xcb: { const v=new DataView(u8.buffer,u8.byteOffset+pos,8).getFloat64(0); pos+=8; return v; }
+            case 0xcc: return u8[pos++];
+            case 0xcd: return rU16();
+            case 0xce: return rU32();
+            case 0xcf: return rU64();
+            case 0xd0: { const v=u8[pos++]; return v>127?v-256:v; }
+            case 0xd1: { const v=rU16(); return v>32767?v-65536:v; }
+            case 0xd2: { const v=rU32(); return v>0x7fffffff?v-0x100000000:v; }
+            case 0xd3: return rI64();
+            case 0xd9: { const n=u8[pos++]; const s=new TextDecoder().decode(u8.slice(pos,pos+n)); pos+=n; return s; }
+            case 0xda: { const n=rU16(); const s=new TextDecoder().decode(u8.slice(pos,pos+n)); pos+=n; return s; }
+            case 0xdb: { const n=rU32(); const s=new TextDecoder().decode(u8.slice(pos,pos+n)); pos+=n; return s; }
+            case 0xdc: { const n=rU16(); const a=[]; for(let i=0;i<n;i++) a.push(read()); return a; }
+            case 0xdd: { const n=rU32(); const a=[]; for(let i=0;i<n;i++) a.push(read()); return a; }
+            case 0xde: { const n=rU16(); const o={}; for(let i=0;i<n;i++){const k=read();o[k]=read();} return o; }
+            case 0xdf: { const n=rU32(); const o={}; for(let i=0;i<n;i++){const k=read();o[k]=read();} return o; }
+            case 0xd4: pos+=2; return null; case 0xd5: pos+=3; return null;
+            case 0xd6: pos+=5; return null; case 0xd7: pos+=9; return null;
+            case 0xd8: pos+=17; return null;
+            case 0xc7: { const n=u8[pos++]; pos+=1+n; return null; }
+            case 0xc8: { const n=rU16(); pos+=1+n; return null; }
+            case 0xc9: { const n=rU32(); pos+=1+n; return null; }
+            default: throw `Unknown byte 0x${b.toString(16)}`;
+        }
+    }
+    function rU16(){ const v=(u8[pos]<<8)|u8[pos+1]; pos+=2; return v; }
+    function rU32(){ const v=(u8[pos]<<24|u8[pos+1]<<16|u8[pos+2]<<8|u8[pos+3])>>>0; pos+=4; return v; }
+    function rU64(){ return rU32()*0x100000000+rU32(); }
+    function rI64(){ const h=rU32(),l=rU32(); return h>0x7fffffff?-(0x100000000*(0xffffffff-h)+(0x100000000-l)):h*0x100000000+l; }
+    try { return { value: read(), bytesRead: pos }; } catch { return null; }
+}
+
+
+const nt = new NT4Client();
+let logEntries = [];
+const MAX_LOG = 2000;
+let lastUIUpdate = 0;
+const UI_INTERVAL = 80;
+let resolvedPrefix = null;
+
+const PREFIXES = [
+    '/RealOutputs/subsystems/ExampleShooter/',
+    '/RealOutputs/ExampleShooter/',
+    '/ReplayOutputs/subsystems/ExampleShooter/',
+    '/ReplayOutputs/ExampleShooter/',
+    '/SmartDashboard/subsystems/ExampleShooter/',
+    '/SmartDashboard/ExampleShooter/',
+    '/subsystems/ExampleShooter/',
+    'ExampleShooter/',
+    '/ExampleShooter/',
+];
+
+function findValue(suffix) {
+    if (resolvedPrefix) { const v = nt.getValue(resolvedPrefix + suffix); if (v) return v.value; }
+    for (const pfx of PREFIXES) { const v = nt.getValue(pfx + suffix); if (v) { resolvedPrefix = pfx; return v.value; } }
+    for (const [key, entry] of nt.getAllValues()) {
+        if (key.endsWith('/' + suffix)) {
+            const pfx = key.substring(0, key.length - suffix.length);
+            if (pfx && !PREFIXES.includes(pfx)) { PREFIXES.push(pfx); log('success', `Auto-discovered prefix: "${pfx}"`); }
+            resolvedPrefix = pfx; return entry.value;
+        }
+    }
+    return undefined;
+}
+
+function getNum(s, d) { const v = findValue(s); if (v == null) return '\u2014'; const n = Number(v); return isNaN(n) ? String(v) : n.toFixed(d != null ? d : 2); }
+function getStr(s) { const v = findValue(s); return v != null ? String(v) : '\u2014'; }
+function getBool(s) { const v = findValue(s); return v == null ? '\u2014' : v ? 'Yes' : 'No'; }
+function getArr(s) { const v = findValue(s); return Array.isArray(v) ? v : null; }
+function setText(id, t) { const el = document.getElementById(id); if (el && el.textContent !== t) el.textContent = t; }
+
+
+function updateConnectionUI() {
+    const dot = document.getElementById('statusDot');
+    const text = document.getElementById('statusText');
+    const btn = document.getElementById('connectBtn');
+    dot.className = 'status-dot' + (nt.connected ? ' connected' : nt.connecting ? ' connecting' : '');
+    text.textContent = nt.connected ? 'Connected' : nt.connecting ? 'Connecting...' : 'Disconnected';
+    btn.textContent = nt.connected ? 'Disconnect' : 'Connect';
+    btn.className = nt.connected ? 'btn danger' : 'btn';
+    document.getElementById('topicCount').textContent = nt.connected ? `${nt.topics.size} topics, ${nt.values.size} values` : '';
+}
+
+function toggleConnection() {
+    if (nt.connected || nt.connecting) nt.disconnect();
+    else { const ip = document.getElementById('robotIp').value.trim(); if (ip) nt.connect(ip); }
+}
+
+
+function log(level, msg) {
+    const now = new Date();
+    const ts = now.toLocaleTimeString('en-US', {hour12:false}) + '.' + String(now.getMilliseconds()).padStart(3,'0');
+    logEntries.push({ level, msg, ts });
+    if (logEntries.length > MAX_LOG) logEntries.shift();
+    const c = document.getElementById('log-container');
+    const div = document.createElement('div');
+    div.className = `log-entry ${level}`;
+    div.innerHTML = `<span class="ts">${ts}</span>${msg.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}`;
+    c.appendChild(div);
+    if (c.children.length > MAX_LOG) c.removeChild(c.firstChild);
+    if (document.getElementById('autoScroll').checked) c.scrollTop = c.scrollHeight;
+}
+function clearLog() { logEntries = []; document.getElementById('log-container').innerHTML = ''; }
+function exportLog() {
+    const t = logEntries.map(e => `[${e.ts}] [${e.level}] ${e.msg}`).join('\n');
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([t], {type:'text/plain'}));
+    a.download = `trajectory-debug-${Date.now()}.log`; a.click();
+}
+
+
+function switchTab(name) {
+    document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
+    document.querySelectorAll('.tab-content').forEach(t => t.classList.toggle('active', t.id === `tab-${name}`));
+    if (name === 'trajectory') requestAnimationFrame(canvasRedraw);
+    if (name === 'candidates') requestAnimationFrame(drawCandidateChart);
+}
+
+
+function updateUI() {
+    const now = performance.now();
+    if (now - lastUIUpdate < UI_INTERVAL) { requestAnimationFrame(updateUI); return; }
+    lastUIUpdate = now;
+    if (!nt.connected) { requestAnimationFrame(updateUI); return; }
+    updateConnectionUI();
+
+    // Shot status
+    const valid = findValue('ValidShot');
+    setText('s-validShot', valid != null ? (valid ? 'YES' : 'NO') : '\u2014');
+    document.getElementById('shotIndicator').style.background = valid ? 'var(--success)' : 'var(--danger)';
+    setText('s-status', getStr('Trajectory/Status'));
+    setText('s-statusMsg', getStr('Trajectory/StatusMessage'));
+    setText('s-source', getStr('ShotSource'));
+    setText('s-confidence', getNum('Trajectory/Confidence', 1) + '%');
+    setText('s-mode', getStr('Mode'));
+
+    // Params
+    setText('s-distance', getNum('Distance', 3) + ' m');
+    setText('s-pitch', getNum('TargetPitchDeg', 2) + '\u00B0');
+    setText('s-yaw', getNum('TargetYawDeg', 2) + '\u00B0');
+    setText('s-yawAdjust', getNum('Trajectory/YawAdjustDeg', 2) + '\u00B0');
+    setText('s-rpm', getNum('TargetRPM', 0));
+    setText('s-measuredRpm', getNum('MeasuredRPM', 0));
+    setText('s-rpmDeficit', getNum('RpmDeficit', 0));
+    setText('s-readyToFire', getBool('ReadyToFire'));
+    setText('s-velocity', getNum('Trajectory/Velocity', 2) + ' m/s');
+    setText('s-tof', getNum('Trajectory/TimeOfFlight', 3) + ' s');
+    setText('s-maxHeight', getNum('Trajectory/MaxHeight', 2) + ' m');
+    setText('s-margin', getNum('Trajectory/Margin', 3) + ' m');
+
+    // Path info
+    const pathX = getArr('Trajectory/PathX'), pathY = getArr('Trajectory/PathY'), pathZ = getArr('Trajectory/PathZ');
+    if (pathX && pathX.length > 0) {
+        setText('s-pathLength', String(pathX.length));
+        setText('s-pathStart', `(${pathX[0].toFixed(2)}, ${pathY[0].toFixed(2)}, ${pathZ[0].toFixed(2)})`);
+        const last = pathX.length - 1;
+        setText('s-pathEnd', `(${pathX[last].toFixed(2)}, ${pathY[last].toFixed(2)}, ${pathZ[last].toFixed(2)})`);
+        const hRange = Math.sqrt((pathX[last]-pathX[0])**2 + (pathY[last]-pathY[0])**2);
+        setText('s-horizRange', hRange.toFixed(2) + ' m');
+        const minZ = Math.min(...pathZ), maxZ = Math.max(...pathZ);
+        setText('s-vertRange', `${minZ.toFixed(2)} \u2192 ${maxZ.toFixed(2)} m`);
+    }
+
+    // Debug
+    setText('s-debugEnabled', getBool('Debug/Enabled'));
+    setText('s-totalTested', getNum('Debug/TotalTested', 0));
+    setText('s-accepted', getNum('Debug/Accepted', 0));
+    setText('s-totalRejected', getNum('Debug/TotalRejected', 0));
+    const rejC = Number(findValue('Debug/RejectedCollision')) || 0;
+    const rejA = Number(findValue('Debug/RejectedArcTooLow')) || 0;
+    const rejCl = Number(findValue('Debug/RejectedClearance')) || 0;
+    const rejM = Number(findValue('Debug/RejectedMiss')) || 0;
+    const rejF = Number(findValue('Debug/RejectedFlyover')) || 0;
+    const acc = Number(findValue('Debug/Accepted')) || 0;
+    setText('s-rejCollision', String(rejC));
+    setText('s-rejArc', String(rejA));
+    setText('s-rejClearance', String(rejCl));
+    setText('s-rejMiss', String(rejM));
+    setText('s-rejFlyover', String(rejF));
+    setText('s-bestScore', getNum('Debug/BestScore', 1));
+    setText('s-bestPitch', getNum('Debug/BestPitchDeg', 2) + '\u00B0');
+
+    // Rejection bar
+    const total = acc + rejC + rejA + rejCl + rejM + rejF;
+    if (total > 0) {
+        const bar = document.getElementById('rejectionBar');
+        bar.innerHTML = '';
+        const segs = [
+            {c:acc,color:'var(--success)'},{c:rejC,color:'#f85149'},{c:rejA,color:'#d29922'},
+            {c:rejCl,color:'#a371f7'},{c:rejM,color:'#79c0ff'},{c:rejF,color:'#e3b341'},
+        ];
+        for (const s of segs) {
+            if (s.c <= 0) continue;
+            const d = document.createElement('div');
+            d.className = 'bar-segment'; d.style.width = (s.c/total*100)+'%'; d.style.background = s.color;
+            bar.appendChild(d);
+        }
+    }
+
+    // Positions
+    const rx = findValue('RobotX'), ry = findValue('RobotY');
+    setText('s-robotPos', rx != null ? `(${Number(rx).toFixed(2)}, ${Number(ry).toFixed(2)})` : '\u2014');
+    const sx = findValue('ShooterX'), sy = findValue('ShooterY');
+    setText('s-shooterPos', sx != null ? `(${Number(sx).toFixed(2)}, ${Number(sy).toFixed(2)})` : '\u2014');
+    const tx = findValue('TargetX'), ty = findValue('TargetY'), tz = findValue('TargetZ');
+    setText('s-targetPos', tx != null ? `(${Number(tx).toFixed(2)}, ${Number(ty).toFixed(2)}, ${Number(tz).toFixed(2)})` : '\u2014');
+    setText('s-shooterH', getNum('ShooterHeight', 2) + ' m');
+
+    // Config
+    setText('s-tracking', getBool('TrackingEnabled'));
+    setText('s-sourceDetail', getStr('SourceDetail'));
+
+    // Summaries
+    const summary = findValue('Debug/Summary');
+    if (summary) document.getElementById('summary-text').textContent = summary;
+    const detail = findValue('Debug/DetailedTable');
+    if (detail) document.getElementById('detailed-table').textContent = detail;
+
+    // Raw NT
+    updateRawTable();
+
+    // Redraw canvases if visible
+    if (document.getElementById('tab-trajectory').classList.contains('active')) canvasRedraw();
+    if (document.getElementById('tab-candidates').classList.contains('active')) drawCandidateChart();
+
+    requestAnimationFrame(updateUI);
+}
+
+function updateRawTable() {
+    const tbody = document.getElementById('raw-tbody');
+    const rows = [];
+    for (const [key, entry] of nt.getAllValues()) {
+        let v = entry.value;
+        if (Array.isArray(v)) v = `[${v.length}] ${v.slice(0,5).map(x => typeof x === 'number' ? x.toFixed(3) : x).join(', ')}${v.length > 5 ? '...' : ''}`;
+        else if (v instanceof Uint8Array) v = `bytes[${v.length}]`;
+        else if (typeof v === 'object' && v !== null) v = JSON.stringify(v).substring(0,100);
+        const hi = key.includes('ExampleShooter') || key.includes('Trajectory');
+        rows.push({ key, val: String(v), hi });
+    }
+    rows.sort((a, b) => a.key.localeCompare(b.key));
+    if (tbody.children.length !== rows.length) {
+        tbody.innerHTML = '';
+        for (const r of rows) {
+            const tr = document.createElement('tr');
+            const s = r.hi ? ' style="background:rgba(88,166,255,0.06)"' : '';
+            tr.innerHTML = `<td class="key"${s}>${r.key.replace(/&/g,'&amp;').replace(/</g,'&lt;')}</td><td class="val">${String(r.val).replace(/&/g,'&amp;').replace(/</g,'&lt;')}</td><td></td>`;
+            tbody.appendChild(tr);
+        }
+    }
+}
+
+
+function canvasRedraw() {
+    drawSideView();
+    drawTopView();
+}
+
+function drawSideView() {
+    const canvas = document.getElementById('sideCanvas');
+    const parent = canvas.parentElement;
+    canvas.width = parent.clientWidth;
+    canvas.height = parent.clientHeight;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#0d1117'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    const pathX = getArr('Trajectory/PathX'), pathY = getArr('Trajectory/PathY'), pathZ = getArr('Trajectory/PathZ');
+    const targetZVal = Number(findValue('TargetZ')) || 2.1;
+    const maxH = Number(findValue('Trajectory/MaxHeight')) || targetZVal + 1;
+
+    if (!pathX || pathX.length < 2) {
+        ctx.font = '13px -apple-system, sans-serif'; ctx.fillStyle = '#8b949e';
+        ctx.fillText('No trajectory path data \u2014 waiting for solver...', 40, canvas.height / 2);
+
+        ctx.font = 'bold 11px -apple-system, sans-serif'; ctx.fillStyle = '#e6edf3';
+        ctx.fillText('Side View (Distance vs Height)', 20, 20);
+        return;
+    }
+
+    // Compute horizontal distance from start for each point
+    const sx = pathX[0], sy = pathY[0];
+    const dist = pathX.map((x, i) => Math.sqrt((x - sx) ** 2 + (pathY[i] - sy) ** 2));
+    const maxDist = Math.max(...dist, 1);
+    const allZ = pathZ;
+    const maxZVal = Math.max(maxH, ...allZ, targetZVal) + 0.5;
+
+    const pad = 50;
+    const w = canvas.width - pad * 2;
+    const h = canvas.height - pad * 2 - 20;
+
+    const toCX = d => pad + d * (w / maxDist);
+    const toCY = z => canvas.height - pad - z * (h / maxZVal);
+
+    // Grid
+    drawGrid(ctx, canvas, pad, 0, maxDist, 0, maxZVal, toCX, toCY);
+
+    // Full trajectory path (thick line with glow)
+    ctx.shadowColor = '#58a6ff'; ctx.shadowBlur = 6;
+    ctx.strokeStyle = '#58a6ff'; ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    for (let i = 0; i < dist.length; i++) {
+        if (i === 0) ctx.moveTo(toCX(dist[i]), toCY(allZ[i]));
+        else ctx.lineTo(toCX(dist[i]), toCY(allZ[i]));
+    }
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+
+    // Trajectory points as dots
+    ctx.fillStyle = 'rgba(88, 166, 255, 0.3)';
+    for (let i = 0; i < dist.length; i += Math.max(1, Math.floor(dist.length / 40))) {
+        ctx.beginPath(); ctx.arc(toCX(dist[i]), toCY(allZ[i]), 2, 0, Math.PI * 2); ctx.fill();
+    }
+
+    // Start point
+    ctx.fillStyle = '#d29922';
+    ctx.beginPath(); ctx.arc(toCX(0), toCY(allZ[0]), 6, 0, Math.PI * 2); ctx.fill();
+    ctx.font = '11px -apple-system, sans-serif'; ctx.fillStyle = '#d29922';
+    ctx.fillText(`Start (${allZ[0].toFixed(2)}m)`, toCX(0) + 10, toCY(allZ[0]) - 8);
+
+    // End point
+    const endDist = dist[dist.length - 1], endZ = allZ[allZ.length - 1];
+    ctx.fillStyle = '#3fb950';
+    ctx.beginPath(); ctx.arc(toCX(endDist), toCY(endZ), 6, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#3fb950';
+    ctx.fillText(`Target (${endZ.toFixed(2)}m)`, toCX(endDist) + 10, toCY(endZ) - 8);
+
+    // Peak height line
+    const peakZ = Math.max(...allZ);
+    const peakIdx = allZ.indexOf(peakZ);
+    const peakDist = dist[peakIdx];
+    ctx.setLineDash([4, 4]);
+    ctx.strokeStyle = 'rgba(248,81,73,0.5)'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(pad, toCY(peakZ)); ctx.lineTo(canvas.width - pad, toCY(peakZ)); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = '#f85149';
+    ctx.beginPath(); ctx.arc(toCX(peakDist), toCY(peakZ), 4, 0, Math.PI * 2); ctx.fill();
+    ctx.fillText(`Peak: ${peakZ.toFixed(2)}m`, toCX(peakDist) + 8, toCY(peakZ) - 6);
+
+    // Target height reference line
+    ctx.setLineDash([2, 4]);
+    ctx.strokeStyle = 'rgba(63,185,80,0.3)'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(pad, toCY(targetZVal)); ctx.lineTo(canvas.width - pad, toCY(targetZVal)); ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Distance label
+    ctx.fillStyle = '#8b949e'; ctx.font = '10px -apple-system, sans-serif';
+    ctx.fillText(`${dist.length} pts, ${maxDist.toFixed(2)}m range`, pad + 5, canvas.height - 12);
+
+    // Title
+    ctx.font = 'bold 11px -apple-system, sans-serif'; ctx.fillStyle = '#e6edf3';
+    ctx.fillText('Side View (Distance vs Height)', 20, 20);
+}
+
+function drawTopView() {
+    const canvas = document.getElementById('topCanvas');
+    const parent = canvas.parentElement;
+    canvas.width = parent.clientWidth;
+    canvas.height = parent.clientHeight;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#0d1117'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    const pathX = getArr('Trajectory/PathX'), pathY = getArr('Trajectory/PathY'), pathZ = getArr('Trajectory/PathZ');
+    const robotX = Number(findValue('RobotX')) || 0, robotY = Number(findValue('RobotY')) || 0;
+    const targetX = Number(findValue('TargetX')) || 6, targetY = Number(findValue('TargetY')) || 4;
+
+    if (!pathX || pathX.length < 2) {
+        ctx.font = '13px -apple-system, sans-serif'; ctx.fillStyle = '#8b949e';
+        ctx.fillText('No trajectory path data', 40, canvas.height / 2);
+        ctx.font = 'bold 11px -apple-system, sans-serif'; ctx.fillStyle = '#e6edf3';
+        ctx.fillText('Top-Down View (XY)', 20, 20);
+        return;
+    }
+
+    const allX = [...pathX, robotX, targetX];
+    const allY = [...pathY, robotY, targetY];
+    const minXv = Math.min(...allX) - 1, maxXv = Math.max(...allX) + 1;
+    const minYv = Math.min(...allY) - 1, maxYv = Math.max(...allY) + 1;
+
+    const pad = 50;
+    const w = canvas.width - pad * 2, h = canvas.height - pad * 2;
+    const sx = w / (maxXv - minXv), sy = h / (maxYv - minYv);
+    const scale = Math.min(sx, sy);
+    const toCX = x => pad + (x - minXv) * scale;
+    const toCY = y => canvas.height - pad - (y - minYv) * scale;
+
+    drawGrid(ctx, canvas, pad, minXv, maxXv, minYv, maxYv, toCX, toCY);
+
+    const maxZ = Math.max(...pathZ), minZ = Math.min(...pathZ);
+    ctx.lineWidth = 2;
+    for (let i = 1; i < pathX.length; i++) {
+        const t = maxZ > minZ ? (pathZ[i] - minZ) / (maxZ - minZ) : 0.5;
+        const r = Math.round(88 + t * 80), g = Math.round(166 - t * 40), b = Math.round(255 - t * 100);
+        ctx.strokeStyle = `rgb(${r},${g},${b})`;
+        ctx.beginPath();
+        ctx.moveTo(toCX(pathX[i-1]), toCY(pathY[i-1]));
+        ctx.lineTo(toCX(pathX[i]), toCY(pathY[i]));
+        ctx.stroke();
+    }
+
+    ctx.fillStyle = 'rgba(88, 166, 255, 0.4)';
+    for (let i = 0; i < pathX.length; i += Math.max(1, Math.floor(pathX.length / 30))) {
+        ctx.beginPath(); ctx.arc(toCX(pathX[i]), toCY(pathY[i]), 2.5, 0, Math.PI * 2); ctx.fill();
+    }
+
+    ctx.strokeStyle = '#3fb950'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(toCX(targetX), toCY(targetY), 0.53 * scale, 0, Math.PI * 2); ctx.stroke();
+    ctx.fillStyle = '#3fb950';
+    ctx.beginPath(); ctx.arc(toCX(targetX), toCY(targetY), 4, 0, Math.PI * 2); ctx.fill();
+
+    ctx.fillStyle = '#d29922';
+    ctx.beginPath(); ctx.arc(toCX(robotX), toCY(robotY), 7, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = '#d29922'; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(toCX(robotX), toCY(robotY), 12, 0, Math.PI * 2); ctx.stroke();
+
+    ctx.fillStyle = '#58a6ff';
+    ctx.beginPath(); ctx.arc(toCX(pathX[0]), toCY(pathY[0]), 5, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#3fb950';
+    const last = pathX.length - 1;
+    ctx.beginPath(); ctx.arc(toCX(pathX[last]), toCY(pathY[last]), 5, 0, Math.PI * 2); ctx.fill();
+
+    ctx.font = '11px -apple-system, sans-serif';
+    ctx.fillStyle = '#d29922'; ctx.fillText('Robot', toCX(robotX) + 14, toCY(robotY) - 4);
+    ctx.fillStyle = '#3fb950'; ctx.fillText('Target', toCX(targetX) + 10, toCY(targetY) - 10);
+
+    ctx.font = 'bold 11px -apple-system, sans-serif'; ctx.fillStyle = '#e6edf3';
+    ctx.fillText('Top-Down View (XY)', 20, 20);
+}
+
+// Dont Trust Lingfeng Guys
+function drawCandidateChart() {
+    const canvas = document.getElementById('candidateCanvas');
+    const parent = canvas.parentElement;
+    canvas.width = parent.clientWidth;
+    canvas.height = parent.clientHeight;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#0d1117'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    const allPitch = getArr('Debug/AllPitches');
+    const allStatus = getArr('Debug/AllStatus');
+    const allClosest = getArr('Debug/AllClosest');
+    const accPitch = getArr('Debug/AcceptedPitches');
+    const accScore = getArr('Debug/AcceptedScores');
+    const accTOF = getArr('Debug/AcceptedTOF');
+    const accMaxH = getArr('Debug/AcceptedMaxHeight');
+
+    if (!allPitch || allPitch.length === 0) {
+        ctx.font = '13px -apple-system, sans-serif'; ctx.fillStyle = '#8b949e';
+        ctx.fillText('No candidate data \u2014 enable solver debug mode', 40, canvas.height / 2);
+        return;
+    }
+
+    const yAxisType = document.getElementById('candidateYAxis').value;
+
+    const pad = 50;
+    const w = canvas.width - pad * 2, h = canvas.height - pad * 2;
+    const minP = Math.min(...allPitch) - 1, maxP = Math.max(...allPitch) + 1;
+
+    const statusColors = {
+        'NONE': '#3fb950', 'COLLISION': '#f85149', 'ARC_TOO_LOW': '#d29922',
+        'CLEARANCE_TOO_LOW': '#a371f7', 'MISSED_TARGET': '#79c0ff', 'FLYOVER': '#e3b341',
+    };
+
+    // Draw ALL candidates (closest approach)
+    if (yAxisType === 'closest' && allClosest) {
+        const finite = allClosest.filter(x => isFinite(x));
+        const maxY = (finite.length > 0 ? Math.max(...finite) : 1) * 1.1;
+        const toCX = p => pad + (p - minP) / (maxP - minP) * w;
+        const toCY = v => canvas.height - pad - (v / maxY) * h;
+        drawGrid(ctx, canvas, pad, minP, maxP, 0, maxY, toCX, toCY);
+
+        for (let i = 0; i < allPitch.length; i++) {
+            if (!isFinite(allClosest[i])) continue;
+            ctx.fillStyle = statusColors[allStatus[i]] || '#8b949e';
+            ctx.beginPath(); ctx.arc(toCX(allPitch[i]), toCY(allClosest[i]), 4, 0, Math.PI * 2); ctx.fill();
+        }
+        ctx.font = 'bold 11px -apple-system, sans-serif'; ctx.fillStyle = '#e6edf3';
+        ctx.fillText('Pitch vs Closest Approach (all candidates)', pad, 20);
+        ctx.font = '10px -apple-system, sans-serif'; ctx.fillStyle = '#8b949e';
+        ctx.fillText('Pitch (\u00B0)', canvas.width / 2, canvas.height - 8);
+        ctx.save(); ctx.translate(10, canvas.height / 2); ctx.rotate(-Math.PI / 2);
+        ctx.fillText('Closest (m)', 0, 0); ctx.restore();
+    }
+    else if (accPitch && accPitch.length > 0) {
+        let yData, yLabel;
+        if (yAxisType === 'score') { yData = accScore; yLabel = 'Score'; }
+        else if (yAxisType === 'maxH') { yData = accMaxH; yLabel = 'Max Height (m)'; }
+        else { yData = accTOF; yLabel = 'TOF (s)'; }
+
+        if (!yData || yData.length === 0) {
+            ctx.font = '13px -apple-system, sans-serif'; ctx.fillStyle = '#8b949e';
+            ctx.fillText('No data for selected Y axis', 40, canvas.height / 2); return;
+        }
+
+        const minY = Math.min(...yData) * 0.9, maxY = Math.max(...yData) * 1.1 || 1;
+        const toCX = p => pad + (p - minP) / (maxP - minP) * w;
+        const toCY = v => canvas.height - pad - ((v - minY) / (maxY - minY)) * h;
+        drawGrid(ctx, canvas, pad, minP, maxP, minY, maxY, toCX, toCY);
+
+        ctx.fillStyle = '#3fb950';
+        for (let i = 0; i < accPitch.length; i++) {
+            ctx.beginPath(); ctx.arc(toCX(accPitch[i]), toCY(yData[i]), 5, 0, Math.PI * 2); ctx.fill();
+        }
+
+        if (accPitch.length > 1) {
+            const sorted = accPitch.map((p, i) => ({ p, y: yData[i] })).sort((a, b) => a.p - b.p);
+            ctx.strokeStyle = 'rgba(63,185,80,0.5)'; ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            sorted.forEach((s, i) => { if (i === 0) ctx.moveTo(toCX(s.p), toCY(s.y)); else ctx.lineTo(toCX(s.p), toCY(s.y)); });
+            ctx.stroke();
+        }
+
+        const bestP = Number(findValue('Debug/BestPitchDeg'));
+        if (isFinite(bestP)) {
+            const bestIdx = accPitch.findIndex(p => Math.abs(p - bestP) < 0.5);
+            if (bestIdx >= 0) {
+                ctx.strokeStyle = '#f0e68c'; ctx.lineWidth = 2;
+                ctx.beginPath(); ctx.arc(toCX(accPitch[bestIdx]), toCY(yData[bestIdx]), 9, 0, Math.PI * 2); ctx.stroke();
+                ctx.fillStyle = '#f0e68c'; ctx.font = '10px -apple-system, sans-serif';
+                ctx.fillText('BEST', toCX(accPitch[bestIdx]) + 12, toCY(yData[bestIdx]) - 4);
+            }
+        }
+
+        if (allPitch && allStatus) {
+            for (let i = 0; i < allPitch.length; i++) {
+                if (allStatus[i] === 'NONE') continue;
+                const cx = toCX(allPitch[i]), cy = canvas.height - pad - h * 0.05;
+                ctx.strokeStyle = statusColors[allStatus[i]] || '#8b949e'; ctx.lineWidth = 1.5;
+                ctx.beginPath(); ctx.moveTo(cx - 3, cy - 3); ctx.lineTo(cx + 3, cy + 3); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(cx + 3, cy - 3); ctx.lineTo(cx - 3, cy + 3); ctx.stroke();
+            }
+        }
+
+        ctx.font = 'bold 11px -apple-system, sans-serif'; ctx.fillStyle = '#e6edf3';
+        ctx.fillText(`Pitch vs ${yLabel} (accepted candidates)`, pad, 20);
+        ctx.font = '10px -apple-system, sans-serif'; ctx.fillStyle = '#8b949e';
+        ctx.fillText('Pitch (\u00B0)', canvas.width / 2, canvas.height - 8);
+    } else {
+        ctx.font = '13px -apple-system, sans-serif'; ctx.fillStyle = '#8b949e';
+        ctx.fillText('No accepted candidates', 40, canvas.height / 2);
+    }
+}
+
+
+function drawGrid(ctx, canvas, pad, minX, maxX, minY, maxY, toCX, toCY) {
+    ctx.strokeStyle = 'rgba(48,54,61,0.5)'; ctx.lineWidth = 0.5;
+    ctx.font = '10px -apple-system, sans-serif'; ctx.fillStyle = '#8b949e';
+    const stepX = niceStep(maxX - minX), stepY = niceStep(maxY - minY);
+    for (let x = Math.ceil(minX / stepX) * stepX; x <= maxX; x += stepX) {
+        const cx = toCX(x);
+        ctx.beginPath(); ctx.moveTo(cx, pad); ctx.lineTo(cx, canvas.height - pad); ctx.stroke();
+        ctx.fillText(x.toFixed(stepX < 1 ? 1 : 0), cx - 10, canvas.height - pad + 14);
+    }
+    for (let y = Math.ceil(minY / stepY) * stepY; y <= maxY; y += stepY) {
+        const cy = toCY(y);
+        ctx.beginPath(); ctx.moveTo(pad, cy); ctx.lineTo(canvas.width - pad, cy); ctx.stroke();
+        ctx.fillText(y.toFixed(stepY < 1 ? 1 : 0), 4, cy + 4);
+    }
+}
+
+function niceStep(range) {
+    const r = range / 8;
+    const p = Math.pow(10, Math.floor(Math.log10(r)));
+    const n = r / p;
+    if (n < 1.5) return p; if (n < 3.5) return 2 * p; if (n < 7.5) return 5 * p; return 10 * p;
+}
+
+let lastLogged = {};
+let logThrottle = {};
+
+nt.onValue((key, value) => {
+    if (!resolvedPrefix && key.includes('ExampleShooter')) {
+        const idx = key.indexOf('ExampleShooter/');
+        if (idx >= 0) {
+            const pfx = key.substring(0, idx) + 'ExampleShooter/';
+            resolvedPrefix = pfx;
+            if (!PREFIXES.includes(pfx)) PREFIXES.push(pfx);
+            log('success', `Auto-detected prefix: "${pfx}"`);
+        }
+    }
+    const short = key.includes('ExampleShooter/') ? key.substring(key.indexOf('ExampleShooter/') + 15) : key;
+    const now = performance.now();
+    const important = ['Trajectory/Status', 'Trajectory/StatusMessage', 'ValidShot'];
+    if (important.some(k => short === k)) {
+        const s = String(value);
+        if (lastLogged[short] !== s) {
+            lastLogged[short] = s;
+            log(short === 'Trajectory/Status' ? (value === 'SUCCESS' ? 'success' : 'warn') : 'data', `${short} = ${s.substring(0, 200)}`);
+        }
+    }
+    if (short.startsWith('Debug/') && (!logThrottle.debug || now - logThrottle.debug > 2000)) {
+        logThrottle.debug = now;
+        log('data', `Solver: ${findValue('Debug/TotalTested') || '?'} tested, ${findValue('Debug/Accepted') || '?'} accepted`);
+    }
+});
+
+
+document.addEventListener('DOMContentLoaded', () => {
+    log('info', 'Trajectory Debug Dashboard v2 loaded');
+    log('info', 'Enter robot IP and click Connect. Use localhost or 127.0.0.1 for simulation.');
+
+    const params = new URLSearchParams(window.location.search);
+    const ip = params.get('ip');
+    if (ip) { document.getElementById('robotIp').value = ip; nt.connect(ip); }
+
+    requestAnimationFrame(updateUI);
+    window.addEventListener('resize', canvasRedraw);
+});
+
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && document.activeElement === document.getElementById('robotIp')) toggleConnection();
+});
+</script>
+</body>
+</html>

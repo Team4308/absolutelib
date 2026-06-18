@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trajectory Solver | AbsoluteLib V2</title>
+    <link rel="stylesheet" href="../styles.css">
+    <link rel="stylesheet"
+        href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script>hljs.highlightAll();</script>
+    <script type="module">
+        import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
+        mermaid.initialize({ startOnLoad: true, theme: 'dark' });
+    </script>
+</head>
+
+<body>
+    <div class="layout">
+        <div id="sidebar-container"></div>
+        <script src="sidebar.js"></script>
+        <div class="overlay" id="overlay" onclick="toggleSidebar()"></div>
+        <main class="main-content">
+            <div class="content-container">
+                <section id="trajectory">
+                    <h2>Trajectory Solver</h2>
+                    <p>The <code>TrajectorySolver</code> module calculates the optimal shooting pitch, flywheel RPM, and required exit velocity based on the robot's physical constraints and projectile motion physics.</p>
+                    
+                    <h3>Shooter System Data Flow</h3>
+                    <p>The calculation sequence is managed by <code>ShooterSystem</code>. First, we select the calculation source based on the active <code>ShotMode</code>. If the primary method fails, we fallback to our known safe states. Finally, adjustments for robot movement, RPM deficits, and safety limits are applied.</p>
+                    
+                    <div class="mermaid">
+graph TD
+    A[Robot States: Distance, Vx, Vy, Yaw, RPM] --> B(Mode Selection)
+    
+    B -- LOOKUP_ONLY --> C1[ShotLookupTable]
+    B -- SOLVER_ONLY --> C2[TrajectorySolver]
+    B -- FALLBACK / BLENDED --> C3{Blend / Fallback Logic}
+    
+    C1 --> D{Valid Result?}
+    C2 --> D
+    C3 --> D
+    
+    D -- Yes --> E[MovementCompensator]
+    D -- No --> F[Fallback: Last Known Good]
+    F --> D
+    
+    E --> G[RPMCorrector]
+    G --> H{SafetyValidator}
+    
+    H -- Safe --> I[Return Valid ShotParameters]
+    H -- Unsafe --> J[Return Invalid Shot]
+                    </div>
+
+                    <h3>Physics and Environment Configuration</h3>
+                    <p>AbsoluteLib models trajectories with optional air resistance and obstacle avoidance. Define your specific Game Piece parameters to yield highly accurate physics results.</p>
+                    
+                    <pre><code class="language-java">// Example: Initialize Solver
+TrajectorySolver solver = TrajectorySolver.builder()
+    .gamePiece(GamePieces.REBUILT_2026_BALL)
+    .config(SolverConfig.defaults())
+    .build();
+
+// Define Shot
+ShotInput input = ShotInput.builder()
+    .shooterPositionMeters(1.0, 2.0, 0.5)
+    .shooterYawDegrees(45)
+    .targetPositionMeters(5.0, 5.0, 2.5)
+    .shotPreference(ShotInput.ShotPreference.HIGH_CLEARANCE)
+    .robotVelocity(vxMps, vyMps, omegaRadPs, 0.25)
+    .build();
+
+// Evaluate
+TrajectoryResult result = solver.solve(input);
+if (result.isSuccess()) {
+    System.out.println("Pitch: " + result.getPitchAngleDegrees());
+    System.out.println("RPM: " + result.getRecommendedRpm());
+}
+</code></pre>
+
+                    <h3>Running with a Coprocessor (Recommended)</h3>
+                    <p>The Trajectory Solver uses a high-fidelity RK4 physics simulation. While it <i>can</i> run on the roboRIO, the mathematical intensity means you must trade off accuracy for CPU budget by using <code>SolverConfig.roboRIO()</code> or limiting the number of iterations.</p>
+                    
+                    <p>For the best performance and highest accuracy, it is highly recommended to run the trajectory system on a dedicated coprocessor (like an Orange Pi, Raspberry Pi, or Jetson). AbsoluteLib includes a specialized <code>coprocessor</code> module designed specifically for this use-case.</p>
+                    
+                    <h4>How to use the Coprocessor Module:</h4>
+                    <ul>
+                        <li><b>High Fidelity Solving</b>: The coprocessor can comfortably run <code>SolverConfig.coProcessor()</code> which provides sub-millimeter integration timesteps and precise 3D obstacle avoidance checks without dropping loop times.</li>
+                        <li><b>Networked Requests</b>: The coprocessor module includes a <code>TrajectoryWrapper</code> that listens for <code>TrajectoryRequest</code> packets from the roboRIO over UDP/TCP.</li>
+                        <li><b>Prediction Loop</b>: The coprocessor can recursively simulate the future position of the robot using the current velocity and time-of-flight to perfectly compensate for system latency and movement.</li>
+                        <li><b>Setup</b>: Ensure you pass your `robotOmegaRadPerSec` (angular velocity) to the <code>ShotInput</code> builder from your swerve odometry so the coprocessor can apply tangential physics drift correctly!</li>
+                    </ul>
+
+                </section>
+            </div>
+        </main>
+    </div>
+    <button class="mobile-toggle" onclick="toggleSidebar()">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="3" y1="12" x2="21" y2="12"></line>
+            <line x1="3" y1="6" x2="21" y2="6"></line>
+            <line x1="3" y1="18" x2="21" y2="18"></line>
+        </svg>
+    </button>
+    <script>
+        function toggleSidebar() {
+            document.getElementById('sidebar').classList.toggle('open');
+            document.getElementById('overlay').classList.toggle('open');
+        }
+    </script>
+</body>
+
+</html>
